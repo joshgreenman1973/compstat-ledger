@@ -451,6 +451,129 @@ const MiniSparkline = ({ points, width = 48, height = 16, minY }) => {
 };
 
 /* ------------------------------------------------------------------ */
+/* HISTORICAL CONTEXT HELPERS                                          */
+/* ------------------------------------------------------------------ */
+// Map of CompStat row names to crime_history.json keys (for citywide annual history).
+// Names not in this map will fall back to a 2-point sparkline.
+const HISTORICAL_KEY = {
+  'Burglary': 'Burglary',
+  'Fel. Assault': 'Fel. Assault',
+  'G.L.A.': 'G.L.A.',
+  'Gr. Larceny': 'Gr. Larceny',
+  'Murder': 'Murder',
+  'Rape': 'Rape',
+  'Robbery': 'Robbery',
+  'Misd. Assault': 'Misd. Assault',
+  'Petit Larceny': 'Petit Larceny',
+  'Shooting Inc.': 'Shooting Inc.',
+};
+
+// Returns historical-context info for a given offense row.
+// Logic:
+//   - Annualize the current YTD count using the prior-year YTD/prior-year-full-year ratio,
+//     so we can compare to historical full-year values.
+//   - Build a series of {y, val} for the last ~12 years.
+//   - Compute pre-pandemic baseline (2017-2019 mean / range).
+//   - Emit a primary "vs pre-pandemic" badge and an "outlier vs 5-yr norm" badge.
+function getHistoricalContext(history, item, currentYear) {
+  const key = HISTORICAL_KEY[item.name];
+  if (!key || !history || !history.length) return null;
+  const series = history.filter(d => typeof d[key] === 'number').map(d => ({ y: d.y, val: d[key] }));
+  if (series.length < 5) return null;
+
+  const priorYearRow = series.find(d => d.y === currentYear - 1);
+  const priorFull = priorYearRow?.val;
+  // YTD fraction: how much of last full year happened in YTD-equivalent period.
+  const ytdFrac = (priorFull && item.prior > 0 && priorFull > 0) ? (item.prior / priorFull) : null;
+  const annualized = (ytdFrac && ytdFrac > 0.05) ? item.current / ytdFrac : item.current;
+
+  // Pre-pandemic baseline: 2017-2019.
+  const pre = series.filter(d => d.y >= 2017 && d.y <= 2019).map(d => d.val);
+  let pandemicBadge = null;
+  if (pre.length >= 2) {
+    const preLow = Math.min(...pre);
+    const preHigh = Math.max(...pre);
+    const preMean = pre.reduce((a, b) => a + b, 0) / pre.length;
+    if (annualized < preLow) {
+      pandemicBadge = { kind: 'below', label: 'Below pre-pandemic low', tone: 'green' };
+    } else if (annualized < preMean * 0.97) {
+      pandemicBadge = { kind: 'belowAvg', label: 'Below pre-pandemic avg', tone: 'green' };
+    } else if (annualized > preHigh * 1.03) {
+      pandemicBadge = { kind: 'aboveHigh', label: 'Above pre-pandemic high', tone: 'orange' };
+    } else if (annualized > preMean * 1.03) {
+      pandemicBadge = { kind: 'above', label: 'Above pre-pandemic avg', tone: 'orange' };
+    } else {
+      pandemicBadge = { kind: 'at', label: 'Back at pre-pandemic level', tone: 'gray' };
+    }
+  }
+
+  // 5-year recent z-score outlier (excluding current).
+  const recent = series.filter(d => d.y >= currentYear - 6 && d.y < currentYear).map(d => d.val);
+  let outlierBadge = null;
+  if (recent.length >= 4) {
+    const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+    const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
+    const std = Math.sqrt(variance);
+    if (std > 0) {
+      const z = (annualized - mean) / std;
+      if (z >= 2) outlierBadge = { kind: 'spike', label: '5-yr high outlier', tone: 'orange' };
+      else if (z <= -2) outlierBadge = { kind: 'plunge', label: '5-yr low outlier', tone: 'green' };
+    }
+  }
+
+  // Find the year-since superlative (e.g., "Lowest since 2014").
+  const sinceSuperlative = (() => {
+    if (annualized <= 0) return null;
+    // Lowest since: find the most recent year (excluding current) where val <= annualized.
+    let lowSince = null;
+    for (let i = series.length - 1; i >= 0; i--) {
+      if (series[i].y >= currentYear) continue;
+      if (series[i].val < annualized) { lowSince = series[i].y + 1; break; }
+    }
+    if (lowSince && lowSince <= currentYear - 3) return { kind: 'low', label: `Lowest since ${lowSince}`, tone: 'green' };
+    let highSince = null;
+    for (let i = series.length - 1; i >= 0; i--) {
+      if (series[i].y >= currentYear) continue;
+      if (series[i].val > annualized) { highSince = series[i].y + 1; break; }
+    }
+    if (highSince && highSince <= currentYear - 3) return { kind: 'high', label: `Highest since ${highSince}`, tone: 'orange' };
+    return null;
+  })();
+
+  return { series, annualized, ytdFrac, pandemicBadge, outlierBadge, sinceSuperlative, preLow: pre.length ? Math.min(...pre) : null, preHigh: pre.length ? Math.max(...pre) : null };
+}
+
+// Sparkline that renders a multi-year series with a pre-pandemic reference band and a "current" projection dot.
+const ContextSparkline = ({ series, annualized, preLow, preHigh, width = 80, height = 22 }) => {
+  if (!series || series.length < 3) return null;
+  const allVals = series.map(d => d.val).concat([annualized]);
+  if (preLow != null) allVals.push(preLow);
+  if (preHigh != null) allVals.push(preHigh);
+  const min = Math.min(...allVals);
+  const max = Math.max(...allVals);
+  const range = max - min || 1;
+  const pad = 2;
+  const xFor = (i, n) => pad + (i / Math.max(1, n - 1)) * (width - pad * 2);
+  const yFor = (v) => pad + (1 - (v - min) / range) * (height - pad * 2);
+
+  // History points (excludes current year — current is rendered separately as the "annualized" dot)
+  const histPoints = series.map((d, i) => `${xFor(i, series.length).toFixed(1)},${yFor(d.val).toFixed(1)}`).join(' ');
+  const cx = xFor(series.length - 1, series.length) + (width - pad * 2) * 0.06; // current sits slightly right of last historical point
+  const cy = yFor(annualized);
+  const trending = annualized > series[series.length - 1].val;
+
+  return (
+    <svg width={width} height={height} className="inline-block align-middle">
+      {preLow != null && preHigh != null && (
+        <rect x={pad} y={yFor(preHigh)} width={width - pad * 2} height={Math.max(1, yFor(preLow) - yFor(preHigh))} fill="#dbeafe" fillOpacity="0.55" />
+      )}
+      <polyline points={histPoints} fill="none" stroke="#9ca3af" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={cx} cy={cy} r="2.5" fill={trending ? VC.orange : VC.green} />
+    </svg>
+  );
+};
+
+/* ------------------------------------------------------------------ */
 /* CITY COMPARISON WIDGET                                              */
 /* ------------------------------------------------------------------ */
 const CityComparisonWidget = ({ rtciData }) => {
@@ -567,7 +690,6 @@ const TRANSIT_OFFENSE_LABELS = {
 const TransitCrimeBox = ({ rawData }) => {
   const cw = rawData?.citywide;
   const transit = cw?.additional_stats?.Transit;
-  const housing = cw?.additional_stats?.Housing;
 
   const [breakdown, setBreakdown] = useState(null); // { year, priorYear, rows: [{name, cur, prior, pct}] }
   const [breakdownLoading, setBreakdownLoading] = useState(true);
@@ -676,50 +798,52 @@ const TransitCrimeBox = ({ rawData }) => {
     );
   };
 
+  const Kpi = ({ label, value, prior, pct, size = 'sm' }) => (
+    <div className="flex flex-col">
+      <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</span>
+      <div className="flex items-baseline gap-2 mt-1">
+        <span className={`tabular-nums font-black text-black ${size === 'lg' ? 'text-[28px] leading-none' : 'text-[18px] leading-none'}`}>{value?.toLocaleString() ?? '—'}</span>
+        {pct != null && (
+          <span className="tabular-nums font-bold text-[12px]" style={{ color: pctColor(pct) }}>{fmtPct(pct)}</span>
+        )}
+      </div>
+      {prior != null && (
+        <span className="text-[10px] text-gray-400 mt-0.5 tabular-nums">vs {prior.toLocaleString()} prior yr</span>
+      )}
+    </div>
+  );
+
   return (
     <section className="mb-10 p-5 bg-white rounded-sm border-l-4 border-gray-900 border-t border-r border-b border-gray-200">
-      {/* Header with live CompStat + annual totals side-by-side */}
-      <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div className="flex-1 min-w-[220px]">
           <h3 className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-400">Transit System · Major Felony Index</h3>
           <p className="text-[13px] font-serif text-gray-600 mt-0.5">
-            Offenses recorded on the NYC subway and bus system, by type.
+            Offenses recorded on the NYC subway and bus system. Live weekly CompStat feed from the NYPD Transit Bureau.
           </p>
         </div>
+        <span className="text-[10px] text-gray-400 whitespace-nowrap">Week ending {period.week_end || '?'}</span>
       </div>
 
-      {/* Live CompStat summary stripe — single row, minimal */}
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pb-3 mb-4 border-b border-gray-100 text-[11px]">
-        <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">CompStat live</span>
-        <span>
-          <span className="text-[10px] text-gray-400">YTD </span>
-          <strong className="tabular-nums text-black">{ytd.current_year?.toLocaleString() ?? '—'}</strong>
-          <span className="ml-1 tabular-nums" style={{ color: pctColor(ytd.pct_change) }}>{fmtPct(ytd.pct_change)}</span>
-          <span className="text-gray-400"> vs {ytd.prior_year?.toLocaleString() ?? '—'}</span>
-        </span>
-        <span>
-          <span className="text-[10px] text-gray-400">28d </span>
-          <strong className="tabular-nums text-black">{m28.current_year?.toLocaleString() ?? '—'}</strong>
-          <span className="ml-1 tabular-nums" style={{ color: pctColor(m28.pct_change) }}>{fmtPct(m28.pct_change)}</span>
-        </span>
-        <span>
-          <span className="text-[10px] text-gray-400">Wk </span>
-          <strong className="tabular-nums text-black">{wtd.current_year?.toLocaleString() ?? '—'}</strong>
-          <span className="ml-1 tabular-nums" style={{ color: pctColor(wtd.pct_change) }}>{fmtPct(wtd.pct_change)}</span>
-        </span>
-        {hist['2_yr_pct'] != null && (
-          <span className="text-gray-500">vs 2 yr ago <strong className="tabular-nums" style={{ color: pctColor(hist['2_yr_pct']) }}>{fmtPct(hist['2_yr_pct'])}</strong></span>
-        )}
-        {hist['14_yr_pct'] != null && (
-          <span className="text-gray-500">vs 14 yr ago <strong className="tabular-nums" style={{ color: pctColor(hist['14_yr_pct']) }}>{fmtPct(hist['14_yr_pct'])}</strong></span>
-        )}
-        {housing?.year_to_date?.pct_change != null && (
-          <span className="pl-4 border-l border-gray-200 text-gray-500">
-            Housing YTD <strong className="tabular-nums text-black">{housing.year_to_date.current_year?.toLocaleString()}</strong>
-            <span className="ml-1 tabular-nums" style={{ color: pctColor(housing.year_to_date.pct_change) }}>{fmtPct(housing.year_to_date.pct_change)}</span>
-          </span>
-        )}
-        <span className="ml-auto text-[10px] text-gray-400">Week ending {period.week_end || '?'}</span>
+      {/* Current trend KPI grid */}
+      <div className="pb-4 mb-5 border-b border-gray-100">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-x-6 gap-y-4 items-end">
+          <div className="col-span-2 md:col-span-2">
+            <Kpi label="Year to date" value={ytd.current_year} prior={ytd.prior_year} pct={ytd.pct_change} size="lg" />
+          </div>
+          <Kpi label="Last 28 days" value={m28.current_year} pct={m28.pct_change} />
+          <Kpi label="This week" value={wtd.current_year} pct={wtd.pct_change} />
+          <div className="flex flex-col gap-1 text-[11px]">
+            <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Long view</span>
+            {hist['2_yr_pct'] != null && (
+              <span className="text-gray-600">vs 2 yrs ago <strong className="tabular-nums ml-1" style={{ color: pctColor(hist['2_yr_pct']) }}>{fmtPct(hist['2_yr_pct'])}</strong></span>
+            )}
+            {hist['14_yr_pct'] != null && (
+              <span className="text-gray-600">vs 14 yrs ago <strong className="tabular-nums ml-1" style={{ color: pctColor(hist['14_yr_pct']) }}>{fmtPct(hist['14_yr_pct'])}</strong></span>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Unified offense-type table */}
@@ -2090,7 +2214,7 @@ Rules: Cite only numbers that appear in the provided data. Never invent or parap
               <thead>
                 <tr className="text-[10px] font-black uppercase tracking-widest text-gray-400 border-b border-gray-200">
                   <th className="py-3">Crime Category</th>
-                  <th className="py-3 text-center hidden sm:table-cell">{activeGeo === 'citywide' ? <span>YoY<span className="hidden md:inline ml-3 text-gray-300">|</span><span className="hidden md:inline ml-3">Since '19</span></span> : 'YoY'}</th>
+                  <th className="py-3 text-center hidden md:table-cell" title="Multi-year trajectory with pre-pandemic (2017–19) reference band shaded blue. Dot = current annualized projection.">{activeGeo === 'citywide' ? <span>Trajectory <span className="text-gray-300">·</span> Pre-pandemic context</span> : 'YoY'}</th>
                   <th className="py-3 text-right">Prior Year</th>
                   <th className="py-3 text-right">Current</th>
                   <th className="py-3 text-right">Change</th>
@@ -2100,21 +2224,34 @@ Rules: Cite only numbers that appear in the provided data. Never invent or parap
                 {(() => {
                   const rows = trendFilter === 'all' ? parsedData.all : (trendFilter === 'up' ? risingOffenses : fallingOffenses);
                   const maxAbsChange = Math.max(1, ...rows.map(r => Math.abs(r.pct || 0)));
+                  const currentYear = parsedData.period?.week_end ? new Date(parsedData.period.week_end).getFullYear() : new Date().getFullYear();
+                  const toneClass = (tone) => tone === 'green' ? 'bg-green-50 text-green-700 border-green-200'
+                    : tone === 'orange' ? 'bg-orange-50 text-orange-700 border-orange-200'
+                    : 'bg-gray-50 text-gray-600 border-gray-200';
                   return rows.map(item => {
                     const isVolatile = item.prior < VOLATILITY_THRESHOLD;
                     const changeBarW = Math.abs(item.pct || 0) / maxAbsChange * 48;
+                    const ctx = activeGeo === 'citywide' ? getHistoricalContext(crimeHistory.citywide, item, currentYear) : null;
+                    // Pick the most-noteworthy single badge to display inline (don't crowd the row).
+                    const primaryBadge = ctx?.sinceSuperlative || ctx?.outlierBadge || ctx?.pandemicBadge;
                     return (
                       <tr key={item.name} className="hover:bg-gray-50 transition-colors group">
-                        <td className="py-2.5 font-bold text-sm text-black">{item.name}{isVolatile && <span className="ml-1 text-gray-400">*</span>}</td>
-                        <td className="py-2.5 text-center hidden sm:table-cell">
-                          <div className="flex items-center justify-center gap-3">
-                            <MiniSparkline points={[item.prior, item.current]} minY={0} />
-                            {activeGeo === 'citywide' && (() => {
-                              const since2019 = crimeHistory.citywide.filter(d => d.y >= 2019).map(d => d[item.name]).filter(v => v != null);
-                              if (since2019.length < 2) return <span className="hidden md:inline-block w-[56px]" />;
-                              return <span className="hidden md:inline-block"><MiniSparkline points={since2019} width={56} height={18} /></span>;
-                            })()}
+                        <td className="py-2.5 font-bold text-sm text-black">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{item.name}{isVolatile && <span className="ml-1 text-gray-400">*</span>}</span>
+                            {primaryBadge && (
+                              <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${toneClass(primaryBadge.tone)}`} title={ctx?.pandemicBadge?.label && ctx.pandemicBadge !== primaryBadge ? `${primaryBadge.label} · ${ctx.pandemicBadge.label}` : primaryBadge.label}>
+                                {primaryBadge.label}
+                              </span>
+                            )}
                           </div>
+                        </td>
+                        <td className="py-2.5 text-center hidden md:table-cell">
+                          {ctx ? (
+                            <ContextSparkline series={ctx.series} annualized={ctx.annualized} preLow={ctx.preLow} preHigh={ctx.preHigh} />
+                          ) : (
+                            <MiniSparkline points={[item.prior, item.current]} minY={0} />
+                          )}
                         </td>
                         <td className={`py-2.5 text-right tabular-nums text-gray-500 ${isVolatile ? 'opacity-50' : ''}`}>
                           <div className="text-sm">{item.prior.toLocaleString()}</div>
@@ -2122,6 +2259,9 @@ Rules: Cite only numbers that appear in the provided data. Never invent or parap
                         <td className={`py-2.5 text-right tabular-nums text-black ${isVolatile ? 'opacity-50' : ''}`}>
                           <div className="text-sm font-black">{item.current.toLocaleString()}</div>
                           {item.currentRate !== null && !isTouristPrecinct && <div className="text-[10px] font-normal text-gray-500">{item.currentRate.toFixed(1)}/100k (CW: {parsedData.citywideRates[item.name]?.toFixed(1)})</div>}
+                          {ctx && ctx.ytdFrac && ctx.ytdFrac < 0.95 && (
+                            <div className="text-[10px] font-normal text-gray-400" title={`Annualized to full-year using YTD fraction ${(ctx.ytdFrac * 100).toFixed(0)}%`}>~{Math.round(ctx.annualized).toLocaleString()} proj.</div>
+                          )}
                         </td>
                         <td className={`py-2.5 text-right text-xs font-bold tabular-nums ${item.pct > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                           <div className="flex items-center justify-end gap-1.5">
@@ -2138,8 +2278,9 @@ Rules: Cite only numbers that appear in the provided data. Never invent or parap
               </tbody>
             </table>
           </div>
-          <div className="mt-6 text-[11px] font-serif italic text-gray-500 border-t border-gray-100 pt-4">
-            * Indicates a base sample size under 30 (statistically volatile).
+          <div className="mt-6 text-[11px] font-serif italic text-gray-500 border-t border-gray-100 pt-4 space-y-1">
+            <div>* Indicates a base sample size under 30 (statistically volatile).</div>
+            <div>Trajectory shows the offense's annual citywide count back to the early 2010s. The blue band marks the 2017–2019 pre-pandemic range — values inside the band have returned to pre-pandemic norms; values below are below pre-pandemic lows. Dot = current year, projected to a full-year equivalent from year-to-date data. Badges call out where each offense sits relative to that historical context (e.g., "Lowest since 2014," "Above pre-pandemic high," "5-yr high outlier"). Pandemic-context badges only appear for the 10 major offenses tracked in our 30-year history.</div>
           </div>
         </section>
       </div>
