@@ -1,0 +1,342 @@
+{
+ "1st Precinct": {
+  "population": 84799,
+  "neighborhoods": "Tribeca, Wall St"
+ },
+ "5th Precinct": {
+  "population": 50598,
+  "neighborhoods": "Chinatown, Little Italy"
+ },
+ "6th Precinct": {
+  "population": 64643,
+  "neighborhoods": "Greenwich Village"
+ },
+ "7th Precinct": {
+  "population": 57985,
+  "neighborhoods": "Lower East Side"
+ },
+ "9th Precinct": {
+  "population": 75951,
+  "neighborhoods": "East Village"
+ },
+ "10th Precinct": {
+  "population": 65570,
+  "neighborhoods": "Chelsea"
+ },
+ "13th Precinct": {
+  "population": 100050,
+  "neighborhoods": "Gramercy, Stuy Town"
+ },
+ "14th Precinct": {
+  "population": 28050,
+  "neighborhoods": "Midtown South"
+ },
+ "17th Precinct": {
+  "population": 89367,
+  "neighborhoods": "Midtown East"
+ },
+ "18th Precinct": {
+  "population": 67528,
+  "neighborhoods": "Midtown North"
+ },
+ "19th Precinct": {
+  "population": 220261,
+  "neighborhoods": "Upper East Side"
+ },
+ "20th Precinct": {
+  "population": 114575,
+  "neighborhoods": "Upper West Side"
+ },
+ "22nd Precinct": {
+  "population": 129,
+  "neighborhoods": "Central Park"
+ },
+ "23rd Precinct": {
+  "population": 74769,
+  "neighborhoods": "East Harlem South"
+ },
+ "24th Precinct": {
+  "population": 107489,
+  "neighborhoods": "Morningside Heights"
+ },
+ "25th Precinct": {
+  "population": 50996,
+  "neighborhoods": "East Harlem North"
+ },
+ "26th Precinct": {
+  "population": 50002,
+  "neighborhoods": "Manhattanville"
+ },
+ "28th Precinct": {
+  "population": 49200,
+  "neighborhoods": "Central Harlem"
+ },
+ "30th Precinct": {
+  "population": 60456,
+  "neighborhoods": "Hamilton Heights"
+ },
+ "32nd Precinct": {
+  "population": 81240,
+  "neighborhoods": "Central Harlem North"
+ },
+ "33rd Precinct": {
+  "population": 71598,
+  "neighborhoods": "Washington Heights"
+ },
+ "34th Precinct": {
+  "population": 108608,
+  "neighborhoods": "Inwood, Wash. Heights"
+ },
+ "40th Precinct": {
+  "population": 100929,
+  "neighborhoods": "Mott Haven"
+ },
+ "41st Precinct": {
+  "population": 54454,
+  "neighborhoods": "Hunts Point"
+ },
+ "42nd Precinct": {
+  "population": 93755,
+  "neighborhoods": "Morrisania"
+ },
+ "43rd Precinct": {
+  "population": 188015,
+  "neighborhoods": "Soundview"
+ },
+ "44th Precinct": {
+  "population": 150436,
+  "neighborhoods": "Highbridge"
+ },
+ "45th Precinct": {
+  "population": 130799,
+  "neighborhoods": "Co-op City"
+ },
+ "46th Precinct": {
+  "population": 132584,
+  "neighborhoods": "Fordham"
+ },
+ "47th Precinct": {
+  "population": 163539,
+  "neighborhoods": "Wakefield"
+ },
+ "48th Precinct": {
+  "population": 89216,
+  "neighborhoods": "East Tremont"
+ },
+ "49th Precinct": {
+  "population": 119881,
+  "neighborhoods": "Pelham Parkway"
+ },
+ "50th Precinct": {
+  "population": 106976,
+  "neighborhoods": "Riverdale"
+ },
+ "52nd Precinct": {
+  "population": 146888,
+  "neighborhoods": "Bedford Park"
+ },
+ "60th Precinct": {
+  "population": 109024,
+  "neighborhoods": "Coney Island"
+ },
+ "61st Precinct": {
+  "population": 169513,
+  "neighborhoods": "Sheepshead Bay"
+ },
+ "62nd Precinct": {
+  "population": 198870,
+  "neighborhoods": "Bensonhurst"
+ },
+ "63rd Precinct": {
+  "population": 112652,
+  "neighborhoods": "Flatlands"
+ },
+ "66th Precinct": {
+  "population": 205377,
+  "neighborhoods": "Borough Park"
+ },
+ "67th Precinct": {
+  "population": 162446,
+  "neighborhoods": "East Flatbush"
+ },
+ "68th Precinct": {
+  "population": 136071,
+  "neighborhoods": "Bay Ridge"
+ },
+ "69th Precinct": {
+  "population": 90763,
+  "neighborhoods": "Canarsie"
+ },
+ "70th Precinct": {
+  "population": 164568,
+  "neighborhoods": "Flatbush"
+ },
+ "71st Precinct": {
+  "population": 102000,
+  "neighborhoods": "Crown Heights South"
+ },
+ "72nd Precinct": {
+  "population": 133230,
+  "neighborhoods": "Sunset Park"
+ },
+ "73rd Precinct": {
+  "population": 98506,
+  "neighborhoods": "Brownsville"
+ },
+ "75th Precinct": {
+  "population": 200994,
+  "neighborhoods": "East New York"
+ },
+ "76th Precinct": {
+  "population": 47789,
+  "neighborhoods": "Red Hook"
+ },
+ "77th Precinct": {
+  "population": 101267,
+  "neighborhoods": "Crown Heights North"
+ },
+ "78th Precinct": {
+  "population": 73203,
+  "neighborhoods": "Park Slope"
+ },
+ "79th Precinct": {
+  "population": 106039,
+  "neighborhoods": "Bed-Stuy West"
+ },
+ "81st Precinct": {
+  "population": 68921,
+  "neighborhoods": "Bed-Stuy East"
+ },
+ "83rd Precinct": {
+  "population": 120747,
+  "neighborhoods": "Bushwick"
+ },
+ "84th Precinct": {
+  "population": 65597,
+  "neighborhoods": "Brooklyn Heights, DUMBO"
+ },
+ "88th Precinct": {
+  "population": 64372,
+  "neighborhoods": "Fort Greene"
+ },
+ "90th Precinct": {
+  "population": 131377,
+  "neighborhoods": "Williamsburg"
+ },
+ "94th Precinct": {
+  "population": 72748,
+  "neighborhoods": "Greenpoint"
+ },
+ "100th Precinct": {
+  "population": 50809,
+  "neighborhoods": "Rockaways"
+ },
+ "101st Precinct": {
+  "population": 73376,
+  "neighborhoods": "Far Rockaway"
+ },
+ "102nd Precinct": {
+  "population": 153297,
+  "neighborhoods": "Richmond Hill"
+ },
+ "103rd Precinct": {
+  "population": 121059,
+  "neighborhoods": "Jamaica"
+ },
+ "104th Precinct": {
+  "population": 178948,
+  "neighborhoods": "Ridgewood, Maspeth"
+ },
+ "105th Precinct": {
+  "population": 199218,
+  "neighborhoods": "Queens Village"
+ },
+ "106th Precinct": {
+  "population": 129391,
+  "neighborhoods": "Ozone Park"
+ },
+ "107th Precinct": {
+  "population": 161402,
+  "neighborhoods": "Fresh Meadows"
+ },
+ "108th Precinct": {
+  "population": 137962,
+  "neighborhoods": "Long Island City"
+ },
+ "109th Precinct": {
+  "population": 269581,
+  "neighborhoods": "Flushing"
+ },
+ "110th Precinct": {
+  "population": 181051,
+  "neighborhoods": "Elmhurst"
+ },
+ "111th Precinct": {
+  "population": 122211,
+  "neighborhoods": "Bayside"
+ },
+ "112th Precinct": {
+  "population": 119739,
+  "neighborhoods": "Forest Hills"
+ },
+ "113th Precinct": {
+  "population": 135221,
+  "neighborhoods": "South Jamaica"
+ },
+ "114th Precinct": {
+  "population": 208525,
+  "neighborhoods": "Astoria"
+ },
+ "115th Precinct": {
+  "population": 179134,
+  "neighborhoods": "Jackson Heights"
+ },
+ "120th Precinct": {
+  "population": 122308,
+  "neighborhoods": "St. George"
+ },
+ "121st Precinct": {
+  "population": 128149,
+  "neighborhoods": "Bulls Head"
+ },
+ "122nd Precinct": {
+  "population": 144552,
+  "neighborhoods": "New Dorp"
+ },
+ "123rd Precinct": {
+  "population": 100738,
+  "neighborhoods": "Tottenville"
+ },
+ "Bronx": {
+  "population": 1477472,
+  "neighborhoods": null
+ },
+ "Brooklyn South": {
+  "population": 1705506,
+  "neighborhoods": null
+ },
+ "Brooklyn North": {
+  "population": 1030568,
+  "neighborhoods": null
+ },
+ "Manhattan South": {
+  "population": 684541,
+  "neighborhoods": null
+ },
+ "Manhattan North": {
+  "population": 989323,
+  "neighborhoods": null
+ },
+ "Queens South": {
+  "population": 1023773,
+  "neighborhoods": null
+ },
+ "Queens North": {
+  "population": 1397151,
+  "neighborhoods": null
+ },
+ "Staten Island": {
+  "population": 495747,
+  "neighborhoods": null
+ }
+}
