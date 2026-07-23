@@ -3,6 +3,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Cartesia
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from './data/nyc_precincts.json';
 import crimeHistory from './data/crime_history.json';
+import PRECINCT_META from './data/precinct_meta.json';
 
 /* ------------------------------------------------------------------ */
 /* 1. HISTORICAL DATASETS & CONFIG                                    */
@@ -179,27 +180,11 @@ const FALLBACK_DATA = {
 
 // 2020 Census populations via John Keefe's census-by-precincts crosswalk
 // (github.com/jkeefe/census-by-precincts). Patrol borough totals = sum of constituent precincts.
-const GEO_POPULATIONS = {
-  "1st Precinct": 84799, "5th Precinct": 50598, "6th Precinct": 64643, "7th Precinct": 57985, "9th Precinct": 75951,
-  "10th Precinct": 65570, "13th Precinct": 100050, "14th Precinct": 28050, "17th Precinct": 89367, "18th Precinct": 67528,
-  "19th Precinct": 220261, "20th Precinct": 114575, "22nd Precinct": 129,
-  "23rd Precinct": 74769, "24th Precinct": 107489, "25th Precinct": 50996, "26th Precinct": 50002, "28th Precinct": 49200,
-  "30th Precinct": 60456, "32nd Precinct": 81240, "33rd Precinct": 71598, "34th Precinct": 108608,
-  "40th Precinct": 100929, "41st Precinct": 54454, "42nd Precinct": 93755, "43rd Precinct": 188015, "44th Precinct": 150436,
-  "45th Precinct": 130799, "46th Precinct": 132584, "47th Precinct": 163539, "48th Precinct": 89216, "49th Precinct": 119881,
-  "50th Precinct": 106976, "52nd Precinct": 146888,
-  "60th Precinct": 109024, "61st Precinct": 169513, "62nd Precinct": 198870, "63rd Precinct": 112652, "66th Precinct": 205377,
-  "67th Precinct": 162446, "68th Precinct": 136071, "69th Precinct": 90763, "70th Precinct": 164568, "71st Precinct": 102000,
-  "72nd Precinct": 133230, "73rd Precinct": 98506, "75th Precinct": 200994, "76th Precinct": 47789, "77th Precinct": 101267,
-  "78th Precinct": 73203, "79th Precinct": 106039, "81st Precinct": 68921, "83rd Precinct": 120747, "84th Precinct": 65597,
-  "88th Precinct": 64372, "90th Precinct": 131377, "94th Precinct": 72748,
-  "100th Precinct": 50809, "101st Precinct": 73376,
-  "102nd Precinct": 153297, "103rd Precinct": 121059, "104th Precinct": 178948, "105th Precinct": 199218, "106th Precinct": 129391,
-  "107th Precinct": 161402, "108th Precinct": 137962, "109th Precinct": 269581, "110th Precinct": 181051, "111th Precinct": 122211,
-  "112th Precinct": 119739, "113th Precinct": 135221, "114th Precinct": 208525, "115th Precinct": 179134,
-  "120th Precinct": 122308, "121st Precinct": 128149, "122nd Precinct": 144552, "123rd Precinct": 100738,
-  "Bronx": 1477472, "Brooklyn South": 1705506, "Brooklyn North": 1030568, "Manhattan South": 684541, "Manhattan North": 989323, "Queens South": 1023773, "Queens North": 1397151, "Staten Island": 495747
-};
+// Derived from src/data/precinct_meta.json, which the weekly-email scripts read too — one table,
+// so the site and the inbox can never disagree about a precinct's population or neighborhoods.
+const GEO_POPULATIONS = Object.fromEntries(
+  Object.entries(PRECINCT_META).filter(([, v]) => v.population != null).map(([k, v]) => [k, v.population])
+);
 
 // 2010 Census populations mapped to 2020 precinct boundaries (John Keefe's crosswalk).
 // Used for precinct-level rate calculations on data from 2010–2019.
@@ -225,34 +210,9 @@ const GEO_POPULATIONS_2010 = { // eslint-disable-line no-unused-vars
   "Bronx": 1382480, "Brooklyn South": 2056639, "Brooklyn North": 448056, "Manhattan South": 611934, "Manhattan North": 953815, "Queens South": 796151, "Queens North": 1457328, "Staten Island": 468730
 };
 
-const PRECINCT_NEIGHBORHOODS = {
-  "1st Precinct": "Tribeca, Wall St", "5th Precinct": "Chinatown, Little Italy", "6th Precinct": "Greenwich Village",
-  "7th Precinct": "Lower East Side", "9th Precinct": "East Village", "10th Precinct": "Chelsea",
-  "13th Precinct": "Gramercy, Stuy Town", "14th Precinct": "Midtown South", "17th Precinct": "Midtown East",
-  "18th Precinct": "Midtown North", "19th Precinct": "Upper East Side", "20th Precinct": "Upper West Side",
-  "22nd Precinct": "Central Park", "23rd Precinct": "East Harlem South", "24th Precinct": "Morningside Heights",
-  "25th Precinct": "East Harlem North", "26th Precinct": "Manhattanville", "28th Precinct": "Central Harlem",
-  "30th Precinct": "Hamilton Heights", "32nd Precinct": "Central Harlem North", "33rd Precinct": "Washington Heights",
-  "34th Precinct": "Inwood, Wash. Heights", "40th Precinct": "Mott Haven", "41st Precinct": "Hunts Point",
-  "42nd Precinct": "Morrisania", "43rd Precinct": "Soundview", "44th Precinct": "Highbridge",
-  "45th Precinct": "Co-op City", "46th Precinct": "Fordham", "47th Precinct": "Wakefield",
-  "48th Precinct": "East Tremont", "49th Precinct": "Pelham Parkway", "50th Precinct": "Riverdale",
-  "52nd Precinct": "Bedford Park", "60th Precinct": "Coney Island", "61st Precinct": "Sheepshead Bay",
-  "62nd Precinct": "Bensonhurst", "63rd Precinct": "Flatlands", "66th Precinct": "Borough Park",
-  "67th Precinct": "East Flatbush", "68th Precinct": "Bay Ridge", "69th Precinct": "Canarsie",
-  "70th Precinct": "Flatbush", "71st Precinct": "Crown Heights South", "72nd Precinct": "Sunset Park",
-  "73rd Precinct": "Brownsville", "75th Precinct": "East New York", "76th Precinct": "Red Hook",
-  "77th Precinct": "Crown Heights North", "78th Precinct": "Park Slope", "79th Precinct": "Bed-Stuy West",
-  "81st Precinct": "Bed-Stuy East", "83rd Precinct": "Bushwick", "84th Precinct": "Brooklyn Heights, DUMBO",
-  "88th Precinct": "Fort Greene", "90th Precinct": "Williamsburg", "94th Precinct": "Greenpoint",
-  "100th Precinct": "Rockaways", "101st Precinct": "Far Rockaway", "102nd Precinct": "Richmond Hill",
-  "103rd Precinct": "Jamaica", "104th Precinct": "Ridgewood, Maspeth", "105th Precinct": "Queens Village",
-  "106th Precinct": "Ozone Park", "107th Precinct": "Fresh Meadows", "108th Precinct": "Long Island City",
-  "109th Precinct": "Flushing", "110th Precinct": "Elmhurst", "111th Precinct": "Bayside",
-  "112th Precinct": "Forest Hills", "113th Precinct": "South Jamaica", "114th Precinct": "Astoria",
-  "115th Precinct": "Jackson Heights", "120th Precinct": "St. George", "121st Precinct": "Bulls Head",
-  "122nd Precinct": "New Dorp", "123rd Precinct": "Tottenville"
-};
+const PRECINCT_NEIGHBORHOODS = Object.fromEntries(
+  Object.entries(PRECINCT_META).filter(([, v]) => v.neighborhoods).map(([k, v]) => [k, v.neighborhoods])
+);
 
 /* ------------------------------------------------------------------ */
 /* HELPERS & MINI-COMPONENTS                                          */
@@ -310,9 +270,9 @@ const formatPeriodDate = (iso) => {
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
 };
 
-const buildStorySummary = ({ parsedData, hotspots, activeTab }) => {
+const buildStorySummary = ({ parsedData, activeTab }) => {
   if (!parsedData || !parsedData.totals) return null;
-  const { totals, driver, period } = parsedData;
+  const { totals, period, all } = parsedData;
   const isYTD = activeTab === 'ytd';
   const endLabel = formatPeriodDate(period?.week_end);
   const startLabel = formatPeriodDate(period?.week_start);
@@ -321,41 +281,42 @@ const buildStorySummary = ({ parsedData, hotspots, activeTab }) => {
     : (startLabel && endLabel ? `For the week of ${startLabel}–${endLabel}` : 'This reporting week');
 
   const mPct = typeof totals.mPct === 'number' ? totals.mPct : 0;
-  const direction = mPct > 0 ? 'rise' : mPct < 0 ? 'decline' : 'change';
   const upDown = mPct > 0 ? 'up' : mPct < 0 ? 'down' : 'flat';
   const pctAbs = Math.abs(mPct).toFixed(1);
   const mCur = totals.mCur?.toLocaleString() ?? '—';
 
-  // Hero already shows the aggregate metric prominently; lead with local color, not duplicated topline.
+  const pctChange = (cur, pri) => (typeof cur === 'number' && typeof pri === 'number' && pri > 0) ? ((cur - pri) / pri) * 100 : null;
+  const move = (p) => Math.abs(p) < 0.5 ? 'essentially flat' : `${p > 0 ? 'up' : 'down'} ${Math.abs(p).toFixed(1)}%`;
+
+  // The three stat cards below already carry the driver, the inequality ratio, the pre-pandemic count and the
+  // sharpest local spike. This box exists to add facts those cards don't: the violent/property split, and the
+  // two numbers people reach for first — murder and shooting victims.
   let sentence1 = null;
-  if (driver && driver.name && Math.abs(driver.share) >= 5) {
-    const shareStr = `${Math.round(Math.abs(driver.share))}%`;
-    sentence1 = `${timeframe}, ${expandCrime(driver.name)} accounts for ${shareStr} of the citywide ${direction}.`;
+  const vPct = pctChange(totals.vCur, totals.vPri);
+  const pPct = pctChange(totals.pCur, totals.pPri);
+  if (vPct !== null && pPct !== null) {
+    sentence1 = `violent offenses are ${move(vPct)} and property offenses ${move(pPct)}.`;
   }
 
   let sentence2 = null;
-  const spike = hotspots?.topPctSpike;
-  const drop = hotspots?.topPctDrop;
   const murder = totals.murder;
   const shootings = totals.shootingVic;
-
-  if (spike && typeof spike.pct === 'number' && spike.pct >= 25) {
-    sentence2 = `The sharpest local shift was ${expandCrime(spike.crime)} in the ${toOrdinalPrecinct(spike.precinct)}, up ${Math.round(spike.pct)}%.`;
-  } else if (drop && typeof drop.pct === 'number' && drop.pct <= -25) {
-    sentence2 = `The sharpest local shift was ${expandCrime(drop.crime)} in the ${toOrdinalPrecinct(drop.precinct)}, down ${Math.round(Math.abs(drop.pct))}%.`;
-  } else if (typeof murder === 'number' && typeof shootings === 'number' && (murder > 0 || shootings > 0)) {
-    sentence2 = `Murder stands at ${murder.toLocaleString()} and shooting victims at ${shootings.toLocaleString()} for the period.`;
-  } else if (hotspots?.inequality) {
-    const ineq = hotspots.inequality;
-    sentence2 = `The ${ineq.topCount} highest-crime precincts (${formatPop(ineq.topPop)} residents) match the violent crime total of the ${ineq.bottomCount} safest (${formatPop(ineq.bottomPop)} residents).`;
+  if ((typeof murder === 'number' && murder > 0) || (typeof shootings === 'number' && shootings > 0)) {
+    const mChg = pctChange(murder, totals.murderPri);
+    const sChg = pctChange(shootings, totals.shootingVicPri);
+    const murderClause = `Murder stands at ${murder.toLocaleString()}${mChg !== null ? ` (${move(mChg)})` : ''}`;
+    const shootClause = `shooting victims at ${shootings.toLocaleString()}${sChg !== null ? ` (${move(sChg)})` : ''}`;
+    sentence2 = `${murderClause} and ${shootClause}.`;
+  } else if (Array.isArray(all) && all.length) {
+    const risen = all.filter(o => typeof o.pct === 'number' && o.pct > 0).length;
+    const fallen = all.filter(o => typeof o.pct === 'number' && o.pct < 0).length;
+    if (risen + fallen > 0) sentence2 = `Of the ${risen + fallen} tracked offenses with a year-over-year comparison, ${risen} are up and ${fallen} are down.`;
   }
 
-  // If we have no local color at all, fall back to a single sentence using the topline so the section isn't empty.
-  if (!sentence1 && !sentence2) {
-    sentence1 = `${timeframe}, major index offenses are ${upDown} ${pctAbs}% versus the same period last year (${mCur} total).`;
-  }
+  // If the split isn't computable, fall back to the topline so the box is never empty.
+  if (!sentence1) sentence1 = `major index offenses are ${upDown} ${pctAbs}% versus the same period last year (${mCur} total).`;
 
-  return [sentence1, sentence2].filter(Boolean).join(' ');
+  return [`${timeframe}, ${sentence1}`, sentence2].filter(Boolean).join(' ');
 };
 
 const toOrdinalPrecinct = (n) => {
@@ -1541,6 +1502,120 @@ const UnifiedMagnitudeChart = ({ data, isTourist, citywideRates, activeGeo }) =>
 
 
 /* ------------------------------------------------------------------ */
+/* EMAIL SIGNUP                                                       */
+/* ------------------------------------------------------------------ */
+// Posts to /api/subscribe, which forwards to Buttondown. Buttondown owns the confirmation
+// email and the unsubscribe link, so nothing about a reader is stored in this app.
+const SubscribeBlock = ({ defaultGeo }) => {
+  const [email, setEmail] = useState('');
+  const [geo, setGeo] = useState(defaultGeo || 'citywide');
+  const [state, setState] = useState('idle'); // idle | sending | done | error
+  const [message, setMessage] = useState('');
+
+  // Keep the dropdown pointed at whatever the reader is currently looking at, until they
+  // choose for themselves — then leave their choice alone.
+  const [touched, setTouched] = useState(false);
+  useEffect(() => { if (!touched && defaultGeo) setGeo(defaultGeo); }, [defaultGeo, touched]);
+
+  const geoOptions = useMemo(() => {
+    const precincts = Object.keys(PRECINCT_NEIGHBORHOODS)
+      .map(p => ({ value: p, label: `${p} — ${PRECINCT_NEIGHBORHOODS[p]}`, sort: parseInt(p, 10) }))
+      .sort((a, b) => a.sort - b.sort);
+    return [{ value: 'citywide', label: 'Citywide' }, ...precincts];
+  }, []);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (state === 'sending') return;
+    setState('sending');
+    setMessage('');
+    try {
+      const resp = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, geo }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.ok) {
+        setState('done');
+        setMessage(data.existing
+          ? `You were already on the list. Your brief now covers ${geo === 'citywide' ? 'the whole city' : `the ${geo}`}.`
+          : 'Check your inbox and confirm the subscription. That last click is what starts it.');
+        setEmail('');
+      } else {
+        setState('error');
+        setMessage(data.error || 'Something went wrong. Try again in a minute.');
+      }
+    } catch {
+      setState('error');
+      setMessage('Could not reach the server. Try again in a minute.');
+    }
+  };
+
+  return (
+    <section id="subscribe" className="mt-12 pt-8 border-t-[3px] border-black scroll-mt-16">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-start">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black font-serif leading-tight flex items-center gap-2">
+            Get your precinct's week by email <AnchorLink id="subscribe" label="Get your precinct's week by email" />
+          </h2>
+          <p className="mt-3 font-serif text-[16px] leading-relaxed text-gray-700">
+            Pick a precinct. Every Wednesday morning, once the NYPD posts the new week, you get one email:
+            that precinct's 28-day trend against the same stretch last year, the week's own numbers and the
+            sharpest movements anywhere in the city.
+          </p>
+          <p className="mt-3 text-[12px] leading-relaxed text-gray-500">
+            One email a week, nothing else. Unsubscribe from any of them. Your address goes to Buttondown,
+            the mailing list service, and nowhere else.
+          </p>
+        </div>
+
+        <form onSubmit={submit} className="bg-gray-50 p-5 sm:p-6 rounded-sm border border-gray-200">
+          <label htmlFor="sub-geo" className="block text-[11px] font-black uppercase tracking-widest text-gray-500 mb-2">Your precinct</label>
+          <select
+            id="sub-geo"
+            value={geo}
+            onChange={(e) => { setTouched(true); setGeo(e.target.value); }}
+            className="w-full bg-white border border-gray-300 rounded-sm px-3 py-2.5 text-[14px] text-black mb-4 focus:outline-none focus:border-black"
+          >
+            {geoOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+
+          <label htmlFor="sub-email" className="block text-[11px] font-black uppercase tracking-widest text-gray-500 mb-2">Email</label>
+          <input
+            id="sub-email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoComplete="email"
+            className="w-full bg-white border border-gray-300 rounded-sm px-3 py-2.5 text-[14px] text-black mb-4 focus:outline-none focus:border-black"
+          />
+
+          <button
+            type="submit"
+            disabled={state === 'sending'}
+            className="w-full bg-black text-white text-[12px] font-black uppercase tracking-widest py-3 rounded-sm hover:bg-gray-800 transition-colors disabled:opacity-50"
+          >
+            {state === 'sending' ? 'Signing you up…' : 'Send me the weekly brief'}
+          </button>
+
+          {message && (
+            <div
+              role="status"
+              className={`mt-4 text-[13px] leading-relaxed ${state === 'error' ? 'text-orange-700' : 'text-green-700'}`}
+            >
+              {message}
+            </div>
+          )}
+        </form>
+      </div>
+    </section>
+  );
+};
+
+/* ------------------------------------------------------------------ */
 /* MAIN APP WITH VIEW ROUTING                                         */
 /* ------------------------------------------------------------------ */
 export default function App() {
@@ -1718,14 +1793,14 @@ export default function App() {
     const minors = extract(geoData.additional_stats).sort((a, b) => b.current - a.current);
     const all = [...felonies, ...minors].sort((a, b) => b.current - a.current);
     
-    let mCur = 0, mPri = 0, pCur = 0, vCur = 0, murder = 0, shootingVic = 0;
+    let mCur = 0, mPri = 0, pCur = 0, pPri = 0, vCur = 0, vPri = 0, murder = 0, murderPri = 0, shootingVic = 0, shootingVicPri = 0;
     felonies.forEach(f => {
       mCur += f.current; mPri += f.prior;
-      if (f.name === 'Murder') murder = f.current;
-      if (PROPERTY_CRIMES.includes(f.name)) pCur += f.current;
-      if (VIOLENT_CRIMES.includes(f.name)) vCur += f.current;
+      if (f.name === 'Murder') { murder = f.current; murderPri = f.prior; }
+      if (PROPERTY_CRIMES.includes(f.name)) { pCur += f.current; pPri += f.prior; }
+      if (VIOLENT_CRIMES.includes(f.name)) { vCur += f.current; vPri += f.prior; }
     });
-    minors.forEach(m => { if (m.name === 'Shooting Vic.') shootingVic = m.current; });
+    minors.forEach(m => { if (m.name === 'Shooting Vic.') { shootingVic = m.current; shootingVicPri = m.prior; } });
 
     const citywideRates = {};
     let cwMCur = 0;
@@ -1782,10 +1857,13 @@ export default function App() {
       felonies, minors, all, driver: driverObj, citywideRates, localAnomaly, localBrightSpot, topSurge, topDrop,
       totals: { 
         mCur, mPri, pCur, vCur, 
-        mPct: calcPct(mCur, mPri) ?? 0, 
-        diff: mDiff, 
-        murder, 
+        mPct: calcPct(mCur, mPri) ?? 0,
+        diff: mDiff,
+        pPri, vPri,
+        murder,
+        murderPri,
         shootingVic,
+        shootingVicPri,
         citywideRate: (cwMCur / CITYWIDE_POPULATION) * 100000,
         lethalityRatio: murder > 0 ? (shootingVic / murder) : 0 
       } 
@@ -1827,7 +1905,14 @@ export default function App() {
       inequality = { topCount: 5, topSum: top5Sum, topPop: top5Pop, bottomCount, bottomPop };
     }
     allPrecinctCrimes.sort((a, b) => b.pct - a.pct);
-    return { inequality, topPctSpike: allPrecinctCrimes[0], topPctDrop: allPrecinctCrimes[allPrecinctCrimes.length - 1] };
+    // One entry per precinct so the runner-up lists don't stack three offenses from the same command.
+    const onePerPrecinct = (list) => {
+      const seen = new Set();
+      return list.filter(item => (seen.has(item.precinct) ? false : (seen.add(item.precinct), true)));
+    };
+    const spikes = onePerPrecinct(allPrecinctCrimes.filter(c => c.pct > 0));
+    const drops = onePerPrecinct([...allPrecinctCrimes].reverse().filter(c => c.pct < 0));
+    return { inequality, spikes, drops, topPctSpike: allPrecinctCrimes[0], topPctDrop: allPrecinctCrimes[allPrecinctCrimes.length - 1] };
   }, [rawData, activeTab]);
 
   const isTouristPrecinct = TOURIST_PRECINCTS.includes(activeGeo);
@@ -1885,12 +1970,28 @@ export default function App() {
 
 
 
-      if (hotspots?.topPctSpike || hotspots?.topPctDrop) {
+      // The sharpest spike gets its own callout card at the top of the page, so this card skips it and
+      // reports the next-largest movements instead of saying the same thing a second time.
+      const featuredSpike = hotspots?.topPctSpike && typeof hotspots.topPctSpike.pct === 'number' && hotspots.topPctSpike.pct >= 25 ? hotspots.topPctSpike : null;
+      const isFeatured = (s) => featuredSpike && s.precinct === featuredSpike.precinct && s.crime === featuredSpike.crime;
+      const shifts = [
+        ...(hotspots?.spikes || []).filter(s => !isFeatured(s)).slice(0, 2).map(s => ({ ...s, rising: true })),
+        ...(hotspots?.drops || []).slice(0, 1).map(d => ({ ...d, rising: false })),
+      ];
+      if (shifts.length) {
         const flashContent = (
-          <ul className="space-y-3 mt-1 text-[14px]">
-            {hotspots.topPctSpike && <li>{`In **${formatGeoName(hotspots.topPctSpike.precinct)}**, **${expandCrimeTitle(hotspots.topPctSpike.crime)}** offenses have spiked by **${Math.round(hotspots.topPctSpike.pct)}%**.`}</li>}
-            {hotspots.topPctDrop && <li className="pt-2 border-t border-gray-100">{`In **${formatGeoName(hotspots.topPctDrop.precinct)}**, **${expandCrimeTitle(hotspots.topPctDrop.crime)}** offenses have fallen by **${Math.round(Math.abs(hotspots.topPctDrop.pct))}%**.`}</li>}
-          </ul>
+          <>
+            <ul className="space-y-3 mt-1 text-[14px]">
+              {shifts.map((s, i) => (
+                <li key={`${s.precinct}-${s.crime}`} className={i > 0 ? 'pt-2 border-t border-gray-100' : ''}>
+                  {s.rising
+                    ? `In **${formatGeoName(s.precinct)}**, **${expandCrimeTitle(s.crime)}** offenses are up **${Math.round(s.pct)}%** (${s.prior.toLocaleString()} to ${s.current.toLocaleString()}).`
+                    : `In **${formatGeoName(s.precinct)}**, **${expandCrimeTitle(s.crime)}** offenses have fallen by **${Math.round(Math.abs(s.pct))}%** (${s.prior.toLocaleString()} to ${s.current.toLocaleString()}).`}
+                </li>
+              ))}
+            </ul>
+            {featuredSpike && <div className="text-[11px] text-gray-400 italic mt-3">Next-largest movements after the citywide sharpest spike, shown above.</div>}
+          </>
         );
         cards.push({ id: 'flashpoints', icon: MapPin, title: 'Significant Local Shifts', content: flashContent });
       }
@@ -2255,7 +2356,7 @@ export default function App() {
 
         {/* Hero callouts: promoted insights that used to be buried in trend cards */}
         {activeGeo === 'citywide' && (() => {
-          const story = buildStorySummary({ parsedData, hotspots, activeTab });
+          const story = buildStorySummary({ parsedData, activeTab });
           const ineq = hotspots?.inequality;
           const recovery = getPrePandemicRecovery(parsedData.felonies, crimeHistory.citywide);
           const spike = hotspots?.topPctSpike;
@@ -2315,6 +2416,7 @@ export default function App() {
             ['national', 'National'],
             ['transit', 'Transit'],
             ['ledger', 'Ledger'],
+            ['subscribe', 'Subscribe'],
           ].map(([id, label]) => (
             <a key={id} href={`#${id}`} className="text-[11px] font-black uppercase tracking-widest text-gray-600 hover:text-black px-2 py-1 rounded hover:bg-gray-100 transition-colors flex-shrink-0">{label}</a>
           ))}
@@ -2515,6 +2617,8 @@ export default function App() {
             <div>Trajectory shows the offense's annual citywide count back to the early 2010s. The blue band marks the 2017–2019 pre-pandemic range — values inside the band have returned to pre-pandemic norms; values below are below pre-pandemic lows. Dot = current year, projected to a full-year equivalent from year-to-date data. Badges call out where each offense sits relative to that historical context (e.g., "Lowest since 2014," "Above pre-pandemic high," "5-yr high outlier"). Pandemic-context badges only appear for the 10 major offenses tracked in our 30-year history.</div>
           </div>
         </section>
+
+        <SubscribeBlock defaultGeo={activeGeo} />
 
         {/* Methodology / About footer */}
         <footer className="mt-16 pt-8 border-t border-gray-200 text-[12px] text-gray-600 grid grid-cols-1 md:grid-cols-3 gap-8">
