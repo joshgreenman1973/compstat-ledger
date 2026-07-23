@@ -21,10 +21,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "email:preview": "node scripts/send-weekly.js --dry-run",
-    "email:check": "node scripts/send-weekly.js --check",
-    "email:send": "node scripts/send-weekly.js --send"
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
