@@ -2176,7 +2176,6 @@ export default function App() {
                   <li>Use dropdown or search to zoom to a precinct.</li>
                   <li>View per-capita rates next to volume for context.</li>
                   <li>Faded rows indicate sample sizes under 30 (high volatility).</li>
-                  <li>Use the query box to ask plain-language questions about whatever data is in view.</li>
                 </ul>
               </div>}
             </div>
