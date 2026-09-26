@@ -1,0 +1,7 @@
+{"articles":[
+{"url":"https://example.com/test-1","url_mobile":"","title":"[TEST] Man shot in East New York stairwell","seendate":"20260918T141500Z","socialimage":"","domain":"example.com","language":"English","sourcecountry":"United States"},
+{"url":"https://example.org/test-2","url_mobile":"","title":"[TEST] Teen wounded in Brownsville shooting","seendate":"20260916T090000Z","socialimage":"","domain":"example.org","language":"English","sourcecountry":"United States"},
+{"url":"https://example.net/test-3","url_mobile":"","title":"[TEST] Two shot outside Mott Haven deli","seendate":"20260912T220000Z","socialimage":"","domain":"example.net","language":"English","sourcecountry":"United States"},
+{"url":"https://example.com/test-4","url_mobile":"","title":"[TEST] Shooting in Bed-Stuy leaves one hurt","seendate":"20260910T120000Z","socialimage":"","domain":"example.com","language":"English","sourcecountry":"United States"},
+{"url":"https://example.com/test-5","url_mobile":"","title":"[TEST] NYPD: gunfire reported in the 75th Precinct","seendate":"20260908T120000Z","socialimage":"","domain":"example.com","language":"English","sourcecountry":"United States"}
+]}
