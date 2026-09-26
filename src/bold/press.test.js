@@ -83,3 +83,47 @@ describe('parsing', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('coverage vs. the counts', () => {
+  const { coverageWindows, coverageChange, coverageVerdict, parseTimeline, buildGroupsQuery, COVERAGE_FAMILIES, timelineUrl } = require('./press');
+  const win = coverageWindows('9/20/2026');
+  test('two back-to-back 28-day windows ending on the report date', () => {
+    expect(win.mid.toISOString()).toBe('2026-08-24T00:00:00.000Z');
+    expect(win.from.toISOString()).toBe('2026-07-27T00:00:00.000Z');
+    expect(win.to.toISOString()).toBe('2026-09-20T23:59:59.000Z');
+  });
+  const day = (iso, value, norm) => ({ date: iso, value, norm });
+  const tl = JSON.stringify({ timeline: [{ series: 'Article Count', data: [
+    day('20260801T000000Z', 10, 1000), day('20260815T000000Z', 10, 1000), // prev: 20 of 2,000
+    day('20260830T000000Z', 20, 1000), day('20260915T000000Z', 20, 1000), // last: 40 of 2,000
+    day('20260921T000000Z', 99, 1000), // after the report date: ignored
+  ] }] });
+  test('parses the timeline and measures the change as a share of all coverage', () => {
+    const { points } = parseTimeline(tl);
+    const c = coverageChange(points, win);
+    expect(c.prev).toBe(20);
+    expect(c.last).toBe(40);
+    expect(c.normalized).toBe(true);
+    expect(c.change).toBeCloseTo(100, 6);
+  });
+  test('verdict rules', () => {
+    const cov = { enough: true, change: 100 };
+    expect(coverageVerdict({ verdict: 'noise', pct: 0 }, cov).label).toBe('More coverage, not more crime');
+    expect(coverageVerdict({ verdict: 'drop', pct: -20 }, cov).label).toBe('More coverage, not more crime');
+    expect(coverageVerdict({ verdict: 'noise', pct: 12 }, cov).kind).toBe('in'); // both up, count not significant
+    expect(coverageVerdict({ verdict: 'rise', pct: 30 }, cov).kind).toBe('in');
+    expect(coverageVerdict({ verdict: 'rise', pct: 30 }, { enough: true, change: -5 }).label).toBe('More crime, not more coverage');
+    expect(coverageVerdict({ verdict: 'noise', pct: -20 }, { enough: true, change: -60 }).kind).toBe('in'); // both down
+    expect(coverageVerdict({ verdict: 'noise', pct: 3 }, { enough: true, change: -60 }).label).toBe('Less coverage, not less crime');
+    expect(coverageVerdict({ verdict: 'noise', pct: 2 }, { enough: true, change: 10 }).kind).toBe('quiet');
+    expect(coverageVerdict({ verdict: 'noise', pct: 2 }, { enough: false, change: 300 }).kind).toBe('thin');
+  });
+  test('two-group queries AND the groups', () => {
+    const subway = COVERAGE_FAMILIES.find((f) => f.key === 'subway');
+    expect(buildGroupsQuery(subway.groups, ['NYPD'])).toBe('(subway OR "on a train" OR "subway station") (attacked OR stabbed OR shoved OR slashed OR assaulted OR robbed) NYPD sourcelang:english');
+    expect(new URL(timelineUrl('x', win.from, win.to)).searchParams.get('mode')).toBe('TimelineVolRaw');
+  });
+  test('plain-text errors are errors', () => {
+    expect(parseTimeline('Queries containing OR must be surrounded by ()').error).toBeTruthy();
+  });
+});

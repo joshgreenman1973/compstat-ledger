@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<!-- Copied from github.com/joshgreenman1973/nyc-precinct-day at 12f1d59 (Sept. 23, 2026), plus a URL preselect near the end. Keep in sync by hand. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A day on the police radio — NYC precinct explorer</title>
+<link rel="preconnect" href="https://unpkg.com">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-gesture-handling/dist/leaflet-gesture-handling.min.css">
+<style>
+  :root{
+    --bg:#0b0f14; --panel:#121821; --panel2:#0e141c; --ink:#e7edf3; --mut:#8aa0b4;
+    --line:#1f2a37; --line2:#2a3a4d; --accent:#37d0c4; --accent2:#5aa9ff;
+    --crit:#ff4d5e; --serious:#ff9f1c; --noncrit:#ffd23f; --routine:#5b7388;
+    --f-patrol:#5b7388; --f-medical:#3ad29f; --f-invest:#7f93a6; --f-other:#6b7a8c;
+    --f-dispute:#ffb454; --f-theft:#ff8c42; --f-accident:#b07cff; --f-disorder:#ffd23f;
+    --f-assault:#ff5e6c; --f-weapon:#ff2d55; --f-alarm:#36c5f0;
+    --mono:"SFMono-Regular",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+  a{color:var(--accent2)}
+  h1,h2,h3{font-weight:650;letter-spacing:-.01em;line-height:1.15;margin:0}
+  .mono{font-family:var(--mono)}
+  .mut{color:var(--mut)}
+
+  header.hero{border-bottom:1px solid var(--line);background:
+    radial-gradient(1200px 400px at 75% -120px,rgba(55,208,196,.10),transparent 60%),
+    radial-gradient(900px 360px at 10% -100px,rgba(90,169,255,.10),transparent 60%);}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--accent);display:flex;align-items:center;gap:9px;margin:30px 0 14px}
+  .kicker .dot{width:8px;height:8px;border-radius:50%;background:var(--crit);
+    box-shadow:0 0 0 0 rgba(255,77,94,.7);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,77,94,.6)}70%{box-shadow:0 0 0 9px rgba(255,77,94,0)}100%{box-shadow:0 0 0 0 rgba(255,77,94,0)}}
+  h1.title{font-size:clamp(28px,5vw,48px);margin-bottom:12px}
+  .sub{font-size:clamp(15px,2.1vw,19px);color:var(--mut);max-width:680px}
+
+  /* control bar */
+  .controlbar{position:sticky;top:0;z-index:500;background:#0b0f14;border-bottom:1px solid var(--line2);padding:14px 0}
+  .cbrow{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut)}
+  select,input[type=date]{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);
+    border-radius:9px;padding:10px 12px;font-size:14px;font-family:var(--sans);min-height:42px}
+  select:focus,input:focus{outline:none;border-color:var(--accent)}
+  select{min-width:280px}
+  .loadbtn{background:var(--accent);color:#04201d;border:none;border-radius:9px;padding:0 22px;height:42px;
+    font-size:14px;font-weight:650;cursor:pointer;font-family:var(--sans);transition:.15s}
+  .loadbtn:hover{filter:brightness(1.08)}
+  .loadbtn:disabled{opacity:.5;cursor:wait}
+  .randbtn{background:var(--panel2);color:var(--mut);border:1px solid var(--line2);border-radius:9px;height:42px;
+    padding:0 14px;font-size:13px;cursor:pointer;font-family:var(--mono)}
+  .randbtn:hover{color:var(--ink);border-color:var(--accent)}
+  .cbnote{font-size:11.5px;color:var(--mut);font-family:var(--mono);margin-top:8px}
+
+  /* status / headline */
+  .headline{padding:18px 0 0;font-size:14px;color:var(--mut);font-family:var(--mono);display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center}
+  .headline b{color:var(--ink)}
+  #status{font-family:var(--mono);font-size:14px;padding:14px 16px;border-radius:10px;margin:18px 0 0;display:none}
+  #status.show{display:block}
+  #status.load{background:#0c1830;border:1px solid #1c2f52;color:#bcd0ee}
+  #status.err{background:#3a0d14;border:1px solid #5e1822;color:#ff9aa6}
+  #status.ok{background:#0d2b22;border:1px solid #17493a;color:#9fe8d0}
+  .headline{scroll-margin-top:170px}
+  .spin{display:inline-block;width:13px;height:13px;border:2px solid #2a4a78;border-top-color:var(--accent2);
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin-top:18px}
+  .stat{background:var(--panel2);padding:18px}
+  .stat .n{font-size:clamp(24px,4vw,38px);font-weight:680;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .stat .l{font-size:12px;color:var(--mut);margin-top:4px}
+  .stat .n.crit{color:var(--crit)} .stat .n.acc{color:var(--accent)}
+
+  #app.dim{opacity:.35;pointer-events:none;transition:.2s}
+  section{padding:42px 0;border-bottom:1px solid var(--line)}
+  .sec-h{font-size:13px;font-family:var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .sec-t{font-size:clamp(21px,3.2vw,28px);margin-bottom:10px}
+  .sec-d{color:var(--mut);max-width:680px;margin-bottom:22px}
+
+  .mapcard{border:1px solid var(--line2);border-radius:14px;overflow:hidden;background:var(--panel)}
+  #map{height:520px;width:100%;background:#0a0e13;z-index:1}
+  .map-wrap{position:relative}
+  .mapempty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:1200;pointer-events:none}
+  .mapempty.show{display:flex}
+  .me-inner{background:rgba(14,20,28,.94);border:1px solid var(--line2);border-radius:12px;padding:18px 22px;
+    text-align:center;max-width:360px;pointer-events:auto;box-shadow:0 14px 44px rgba(0,0,0,.55)}
+  .me-inner h4{font-size:15px;margin:0 0 6px}
+  .me-inner p{font-size:12px;color:var(--mut);margin:0 0 13px;font-family:var(--mono);line-height:1.5}
+  .me-inner button{background:var(--accent);color:#04201d;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:650;cursor:pointer}
+  .me-inner button:hover{filter:brightness(1.08)}
+  .leaflet-container{background:#0a0e13;font-family:var(--sans)}
+  .leaflet-popup-content-wrapper{background:#0e141c;color:var(--ink);border:1px solid var(--line2);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .leaflet-popup-tip{background:#0e141c;border:1px solid var(--line2)}
+  .leaflet-popup-content{margin:12px 14px;font-size:13px;line-height:1.45}
+  .pop-ty{font-weight:650;margin-bottom:6px;font-size:13.5px}
+  .pop-row{display:flex;justify-content:space-between;gap:16px;font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .pop-row b{color:var(--ink);font-weight:600}
+  .pchip{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:1px 7px;border-radius:20px;margin-top:7px;font-weight:600}
+
+  .controls{padding:14px 14px 16px;border-top:1px solid var(--line)}
+  .timerow{display:flex;align-items:center;gap:14px}
+  .playbtn{flex:none;width:44px;height:44px;border-radius:50%;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--ink);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:.15s}
+  .playbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .playbtn.on{background:var(--accent);color:#04201d;border-color:var(--accent)}
+  .clock{font-family:var(--mono);font-size:24px;font-weight:680;font-variant-numeric:tabular-nums;min-width:112px}
+  .clock small{font-size:12px;color:var(--mut);font-weight:500;display:block;letter-spacing:.08em}
+  .slider-wrap{flex:1}
+  input[type=range]{width:100%;-webkit-appearance:none;height:6px;border-radius:6px;background:#22303f;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;
+    background:#fff;border:3px solid var(--accent);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  .modes{display:flex;gap:6px;margin-left:auto}
+  .modebtn{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:7px;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--mut);cursor:pointer}
+  .modebtn.on{background:#1a2a38;color:var(--ink);border-color:var(--accent)}
+
+  .legend{display:flex;flex-wrap:wrap;gap:7px;margin-top:16px}
+  .lchip{display:flex;align-items:center;gap:7px;font-size:12px;padding:5px 10px 5px 8px;border-radius:20px;
+    border:1px solid var(--line2);background:var(--panel2);cursor:pointer;user-select:none;transition:.12s}
+  .lchip .sw{width:10px;height:10px;border-radius:50%}
+  .lchip .ct{font-family:var(--mono);color:var(--mut);font-size:11px}
+  .lchip.off{opacity:.32}
+  .prifilter{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  .prifilter .lab{font-size:11px;font-family:var(--mono);color:var(--mut);text-transform:uppercase;letter-spacing:.1em;margin-right:4px}
+  .pbtn,.ibtn{font-family:var(--mono);font-size:11px;padding:5px 11px;border-radius:20px;border:1px solid var(--line2);
+    background:var(--panel2);color:var(--mut);cursor:pointer}
+  .hint{font-size:12px;color:var(--mut);margin-top:12px;font-style:italic}
+
+  .bar-row{display:grid;grid-template-columns:170px 1fr 64px;align-items:center;gap:12px;margin:7px 0;cursor:pointer}
+  .bar-row .nm{font-size:13px;text-align:right;color:var(--ink)}
+  .bar-track{height:22px;background:#0e141c;border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+  .bar-fill{height:100%;border-radius:5px 0 0 5px;transition:width .7s cubic-bezier(.2,.7,.2,1)}
+  .bar-row .vl{font-family:var(--mono);font-size:12px;color:var(--mut);font-variant-numeric:tabular-nums}
+
+  .hours{display:flex;align-items:flex-end;gap:3px;height:200px;margin-top:8px}
+  .hbar{flex:1;background:linear-gradient(180deg,var(--accent2),#2b5a8c);border-radius:3px 3px 0 0;
+    position:relative;cursor:pointer;min-height:2px;transition:.15s;opacity:.85}
+  .hbar:hover{opacity:1;filter:brightness(1.15)}
+  .hbar.sel{background:linear-gradient(180deg,var(--accent),#1f7a72);opacity:1}
+  .hbar .hv{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:10px;color:var(--mut)}
+  .hlabels{display:flex;gap:3px;margin-top:6px}
+  .hlabels span{flex:1;text-align:center;font-family:var(--mono);font-size:9.5px;color:var(--mut)}
+
+  /* dispatch-log player */
+  .player{border:1px solid var(--line2);border-radius:14px;background:var(--panel);padding:16px}
+  .prow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .spd{display:flex;gap:4px;align-items:center}
+  .spd .lbl{font-family:var(--mono);font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em;margin-right:2px}
+  .spdbtn{font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:7px;border:1px solid var(--line2);background:var(--panel2);color:var(--mut);cursor:pointer}
+  .spdbtn.on{background:#1a2a38;color:var(--ink);border-color:var(--accent)}
+  .pclock{font-family:var(--mono);font-size:24px;font-weight:680;min-width:104px;font-variant-numeric:tabular-nums}
+  .pclock small{display:block;font-size:11px;color:var(--mut);font-weight:500}
+  .player input[type=range]{width:100%;-webkit-appearance:none;height:6px;border-radius:6px;background:#22303f;outline:none}
+  .player input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;border:3px solid var(--accent);cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.5)}
+  .feed{margin-top:14px;max-height:340px;overflow-y:auto;border-top:1px solid var(--line);padding-top:4px}
+  .fentry{display:grid;grid-template-columns:56px 1fr auto;gap:10px;padding:7px 4px;border-bottom:1px solid var(--line);font-size:13px;align-items:baseline}
+  .fentry .ft{font-family:var(--mono);font-weight:650;color:var(--accent2);font-size:12.5px}
+  .fentry .fr{font-family:var(--mono);color:var(--mut);font-size:11.5px;text-align:right;white-space:nowrap}
+  .fentry.new{animation:fin .7s ease}
+  @keyframes fin{0%{background:rgba(55,208,196,.22)}100%{background:transparent}}
+  .prichip{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 7px;border-radius:12px;margin-left:8px;font-weight:650;vertical-align:1px;border:1px solid}
+  .feed-empty{color:var(--mut);font-style:italic;padding:10px 4px;font-size:13px}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  .pipe{display:flex;flex-direction:column;gap:8px}
+  .pstep{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center}
+  .pstep .pl{font-size:13.5px} .pstep .pl small{display:block;color:var(--mut);font-size:11.5px;font-family:var(--mono);margin-top:2px}
+  .pstep .pn{font-family:var(--mono);font-size:20px;font-weight:680;font-variant-numeric:tabular-nums}
+  table.tt{width:100%;border-collapse:collapse;font-size:13px}
+  table.tt th,table.tt td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right}
+  table.tt th:first-child,table.tt td:first-child{text-align:left}
+  table.tt th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut);font-weight:600}
+  table.tt td{font-variant-numeric:tabular-nums}
+  table.tt td.big{font-family:var(--mono);font-weight:600;color:var(--ink)}
+  .pri-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:middle}
+
+  .ctl{margin-top:8px}
+  .citem{display:grid;grid-template-columns:74px 1fr auto;gap:14px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line);cursor:pointer}
+  .ctime{font-family:var(--mono);font-size:15px;font-weight:680;color:var(--crit)}
+  .cty{font-size:14px}
+  .cresp{font-family:var(--mono);font-size:12px;color:var(--mut);text-align:right}
+  .cresp b{color:var(--accent);font-weight:600;font-size:15px}
+  .empty{color:var(--mut);font-style:italic;padding:14px 0}
+
+  .methodbox{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:22px 24px}
+  .methodbox h3{font-size:15px;margin-bottom:6px}
+  .methodbox ul{margin:0 0 16px;padding-left:18px;color:var(--mut);font-size:14px}
+  .methodbox li{margin:6px 0}
+  .methodbox b{color:var(--ink)}
+  .aibtn{font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;background:#3a0d14;color:#ff9aa6;
+    border:1px solid #5e1822;padding:8px 14px;border-radius:8px;cursor:pointer}
+  .aipop{display:none;margin-top:14px;background:#0c1830;border:1px solid #1c2f52;border-radius:12px;padding:20px 22px;color:#bcd0ee;font-size:13.5px}
+  .aipop.show{display:block}
+  .aipop h3{color:#dce8ff;font-size:14px;margin-bottom:8px}
+  .aipop ul{margin:0;padding-left:18px} .aipop li{margin:5px 0}
+
+  footer{padding:34px 0 60px;color:var(--mut);font-size:12.5px}
+  @media(max-width:760px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .grid2{grid-template-columns:1fr;gap:30px}
+    .bar-row{grid-template-columns:120px 1fr 54px}
+    .timerow{flex-wrap:wrap}.modes{margin-left:0}
+    #map{height:420px}
+    select{min-width:0;width:100%} .field{flex:1 1 100%}
+    /* bigger touch targets on phones */
+    .pbtn,.ibtn,.modebtn,.spdbtn{padding:9px 14px;font-size:12.5px}
+    .lchip{padding:8px 12px 8px 10px;font-size:13px}
+    .lchip .sw{width:12px;height:12px}
+    .playbtn{width:48px;height:48px}
+    .legend{gap:9px}.prifilter{gap:8px}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker"><span class="dot"></span> Live from NYC Open Data</div>
+    <h1 class="title">A day on the police radio</h1>
+    <p class="sub">Pick any of New York City's 78 police precincts and any day from January 2018 through the latest month the city has published. This pulls every 911 call and radio run the New York City Police Department (NYPD) dispatched there that day, straight from the city's own records, and rebuilds the map, the timeline and the response breakdown live.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px">
+      <a href="https://joshgreenman1973.github.io/nyc-fire-medical-day/" style="font-size:13px;font-family:var(--mono);color:var(--accent);text-decoration:none;border:1px solid var(--line2);padding:7px 13px;border-radius:8px">🚑 Fire &amp; medical (FDNY) version →</a>
+      <a href="https://joshgreenman1973.github.io/nyc-311-day/" style="font-size:13px;font-family:var(--mono);color:var(--accent);text-decoration:none;border:1px solid var(--line2);padding:7px 13px;border-radius:8px">☎️ 311 service-request version →</a>
+    </div>
+  </div>
+</header>
+
+<div class="controlbar">
+  <div class="wrap">
+    <div class="cbrow">
+      <div class="field">
+        <label for="pct">Precinct</label>
+        <select id="pct"></select>
+      </div>
+      <div class="field">
+        <label for="date">Date</label>
+        <input type="date" id="date" min="2018-01-01" max="2026-06-30" value="2025-12-17">
+      </div>
+      <button class="loadbtn" id="load">Load the day</button>
+      <button class="randbtn" id="rand" title="Jump to a random precinct and day">🎲 Surprise me</button>
+    </div>
+    <div class="cbnote" id="cbnote">Data available from Jan 1, 2018, through June 30, 2026. Source: NYPD Calls for Service (Historic and Year-to-Date), NYC Open Data.</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="headline" id="headline"></div>
+  <div id="status"></div>
+  <div class="stats" id="stats" style="display:none">
+    <div class="stat"><div class="n" id="s-total">—</div><div class="l">jobs dispatched in 24 hours</div></div>
+    <div class="stat"><div class="n acc" id="s-gap">—</div><div class="l">average time between jobs</div></div>
+    <div class="stat"><div class="n" id="s-resp">—</div><div class="l">median response · dispatched calls</div></div>
+    <div class="stat"><div class="n crit" id="s-crit">—</div><div class="l">critical jobs — guns and knives</div></div>
+  </div>
+</div>
+
+<div id="app">
+<section>
+  <div class="wrap">
+    <div class="sec-h">The day, block by block</div>
+    <h2 class="sec-t">Where the calls came from</h2>
+    <p class="sec-d">Each dot is one dispatched job, placed at the location the radio run was logged and colored by what kind of call it was. Press play to sweep through the 24 hours, or drag the slider. Tap the colored chips to isolate a call type, and click any dot for the details.</p>
+    <div class="mapcard">
+      <div class="map-wrap">
+        <div id="map"></div>
+        <div id="mapempty" class="mapempty"><div class="me-inner">
+          <h4>Nothing matches these filters</h4>
+          <p id="me-detail"></p>
+          <button id="me-clear">Clear filters</button>
+        </div></div>
+      </div>
+      <div class="controls">
+        <div class="timerow">
+          <button class="playbtn" id="play" aria-label="Play the day">▶</button>
+          <div class="clock"><span id="clock">All day</span><small id="clocksub" class="mono">—</small></div>
+          <div class="slider-wrap"><input type="range" id="slider" min="0" max="86399" value="86399" step="60"></div>
+          <div class="modes">
+            <button class="modebtn on" id="m-all">Show all</button>
+            <button class="modebtn" id="m-flow">Live flow</button>
+          </div>
+        </div>
+        <div class="prifilter">
+          <span class="lab">Priority</span>
+          <button class="pbtn on" data-pri="all" style="border-color:var(--accent);color:var(--accent)">All</button>
+          <button class="pbtn" data-pri="Critical">Critical</button>
+          <button class="pbtn" data-pri="Serious">Serious</button>
+          <button class="pbtn" data-pri="Non Critical">Non-critical</button>
+          <button class="pbtn" data-pri="Non CIP">Routine</button>
+        </div>
+        <div class="prifilter">
+          <span class="lab">Source</span>
+          <button class="ibtn on" id="ib-all" data-init="all">All jobs</button>
+          <button class="ibtn" id="ib-disp" data-init="dispatched">911 / dispatched</button>
+          <button class="ibtn" id="ib-off" data-init="officer">Officer-initiated</button>
+        </div>
+        <div class="hint" id="init-note">“Officer-initiated” covers proactive patrol, inspections and sweeps, plus jobs where a unit was already on scene (no travel). “911 / dispatched” are complaints a unit was sent to and drove to. Inferred from the records, which don't name who started each job.</div>
+        <div class="legend" id="legend"></div>
+        <div class="hint">In “Live flow” mode, dots brighten as their call comes in and fade over the following 40 minutes, so you can watch the rhythm of a shift. Clicking an hour below filters the map to that hour. Looking for 311 requests? They now have <a href="https://joshgreenman1973.github.io/nyc-311-day/">their own explorer</a>.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h">The day as it happened</div>
+    <h2 class="sec-t">Play the dispatch log</h2>
+    <p class="sec-d">The same day as a readable radio log: press play to stream every job in the order it came in — a text companion to the map's animation above, where the map shows <em>where</em> and this shows <em>what</em>, in sequence.</p>
+    <div class="player">
+      <div class="prow">
+        <button class="playbtn" id="pplay" aria-label="Play the day">▶</button>
+        <div class="pclock"><span id="pclock">00:00</span><small id="pcount">press play</small></div>
+        <div style="flex:1;min-width:180px"><input type="range" id="pslider" min="0" max="86399" value="0" step="60"></div>
+        <div class="spd"><span class="lbl">Speed</span>
+          <button class="spdbtn" data-spd="0.6">Slow</button>
+          <button class="spdbtn on" data-spd="1.4">Normal</button>
+          <button class="spdbtn" data-spd="4.4">Fast</button>
+        </div>
+      </div>
+      <div class="feed" id="feed"><div class="feed-empty">Press play to start the day at midnight, or drag the slider to any hour…</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h">The rhythm of the day</div>
+    <h2 class="sec-t">When the calls came in</h2>
+    <p class="sec-d">Jobs by hour of the day. Click any bar to pin the map to that hour.</p>
+    <div class="hours" id="hours"></div>
+    <div class="hlabels" id="hlabels"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h">What the calls were</div>
+    <h2 class="sec-t" id="fam-title">Calls sorted into families</h2>
+    <p class="sec-d" id="fam-desc">Every distinct call description on this day, grouped into families. Click a family to isolate it on the map.</p>
+    <div id="fams"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h">The response</div>
+    <h2 class="sec-t">From the call to the curb</h2>
+    <p class="sec-d">How far each job travelled through the dispatch system, and how long each leg took. Response times cover <b>dispatched calls</b> — jobs where a unit had to travel to the scene. Officer-initiated and already-on-scene runs (which log arrival instantly) are set aside, the way the NYPD's own response-time reporting does. Medians are shown because a long tail of jobs left waiting in queue pulls the averages far higher.</p>
+    <div class="grid2">
+      <div>
+        <h3 style="font-size:14px;margin-bottom:12px;color:var(--mut);font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em">The pipeline</h3>
+        <div class="pipe" id="pipe"></div>
+      </div>
+      <div>
+        <h3 style="font-size:14px;margin-bottom:12px;color:var(--mut);font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em">Timing &amp; priority</h3>
+        <table class="tt"><thead><tr><th>Leg of the response</th><th>Median</th><th>p90</th></tr></thead><tbody id="timing"></tbody></table>
+        <table class="tt" style="margin-top:18px"><thead><tr><th>Median response by priority</th><th>Jobs</th><th>Median</th></tr></thead><tbody id="pritab"></tbody></table>
+        <div class="hint" id="resp-note"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-h">The sharp end</div>
+    <h2 class="sec-t">The critical jobs</h2>
+    <p class="sec-d">The calls flagged critical — those involving guns and knives. Click any to fly the map there.</p>
+    <div class="ctl" id="crit"></div>
+    <p class="hint" id="serious-note"></p>
+  </div>
+</section>
+
+<section style="border-bottom:none">
+  <div class="wrap">
+    <div class="sec-h">Methodology</div>
+    <h2 class="sec-t">How this works — and its limits</h2>
+    <div class="methodbox">
+      <h3>Source &amp; method</h3>
+      <ul>
+        <li><b>Data:</b> NYPD Calls for Service, NYC Open Data — the police department's own computer-aided dispatch (CAD) log. Days from 2025 on come from the Year-to-Date dataset <span class="mono">n2zq-pubd</span>; days from 2018 through 2024 come from the Historic dataset <span class="mono">d6zx-ckhd</span>, which has the same fields. Queried live in your browser for the precinct and date you choose.</li>
+        <li><b>Coverage:</b> January 1, 2018, through the latest month the city has published (June 30, 2026, as of September 2026; the date picker updates itself when newer months appear).</li>
+        <li id="m-current"></li>
+      </ul>
+      <h3>Definitions &amp; caveats</h3>
+      <ul>
+        <li><b>“Response time”</b> measures job-created to first-unit-arrived, and is reported only for <b>dispatched calls</b> — jobs where a unit travelled to the scene (arrival logged more than 12 seconds after creation). It excludes the time a 911 caller spends on the line before a call-taker creates the job, so true door-to-door response is somewhat longer.</li>
+        <li><b>Officer-initiated and already-on-scene runs</b> — visibility patrol, inspections, ShotSpotter, on-view enforcement — log arrival instantly and carry no real travel time. Counting them would collapse response times toward zero in heavily patrolled precincts, so they are set aside from the response medians (the NYPD's own response-time reporting does the same). They remain in every count and on the map.</li>
+        <li><b>Medians, not means.</b> A handful of low-priority jobs can sit in queue for hours and badly skew averages; medians are the honest central measure.</li>
+        <li><b>No outcomes.</b> This dataset records each job's type, times, location and priority — but carries <b>no arrest or disposition</b>. It cannot tell you how a call was resolved, and there is no key to link it to the separate NYPD arrests data.</li>
+        <li><b>Jobs, not incidents.</b> One incident can generate several jobs. “Families” are this tool's grouping of the raw call descriptions.</li>
+        <li><b>Priority (“CIP” = Crime In Progress).</b> The NYPD's <span class="mono">CIP_JOBS</span> field flags whether a call is a crime in progress and how urgent: <b>Critical</b> and <b>Serious</b> are crimes in progress (the guns-and-knives calls); “Non-CIP,” shown here as <b>Routine</b>, means the call is not a crime in progress — medical assists, patrol, disputes and the rest.</li>
+      </ul>
+      <button class="aibtn" id="aibtn">⚠ AI caution — read before sharing</button>
+      <div class="aipop" id="aipop">
+        <h3>Made with AI assistance</h3>
+        <ul>
+          <li><b>Verified:</b> every figure is computed in your browser directly from the raw NYC Open Data records returned for your selection — nothing is estimated or cached.</li>
+          <li><b>Verified:</b> map points use the city's own coordinates; jobs without coordinates are counted in the totals but not plotted.</li>
+          <li><b>Not independently verified:</b> the accuracy of the underlying police records themselves, including how each call was classified and timestamped by the NYPD.</li>
+          <li><b>Judgment calls:</b> the grouping of raw call descriptions into families is editorial. A single day is a snapshot, not a precinct's typical pattern.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
+<footer>
+  <div class="wrap">
+    Built from NYC Open Data · NYPD Calls for Service, datasets n2zq-pubd (2025 on) and d6zx-ckhd (2018–2024) · Map tiles © OpenStreetMap contributors © CARTO. No outcome or arrest data is available in this source. · <span class="mono" id="buildstamp">build 9</span>
+  </div>
+</footer>
+
+<script>
+/* ---- diagnostics: surface any script error visibly; ?debug=1 shows a self-test panel ---- */
+const BUILD='14 · 2026-09-23';
+window.addEventListener('error',function(ev){
+  var s=document.getElementById('status');
+  if(s){s.className='show err';s.textContent='⚠ Page error: '+(ev.message||'unknown')+' (line '+(ev.lineno||'?')+'). Screenshot this message and report it.';}
+});
+window.addEventListener('DOMContentLoaded',function(){
+  var b=document.getElementById('buildstamp'); if(b) b.textContent='build '+BUILD;
+  fetch('https://data.cityofnewyork.us/resource/n2zq-pubd.json?$select=max(incident_date)%20as%20m')
+    .then(function(r){return r.json();})
+    .then(function(j){var m=j&&j[0]&&j[0].m?j[0].m.slice(0,10):null;var di=document.getElementById('date');
+      if(m&&m>di.max){di.max=m;var n=document.getElementById('cbnote');
+        if(n)n.textContent='Data available from Jan 1, 2018, through '+new Date(m+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'. Source: NYPD Calls for Service (Historic and Year-to-Date), NYC Open Data.';}})
+    .catch(function(){});
+  if(/debug/.test(location.search)){
+    var d=document.createElement('div');
+    d.style.cssText='position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#fff8c4;color:#332b00;border:2px solid #b09a00;border-radius:10px;padding:12px 14px;font:12px/1.6 Menlo,monospace;white-space:pre-wrap';
+    d.textContent='DIAGNOSTICS\nbuild: '+BUILD+'\nviewer: '+navigator.userAgent+'\ndata connection: testing…';
+    document.body.appendChild(d);
+    var t0=Date.now();
+    fetch('https://data.cityofnewyork.us/resource/n2zq-pubd.json?$limit=1')
+      .then(function(r){return r.json();})
+      .then(function(j){d.textContent=d.textContent.replace('testing…','OK — reached NYC Open Data in '+(Date.now()-t0)+'ms');})
+      .catch(function(e){d.textContent=d.textContent.replace('testing…','FAILED — '+e.message);});
+  }
+});
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-gesture-handling"></script>
+<script>
+/* ---------- precinct directory ---------- */
+const PRECINCTS=[
+ ['Manhattan',[[1,'Financial District / Battery Park'],[5,'Chinatown / Little Italy'],[6,'West Village'],[7,'Lower East Side'],[9,'East Village'],[10,'Chelsea / Hudson Yards'],[13,'Gramercy / Flatiron'],[14,'Midtown South / Times Square'],[17,'Murray Hill / Turtle Bay'],[18,"Midtown North / Hell's Kitchen"],[19,'Upper East Side'],[20,'Upper West Side'],[22,'Central Park'],[23,'East Harlem South'],[24,'Manhattan Valley'],[25,'East Harlem North'],[26,'Morningside Heights'],[28,'Central Harlem South'],[30,'Hamilton Heights'],[32,'Central Harlem North'],[33,'Washington Heights South'],[34,'Washington Heights / Inwood']]],
+ ['Bronx',[[40,'Mott Haven / Melrose'],[41,'Hunts Point'],[42,'Morrisania / Claremont'],[43,'Soundview / Parkchester'],[44,'Highbridge / Concourse'],[45,'Throgs Neck / Co-op City'],[46,'Fordham / University Heights'],[47,'Wakefield / Williamsbridge'],[48,'Belmont / East Tremont'],[49,'Pelham Parkway / Morris Park'],[50,'Riverdale / Kingsbridge'],[52,'Bedford Park / Norwood']]],
+ ['Brooklyn',[[60,'Coney Island'],[61,'Sheepshead Bay / Gravesend'],[62,'Bensonhurst / Bath Beach'],[63,'Flatlands / Mill Basin'],[66,'Borough Park'],[67,'East Flatbush'],[68,'Bay Ridge / Dyker Heights'],[69,'Canarsie'],[70,'Flatbush / Midwood'],[71,'Crown Heights South'],[72,'Sunset Park / Windsor Terrace'],[73,'Brownsville'],[75,'East New York / Cypress Hills'],[76,'Red Hook / Carroll Gardens'],[77,'Prospect Heights / Crown Heights'],[78,'Park Slope'],[79,'Bedford-Stuyvesant South'],[81,'Stuyvesant Heights'],[83,'Bushwick'],[84,'Downtown Brooklyn / Brooklyn Heights'],[88,'Fort Greene / Clinton Hill'],[90,'Williamsburg South'],[94,'Greenpoint']]],
+ ['Queens',[[100,'Rockaway'],[101,'Far Rockaway'],[102,'Richmond Hill / Woodhaven'],[103,'Jamaica'],[104,'Ridgewood / Glendale / Maspeth'],[105,'Queens Village / Rosedale'],[106,'Ozone Park / Howard Beach'],[107,'Fresh Meadows / Briarwood'],[108,'Long Island City / Sunnyside'],[109,'Flushing / College Point'],[110,'Elmhurst / Corona'],[111,'Bayside / Douglaston'],[112,'Forest Hills / Rego Park'],[113,'St. Albans / Springfield Gardens'],[114,'Astoria / Long Island City'],[115,'Jackson Heights / East Elmhurst'],[116,'Southeast Queens (split from the 105th, Dec. 2024)']]],
+ ['Staten Island',[[120,'St. George / Stapleton'],[121,'Graniteville / Mariners Harbor'],[122,'New Dorp / South Beach'],[123,'Tottenville / Great Kills']]],
+];
+const PCT_NAME={}, PCT_BORO={}, ALL_CODES=[];
+PRECINCTS.forEach(([boro,list])=>list.forEach(([c,n])=>{PCT_NAME[c]=n;PCT_BORO[c]=boro;ALL_CODES.push(c);}));
+const pctSel=document.getElementById('pct');
+PRECINCTS.forEach(([boro,list])=>{
+  const og=document.createElement('optgroup'); og.label=boro;
+  list.forEach(([c,n])=>{const o=document.createElement('option');o.value=c;o.textContent=`${c}${c<100?'th':'th'} — ${n}`;og.appendChild(o);});
+  pctSel.appendChild(og);
+});
+pctSel.value='75';
+function ordinal(c){const s=['th','st','nd','rd'],v=c%100;return c+(s[(v-20)%10]||s[v]||s[0]);}
+
+/* ---------- families ---------- */
+const FAM=[["Patrol/visibility","--f-patrol"],["Medical/EMS","--f-medical"],["Investigate/check","--f-invest"],
+  ["Dispute","--f-dispute"],["Theft/robbery/burglary","--f-theft"],["Vehicle accident","--f-accident"],
+  ["Disorder/quality-of-life","--f-disorder"],["Assault","--f-assault"],["Weapon/shots","--f-weapon"],
+  ["Alarm","--f-alarm"],["Other","--f-other"]];
+const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const famColor={}; FAM.forEach(([n,v])=>famColor[n]=cssv(v));
+const PRI_COLOR={"Critical":cssv("--crit"),"Serious":cssv("--serious"),"Non Critical":cssv("--noncrit"),"Non CIP":cssv("--routine")};
+function familyOf(t){
+  t=(t||'').toUpperCase();
+  if(t.includes('AMBULANCE')) return 'Medical/EMS';
+  if(t.includes('EDP')) return 'Medical/EMS';
+  if(t.startsWith('VISIBILITY')||t.includes('INSPECTION')||t.includes('TRAIN RUN')||t.includes('SWEEP')||t.includes('DIRECTED')) return 'Patrol/visibility';
+  if(t.startsWith('VEHICLE ACCIDENT')) return 'Vehicle accident';
+  if(t.includes('ASSAULT')) return 'Assault';
+  if(t.includes('DISPUTE')) return 'Dispute';
+  if(t.includes('LARCENY')||t.includes('ROBBERY')||t.includes('BURGLARY')) return 'Theft/robbery/burglary';
+  if(t.includes('SHOT')||t.includes('WEAPON')||t.includes('FIREARM')||t.includes('GUN')) return 'Weapon/shots';
+  if(t.includes('ALARM')) return 'Alarm';
+  if(t.includes('DISORDERLY')||t.includes('NOISE')||t.includes('QUALITY OF LIFE')||t.includes('PARTY')) return 'Disorder/quality-of-life';
+  if(t.includes('INVESTIGATE')||t.includes('SEE COMPLAINANT')||t.includes('CHECK')||t.includes('VISIT')) return 'Investigate/check';
+  return 'Other';
+}
+
+/* ---------- math ---------- */
+function median(a){if(!a.length)return null;const s=[...a].sort((x,y)=>x-y);const m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+function pct90(a){if(!a.length)return null;const s=[...a].sort((x,y)=>x-y);return s[Math.min(s.length-1,Math.floor(0.9*s.length))];}
+function parseTs(s){return s?new Date(s):null;}
+function mins(a,b){if(a&&b){const d=(b-a)/60000;return (d>-1&&d<1440)?Math.round(d*10)/10:null;}return null;}
+function hex2rgba(h,a){const x=h.replace('#','');return `rgba(${parseInt(x.slice(0,2),16)},${parseInt(x.slice(2,4),16)},${parseInt(x.slice(4,6),16)},${a})`;}
+function fmtMin(v){return v==null?'—':v.toFixed(1)+' min';}
+/* a "dispatched" call is one where a unit actually travelled to the scene (>12s).
+   Officer-initiated / already-on-scene runs log arrival instantly and are set aside. */
+const TRAVEL=c=>c.rsp!=null&&c.rsp>0.2;
+
+/* ---------- map base ---------- */
+const map=L.map('map',{zoomControl:true,gestureHandling:true}).setView([40.70,-73.92],11);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2r82_1_ae4e70b6166057bc41b89638',
+  {attribution:'© OpenStreetMap © CARTO',subdomains:'abcd',maxZoom:19}).addTo(map);
+let layer=L.layerGroup().addTo(map);
+let markers=[];
+
+/* ---------- state ---------- */
+let calls=[];
+const state={mode:"all",cursor:86399,activeFam:new Set(FAM.map(f=>f[0])),pri:"all",init:"all",hour:null};
+const WINDOW=40*60;
+
+/* ---------- fetch ---------- */
+const loadBtn=document.getElementById('load'), statusEl=document.getElementById('status');
+function setStatus(kind,html){statusEl.className=kind?('show '+kind):'';statusEl.innerHTML=html;}
+async function load(auto){
+  const code=pctSel.value, date=document.getElementById('date').value;
+  if(!date){setStatus('err','Please choose a date.');return;}
+  loadBtn.disabled=true; loadBtn.textContent='Loading…';
+  document.getElementById('app').classList.add('dim');
+  document.getElementById('stats').style.display='none';
+  setStatus('load',`<span class="spin"></span>Querying NYC Open Data — ${ordinal(+code)} Precinct, ${date}…`);
+  const where=`nypd_pct_cd='${code}' AND incident_date='${date}T00:00:00'`;
+  const ds=date<'2025-01-01'?'d6zx-ckhd':'n2zq-pubd';
+  const url=`https://data.cityofnewyork.us/resource/${ds}.json?$where=${encodeURIComponent(where)}&$limit=20000&$order=incident_time`;
+  const ctrl=new AbortController(); const to=setTimeout(()=>ctrl.abort(),15000);
+  try{
+    const res=await fetch(url,{signal:ctrl.signal});
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    const raw=await res.json();
+    calls=raw.map(r=>{
+      const tm=r.incident_time||'00:00:00';
+      const [hh,mm,ss]=tm.split(':').map(Number);
+      const ty=r.typ_desc||'UNKNOWN';
+      return {id:r.cad_evnt_id,tm,s:hh*3600+mm*60+(ss||0),h:hh,ty,fam:familyOf(ty),
+        pri:r.cip_jobs||'Non CIP',
+        lat:r.latitude?+r.latitude:null, lon:r.longitude?+r.longitude:null,
+        rsp:mins(parseTs(r.add_ts),parseTs(r.arrivd_ts)),
+        qd:mins(parseTs(r.add_ts),parseTs(r.disp_ts)),
+        dt:mins(parseTs(r.disp_ts),parseTs(r.arrivd_ts)),
+        os:mins(parseTs(r.arrivd_ts),parseTs(r.closng_ts)),
+        hasDisp:!!r.disp_ts, hasArr:!!r.arrivd_ts, hasClo:!!r.closng_ts};
+    });
+    if(!calls.length){
+      setStatus('err',`No jobs found for the ${ordinal(+code)} Precinct on ${date}. Try another day.`);
+      return;
+    }
+    try{ render(code,date); }
+    catch(re){ setStatus('err','The data loaded, but the page failed to draw it: '+re.message); return; }
+    setStatus('ok',`✓ Loaded ${calls.length} jobs — ${ordinal(+code)} Precinct, ${date}. Results below.`);
+    clearTimeout(window.__okT); window.__okT=setTimeout(()=>{ if(statusEl.classList.contains('ok')) setStatus('',''); },5000);
+    if(!auto) document.getElementById('headline').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){
+    const msg = e.name==='AbortError'
+      ? "NYC Open Data didn't respond within 15 seconds. This is almost always a network, VPN or firewall block on your side — not this page. Try a different network (like your phone's data)."
+      : 'Could not reach NYC Open Data ('+e.message+'). Check your connection and try again.';
+    setStatus('err',msg);
+  }finally{
+    clearTimeout(to);
+    loadBtn.disabled=false; loadBtn.textContent='Load the day';
+    document.getElementById('app').classList.remove('dim'); // never leave the page stuck dimmed
+  }
+}
+
+/* ---------- render ---------- */
+function render(code,date){
+  document.getElementById('app').classList.remove('dim');
+  const name=PCT_NAME[code]||('Precinct '+code), boro=PCT_BORO[code]||'';
+  const dObj=new Date(date+'T12:00:00');
+  const dStr=dObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  // headline + methodology
+  document.getElementById('headline').innerHTML=
+    `<span><b>${ordinal(+code)} Precinct</b> · ${name} (${boro})</span><span><b>${dStr}</b></span><span><b>${calls.length}</b> jobs</span>`;
+  document.getElementById('m-current').innerHTML=
+    `<b>Your selection:</b> ${ordinal(+code)} Precinct (${name}, ${boro}), ${dStr} — ${calls.length} jobs, ${calls.filter(c=>c.lat&&c.lon).length} with map coordinates.`;
+  // stats
+  const resTrav=calls.filter(TRAVEL).map(c=>c.rsp);
+  document.getElementById('stats').style.display='';
+  document.getElementById('s-total').textContent=calls.length;
+  document.getElementById('s-gap').textContent='1 / '+(24*60/calls.length).toFixed(1)+' min';
+  document.getElementById('s-resp').textContent=resTrav.length?median(resTrav).toFixed(1)+' min':'—';
+  document.getElementById('s-crit').textContent=calls.filter(c=>c.pri==='Critical').length;
+
+  buildMap();
+  buildLegend();
+  buildHours();
+  buildFamilies();
+  buildResponse();
+  buildCritical();
+
+  // reset filters
+  state.mode='all';state.cursor=86399;state.activeFam=new Set(FAM.map(f=>f[0]));state.pri='all';state.init='all';state.hour=null;
+  document.getElementById('slider').value=86399;
+  document.getElementById('m-all').classList.add('on');document.getElementById('m-flow').classList.remove('on');
+  document.querySelectorAll('.pbtn').forEach(x=>{x.classList.remove('on');x.style.color='';x.style.borderColor='';});
+  const allBtn=document.querySelector('.pbtn[data-pri="all"]');allBtn.classList.add('on');allBtn.style.color=cssv('--accent');allBtn.style.borderColor=cssv('--accent');
+  // source filter: reset + live counts
+  const offN=calls.filter(isOfficer).length, dispN=calls.length-offN;
+  document.getElementById('ib-disp').textContent=`911 / dispatched · ${dispN}`;
+  document.getElementById('ib-off').textContent=`Officer-initiated · ${offN}`;
+  document.querySelectorAll('.ibtn').forEach(x=>{x.classList.remove('on');x.style.color='';x.style.borderColor='';});
+  const iAll=document.getElementById('ib-all');iAll.classList.add('on');iAll.style.color=cssv('--accent2');iAll.style.borderColor=cssv('--accent2');
+  syncLegend(); syncHours(); refresh();
+  pReset();
+}
+
+/* ---------- dispatch-log player: streams jobs at their actual timestamps ---------- */
+const PL={cursor:0,timer:null,idx:0,speed:1.4}; const FEED_CAP=80;
+function plEntryHTML(c){
+  const pc=PRI_COLOR[c.pri]||'#888', prLabel=c.pri==='Non CIP'?'ROUTINE':c.pri.toUpperCase();
+  const chip=`<span class="prichip" style="color:${pc};border-color:${pc}">${prLabel}</span>`;
+  const right = c.rsp==null?'self-cleared':(c.rsp<=0.2?'already on scene':c.rsp.toFixed(0)+' min to scene');
+  return `<div class="ft">${c.tm.slice(0,5)}</div><div>${c.ty}${chip}</div><div class="fr">${right}</div>`;
+}
+function plClock(){
+  const h=Math.floor(PL.cursor/3600),m=Math.floor((PL.cursor%3600)/60);
+  document.getElementById('pclock').textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+  document.getElementById('pcount').textContent=PL.idx+' job'+(PL.idx===1?'':'s')+' so far';
+  const p=PL.cursor/86399*100;
+  document.getElementById('pslider').style.background=`linear-gradient(90deg,var(--accent) ${p}%,#22303f ${p}%)`;
+}
+function plAdvance(cur,animate){
+  const feed=document.getElementById('feed');
+  if(feed.querySelector('.feed-empty')&&PL.idx<calls.length&&calls[PL.idx].s<=cur) feed.innerHTML='';
+  while(PL.idx<calls.length&&calls[PL.idx].s<=cur){
+    const d=document.createElement('div'); d.className='fentry'+(animate?' new':'');
+    d.innerHTML=plEntryHTML(calls[PL.idx]); feed.prepend(d); PL.idx++;
+  }
+  while(feed.children.length>FEED_CAP) feed.removeChild(feed.lastChild);
+  PL.cursor=cur; plClock();
+}
+function plRebuild(cur){
+  const feed=document.getElementById('feed'); feed.innerHTML=''; PL.idx=0; PL.cursor=0; plAdvance(cur,false);
+  if(!feed.children.length) feed.innerHTML='<div class="feed-empty">No jobs yet by this time of day — drag further or press play.</div>';
+}
+function plStop(){if(PL.timer){clearInterval(PL.timer);PL.timer=null;}const b=document.getElementById('pplay');b.textContent='▶';b.classList.remove('on');}
+function plPlay(){
+  if(PL.cursor>=86399) plRebuild(0);
+  const b=document.getElementById('pplay'); b.textContent='❚❚'; b.classList.add('on');
+  const c0=PL.cursor, t0=Date.now(), spd=PL.speed;
+  PL.timer=setInterval(()=>{
+    const next=Math.min(c0+(Date.now()-t0)*spd,86399);
+    plAdvance(next,true); document.getElementById('pslider').value=next;
+    if(next>=86399) plStop();
+  },90);
+}
+document.querySelectorAll('.spdbtn').forEach(b=>b.onclick=()=>{
+  PL.speed=+b.dataset.spd;
+  document.querySelectorAll('.spdbtn').forEach(x=>x.classList.remove('on')); b.classList.add('on');
+  if(PL.timer){ plStop(); plPlay(); } // rebase pacing from the current moment
+});
+function pReset(){plStop();PL.cursor=0;PL.idx=0;document.getElementById('pslider').value=0;
+  document.getElementById('feed').innerHTML='<div class="feed-empty">Press play to start the day at midnight, or drag the slider to any hour…</div>';
+  plClock(); document.getElementById('pcount').textContent='press play';}
+document.getElementById('pplay').onclick=()=>{PL.timer?plStop():plPlay();};
+document.getElementById('pslider').oninput=e=>{plStop();plRebuild(+e.target.value);};
+
+function buildMap(){
+  layer.clearLayers(); markers=[];
+  const pts=calls.filter(c=>c.lat&&c.lon);
+  pts.forEach(c=>{
+    const m=L.circleMarker([c.lat,c.lon],{
+      radius:c.pri==="Critical"?8:(c.pri==="Serious"?6:4.2),
+      color:famColor[c.fam]||"#888",weight:1,fillColor:famColor[c.fam]||"#888",fillOpacity:.82,opacity:.9});
+    m.bindPopup(popup(c)); m._c=c; markers.push(m); m.addTo(layer);
+  });
+  if(!map.hasLayer(layer)) layer.addTo(map);
+  if(markers.length){const g=L.featureGroup(markers); map.fitBounds(g.getBounds().pad(0.12));}
+}
+/* Plain-language response value. On-view / officer-initiated jobs log arrival the same
+   second they're created (rsp ~ 0), so we say so instead of printing a misleading "0.0 min". */
+function respText(c){
+  if(c.rsp==null) return 'no arrival logged';
+  if(c.rsp<=0.2) return 'unit already on scene — no travel';
+  return c.rsp.toFixed(1)+' min to scene';
+}
+/* Inferred source: officer-initiated = proactive patrol/inspections/sweeps, or a unit
+   already on scene with no travel. Everything else is a dispatched call for service.
+   The dataset has no field naming who started the job, so this is a labeled inference. */
+function isOfficer(c){return c.fam==='Patrol/visibility'||c.rsp==null||c.rsp<=0.2;}
+function popup(c){
+  const pc=PRI_COLOR[c.pri]||"#888", prLabel=c.pri==="Non CIP"?"Routine":c.pri;
+  return `<div class="pop-ty">${c.ty}</div>
+    <div class="pop-row"><span>Time</span><b>${c.tm}</b></div>
+    <div class="pop-row"><span>Family</span><b>${c.fam}</b></div>
+    <div class="pop-row"><span>Response</span><b>${respText(c)}</b></div>
+    <span class="pchip" style="background:${hex2rgba(pc,.16)};color:${pc};border:1px solid ${hex2rgba(pc,.5)}">${prLabel.toUpperCase()}</span>`;
+}
+
+function visible(c){
+  if(!state.activeFam.has(c.fam))return null;
+  if(state.pri!=="all"&&c.pri!==state.pri)return null;
+  if(state.init==='dispatched'&&isOfficer(c))return null;
+  if(state.init==='officer'&&!isOfficer(c))return null;
+  if(state.hour!==null&&c.h!==state.hour)return null;
+  if(state.mode==="flow"){
+    if(c.s>state.cursor)return null;
+    const age=state.cursor-c.s;
+    if(age>WINDOW)return 0.38;
+    return 1-(age/WINDOW)*0.62;
+  }
+  return 0.82;
+}
+/* does a 911 job match the NON-time filters (family/priority/source/hour)? — ignores the flow cursor,
+   so we can tell a genuinely-empty filter combo apart from "the animation hasn't reached it yet". */
+function matchesFilters(c){
+  if(!state.activeFam.has(c.fam)) return false;
+  if(state.pri!=='all'&&c.pri!==state.pri) return false;
+  if(state.init==='dispatched'&&isOfficer(c)) return false;
+  if(state.init==='officer'&&!isOfficer(c)) return false;
+  if(state.hour!==null&&c.h!==state.hour) return false;
+  return true;
+}
+function describeFilters(){
+  const priLbl={'Critical':'Critical','Serious':'Serious','Non Critical':'Non-critical','Non CIP':'Routine'};
+  const parts=[];
+  if(state.pri!=='all') parts.push('Priority: '+priLbl[state.pri]);
+  const liveFams=FAM.map(f=>f[0]).filter(n=>calls.some(c=>c.fam===n));
+  if(state.activeFam.size<liveFams.length) parts.push('Type: '+[...state.activeFam].filter(n=>liveFams.includes(n)).join(', '));
+  if(state.init==='dispatched') parts.push('Source: 911 / dispatched');
+  if(state.init==='officer') parts.push('Source: Officer-initiated');
+  if(state.hour!==null) parts.push('Hour '+String(state.hour).padStart(2,'0')+':00');
+  return parts.length?('No calls this day match — '+parts.join(' + ')+'.'):'No calls to show.';
+}
+function clearFilters(){
+  state.activeFam=new Set(FAM.map(f=>f[0]));
+  state.pri='all'; state.init='all'; state.hour=null;
+  document.querySelectorAll('.pbtn').forEach(x=>{x.classList.remove('on');x.style.color='';x.style.borderColor='';});
+  const pa=document.querySelector('.pbtn[data-pri="all"]'); pa.classList.add('on'); pa.style.color=cssv('--accent'); pa.style.borderColor=cssv('--accent');
+  document.querySelectorAll('.ibtn').forEach(x=>{x.classList.remove('on');x.style.color='';x.style.borderColor='';});
+  const ia=document.getElementById('ib-all'); ia.classList.add('on'); ia.style.color=cssv('--accent2'); ia.style.borderColor=cssv('--accent2');
+  syncLegend(); syncHours();
+  setMode('all'); // resets flow + calls refresh()
+}
+function refresh(){
+  let shown=0;
+  markers.forEach(m=>{
+    const v=visible(m._c);
+    if(v===null){if(map.hasLayer(m))layer.removeLayer(m);}
+    else{
+      if(!map.hasLayer(m))m.addTo(layer);
+      const fresh=state.mode==="flow"&&(state.cursor-m._c.s)<90&&m._c.s<=state.cursor;
+      m.setStyle({fillOpacity:v,opacity:Math.min(1,v+.1),
+        radius:(m._c.pri==="Critical"?8:m._c.pri==="Serious"?6:4.2)*(fresh?1.6:1)});
+      shown++;
+    }
+  });
+  // empty-state: does the filter combo match anything at all (regardless of the animation position)?
+  const filterCount = calls.filter(matchesFilters).length;
+  const em=document.getElementById('mapempty');
+  if(filterCount===0 && calls.length){ em.classList.add('show'); document.getElementById('me-detail').textContent=describeFilters(); }
+  else em.classList.remove('show');
+  updateClock(shown);
+}
+function updateClock(shown){
+  const cl=document.getElementById('clock'),sub=document.getElementById('clocksub');
+  if(state.mode==="all"&&state.hour===null)cl.textContent="All day";
+  else if(state.hour!==null)cl.textContent=String(state.hour).padStart(2,'0')+":00";
+  else{const h=Math.floor(state.cursor/3600),mm=Math.floor((state.cursor%3600)/60);cl.textContent=String(h).padStart(2,'0')+":"+String(mm).padStart(2,'0');}
+  sub.textContent=shown+" job"+(shown===1?"":"s")+" on map";
+  const p=(state.cursor/86399)*100;
+  document.getElementById('slider').style.background=`linear-gradient(90deg,var(--accent) ${p}%,#22303f ${p}%)`;
+}
+
+function buildLegend(){
+  const counts={}; FAM.forEach(([n])=>counts[n]=0); calls.forEach(c=>counts[c.fam]++);
+  const legend=document.getElementById('legend'); legend.innerHTML='';
+  FAM.forEach(([n])=>{
+    if(!counts[n])return;
+    const el=document.createElement('div'); el.className='lchip'; el.dataset.fam=n;
+    el.innerHTML=`<span class="sw" style="background:${famColor[n]}"></span>${n} <span class="ct">${counts[n]}</span>`;
+    el.onclick=()=>{
+      const all=FAM.filter(f=>counts[f[0]]).map(f=>f[0]);
+      if(state.activeFam.has(n)){
+        if(state.activeFam.size===all.length)state.activeFam=new Set([n]);
+        else if(state.activeFam.size===1)state.activeFam=new Set(all);
+        else state.activeFam.delete(n);
+      }else state.activeFam.add(n);
+      syncLegend();refresh();
+    };
+    legend.appendChild(el);
+  });
+}
+function syncLegend(){document.querySelectorAll('.lchip').forEach(el=>el.classList.toggle('off',!state.activeFam.has(el.dataset.fam)));}
+
+function buildHours(){
+  const hc=new Array(24).fill(0); calls.forEach(c=>{if(c.h!=null)hc[c.h]++;});
+  const maxH=Math.max(...hc,1);
+  const hoursEl=document.getElementById('hours'),hlab=document.getElementById('hlabels');
+  hoursEl.innerHTML='';hlab.innerHTML='';
+  hc.forEach((n,h)=>{
+    const b=document.createElement('div');b.className='hbar';b.dataset.h=h;
+    b.style.height=(n/maxH*100)+'%';b.innerHTML=`<span class="hv">${n}</span>`;
+    b.title=`${String(h).padStart(2,'0')}:00 — ${n} jobs`;
+    b.onclick=()=>{state.hour=state.hour===h?null:h;if(state.hour!==null)setMode('all');syncHours();refresh();
+      document.getElementById('map').scrollIntoView({behavior:'smooth',block:'center'});};
+    hoursEl.appendChild(b);
+    const s=document.createElement('span');s.textContent=(h%3===0)?String(h).padStart(2,'0'):'';hlab.appendChild(s);
+  });
+}
+function syncHours(){document.querySelectorAll('.hbar').forEach(b=>b.classList.toggle('sel',+b.dataset.h===state.hour));}
+
+function buildFamilies(){
+  const counts={}; FAM.forEach(([n])=>counts[n]=0); calls.forEach(c=>counts[c.fam]++);
+  const arr=FAM.map(([n])=>[n,counts[n]]).filter(d=>d[1]>0).sort((a,b)=>b[1]-a[1]);
+  const maxF=Math.max(...arr.map(d=>d[1]),1);
+  const distinct=new Set(calls.map(c=>c.ty)).size;
+  document.getElementById('fam-title').textContent=`${distinct} kinds of call, sorted into families`;
+  const famsEl=document.getElementById('fams'); famsEl.innerHTML='';
+  arr.forEach(([n,v])=>{
+    const row=document.createElement('div');row.className='bar-row';
+    row.innerHTML=`<div class="nm">${n}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:0;background:${famColor[n]}"></div></div>
+      <div class="vl">${v} · ${(v/calls.length*100).toFixed(0)}%</div>`;
+    row.onclick=()=>{state.activeFam=new Set([n]);syncLegend();refresh();document.getElementById('map').scrollIntoView({behavior:'smooth',block:'center'});};
+    famsEl.appendChild(row);
+    requestAnimationFrame(()=>setTimeout(()=>{row.querySelector('.bar-fill').style.width=(v/maxF*100)+'%';},60));
+  });
+}
+
+function buildResponse(){
+  const N=calls.length;
+  const disp=calls.filter(c=>c.hasDisp).length, arr=calls.filter(c=>c.hasArr).length, clo=calls.filter(c=>c.hasClo).length;
+  const onview=calls.filter(c=>c.rsp!=null&&c.rsp<=0.2).length;
+  const trav=calls.filter(TRAVEL);
+  const pct=x=>Math.round(x/N*100);
+  document.getElementById('pipe').innerHTML=`
+    <div class="pstep" style="border-left-color:var(--accent2)"><div class="pl">Job created<small>911 call or radio run entered</small></div><div class="pn">${N}</div></div>
+    <div class="pstep" style="border-left-color:var(--accent2)"><div class="pl">Dispatched to a unit<small>${pct(disp)}% of jobs</small></div><div class="pn">${disp}</div></div>
+    <div class="pstep" style="border-left-color:var(--accent)"><div class="pl">Unit arrived on scene<small>${pct(arr)}% — incl. ${onview} already on scene</small></div><div class="pn">${arr}</div></div>
+    <div class="pstep" style="border-left-color:var(--accent)"><div class="pl">Closed / cleared<small>${pct(clo)}% resolved in system</small></div><div class="pn">${clo}</div></div>`;
+  const qd=trav.map(c=>c.qd).filter(v=>v!=null), dt=trav.map(c=>c.dt).filter(v=>v!=null),
+        rs=trav.map(c=>c.rsp), on=trav.map(c=>c.os).filter(v=>v!=null);
+  const row=(l,a)=>`<tr><td>${l}</td><td class="big">${fmtMin(median(a))}</td><td>${a.length?pct90(a).toFixed(1):'—'}</td></tr>`;
+  document.getElementById('timing').innerHTML=
+    row('Create → dispatch (queue)',qd)+row('Dispatch → arrival (travel)',dt)+row('Total to on scene',rs)+row('Time on scene',on);
+  const order=[['Critical','--crit'],['Serious','--serious'],['Non Critical','--noncrit'],['Non CIP','--routine']];
+  const label={'Critical':'Critical','Serious':'Serious','Non Critical':'Non-critical','Non CIP':'Routine'};
+  document.getElementById('pritab').innerHTML=order.map(([k,c])=>{
+    const grp=calls.filter(x=>x.pri===k), r=grp.filter(TRAVEL).map(x=>x.rsp);
+    if(!grp.length)return '';
+    return `<tr><td><span class="pri-dot" style="background:${cssv(c)}"></span>${label[k]}</td><td>${grp.length}</td><td class="big">${r.length?median(r).toFixed(1)+' min':'—'}</td></tr>`;
+  }).join('');
+  document.getElementById('resp-note').textContent=
+    `Response times are based on ${trav.length} dispatched calls that required travel. ${onview} job${onview===1?'':'s'} (${pct(onview)}%) had a unit already on scene or were officer-initiated, with no travel time, and are excluded from the medians above.`;
+}
+
+function buildCritical(){
+  const crit=calls.filter(c=>c.pri==="Critical").sort((a,b)=>a.s-b.s);
+  const el=document.getElementById('crit'); el.innerHTML='';
+  if(!crit.length){el.innerHTML='<div class="empty">No jobs were flagged critical on this day.</div>';}
+  else crit.forEach(c=>{
+    const d=document.createElement('div');d.className='citem';
+    const cr=c.rsp==null?'no arrival':c.rsp<=0.2?'already there':c.rsp.toFixed(1)+' min';
+    d.innerHTML=`<div class="ctime">${c.tm.slice(0,5)}</div><div class="cty">${c.ty}</div>
+      <div class="cresp">on scene<br><b>${cr}</b></div>`;
+    d.onclick=()=>{if(c.lat&&c.lon){map.setView([c.lat,c.lon],16);markers.find(m=>m._c.id===c.id)?.openPopup();}
+      document.getElementById('map').scrollIntoView({behavior:'smooth',block:'center'});};
+    el.appendChild(d);
+  });
+  const ser=calls.filter(c=>c.pri==="Serious");
+  const top=Object.entries(ser.reduce((a,c)=>{a[c.fam]=(a[c.fam]||0)+1;return a;},{})).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  document.getElementById('serious-note').textContent=ser.length?
+    `Also logged: ${ser.length} “serious” jobs — mostly ${top.map(t=>t[0].toLowerCase()+' ('+t[1]+')').join(', ')}.`:'';
+}
+
+/* ---------- controls wiring ---------- */
+document.querySelectorAll('.pbtn').forEach(b=>{
+  b.onclick=()=>{
+    state.pri=b.dataset.pri;
+    document.querySelectorAll('.pbtn').forEach(x=>{x.classList.remove('on');x.style.color='';x.style.borderColor='';});
+    b.classList.add('on');
+    const col=b.dataset.pri==="all"?cssv('--accent'):cssv((b.dataset.pri==='Critical'?'--crit':b.dataset.pri==='Serious'?'--serious':b.dataset.pri==='Non Critical'?'--noncrit':'--routine'));
+    b.style.color=col;b.style.borderColor=col;
+    refresh();
+  };
+});
+document.querySelectorAll('.ibtn').forEach(b=>{
+  b.onclick=()=>{
+    state.init=b.dataset.init;
+    document.querySelectorAll('.ibtn').forEach(x=>{x.classList.remove('on');x.style.color='';x.style.borderColor='';});
+    b.classList.add('on');
+    const col=cssv('--accent2'); b.style.color=col; b.style.borderColor=col;
+    refresh();
+  };
+});
+const slider=document.getElementById('slider'),playBtn=document.getElementById('play');
+let timer=null;
+function setMode(mode){
+  state.mode=mode;
+  document.getElementById('m-all').classList.toggle('on',mode==='all');
+  document.getElementById('m-flow').classList.toggle('on',mode==='flow');
+  if(mode==='all'){stop();state.cursor=86399;slider.value=86399;}
+  else{state.hour=null;syncHours();}
+  refresh();
+}
+document.getElementById('m-all').onclick=()=>setMode('all');
+document.getElementById('m-flow').onclick=()=>{setMode('flow');state.cursor=0;slider.value=0;refresh();};
+slider.oninput=()=>{if(state.mode==='all')setMode('flow');state.hour=null;syncHours();state.cursor=+slider.value;refresh();};
+function play(){
+  setMode('flow');state.hour=null;syncHours();
+  if(state.cursor>=86399)state.cursor=0;
+  playBtn.textContent='❚❚';playBtn.classList.add('on');
+  timer=setInterval(()=>{state.cursor+=420;if(state.cursor>=86399){state.cursor=86399;slider.value=86399;refresh();stop();return;}slider.value=state.cursor;refresh();},90);
+}
+function stop(){if(timer){clearInterval(timer);timer=null;}playBtn.textContent='▶';playBtn.classList.remove('on');}
+playBtn.onclick=()=>{timer?stop():play();};
+document.getElementById('aibtn').onclick=()=>document.getElementById('aipop').classList.toggle('show');
+document.getElementById('me-clear').onclick=clearFilters;
+
+loadBtn.onclick=()=>load();
+document.getElementById('rand').onclick=()=>{
+  const code=ALL_CODES[Math.floor(Math.random()*ALL_CODES.length)];
+  const di=document.getElementById('date');
+  const lo=Date.parse(di.min), hi=Date.parse(di.max);
+  const d=new Date(lo+Math.floor(Math.random()*((hi-lo)/864e5+1))*864e5);
+  pctSel.value=code;
+  document.getElementById('date').value=d.toISOString().slice(0,10);
+  load();
+};
+window.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='BUTTON')load();});
+
+/* Preselect a precinct and day from the URL (?pct=75&date=2026-06-30), so another page can
+   open this explorer on a given precinct. Added in the compstat-stress-test fork. */
+(function(){
+  var q=new URLSearchParams(location.search), p=q.get('pct'), d=q.get('date');
+  if(p && ALL_CODES.indexOf(+p)>-1) pctSel.value=String(+p);
+  var di=document.getElementById('date');
+  if(d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d>=di.min){ if(d>di.max) di.max=d; di.value=d; }
+})();
+
+/* initial load */
+load(true);
+</script>
+</body>
+</html>

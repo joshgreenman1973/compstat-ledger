@@ -109,6 +109,157 @@ function PressPanel({ family, geo, periodId, reportPeriod, what }) {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* DIG DEEPER — the precinct-day explorer (a copy lives in             */
+/* public/precinct-day), collapsed until asked for, loaded on demand.  */
+/* ------------------------------------------------------------------ */
+const CFS_MAX_URL = 'https://data.cityofnewyork.us/resource/n2zq-pubd.json?$select=max(incident_date)%20as%20m';
+function DigDeeper({ precincts, initialKey }) {
+  const [open, setOpen] = useState(false);
+  const [key, setKey] = useState(initialKey);
+  useEffect(() => setKey(initialKey), [initialKey]);
+  const [maxDate, setMaxDate] = useState(null);
+  const [date, setDate] = useState('');
+  useEffect(() => {
+    if (!open || maxDate) return undefined;
+    let alive = true;
+    fetch(CFS_MAX_URL).then((r) => r.json())
+      .then((j) => { const m = j?.[0]?.m?.slice(0, 10); if (alive) { setMaxDate(m || 'unknown'); if (m) setDate((d) => d || m); } })
+      .catch(() => { if (alive) { setMaxDate('unknown'); setDate((d) => d || '2026-06-30'); } });
+    return () => { alive = false; };
+  }, [open, maxDate]);
+  const pct = key ? parseInt(key, 10) : null;
+  const src = pct && date ? `${process.env.PUBLIC_URL}/precinct-day/index.html?pct=${pct}&date=${date}` : null;
+  return (
+    <section id="dig" className="py-8 border-b border-[#e6e6e6] scroll-mt-14">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between gap-4 text-left group">
+        <span>
+          <span className="block text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff7c53] mb-1">Dig deeper</span>
+          <span className="vc-display block text-[22px] sm:text-[26px] font-black leading-tight">A day on the police radio{key ? ` in the ${key}` : ''}</span>
+        </span>
+        <span className="flex-shrink-0 rounded-full border-2 border-[#050507] px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] group-hover:bg-[#dde44c]">{open ? 'Close' : 'Open'}</span>
+      </button>
+      <p className="mt-2 max-w-3xl text-[14px] leading-snug text-[#555]">Every 911 call and radio run NYPD dispatched in one precinct on one day, rebuilt from the department's own dispatch log on NYC Open Data. It counts jobs, not crimes, and a single day is a snapshot, not a pattern. The log runs months behind CompStat.</p>
+      {open && (
+        <div className="mt-5">
+          <div className="flex flex-wrap items-end gap-3 mb-3">
+            {precincts && (
+              <label className="text-[11px] font-bold uppercase tracking-wider text-[#555]">Precinct
+                <select value={key || ''} onChange={(e) => setKey(e.target.value)} className="block mt-1 rounded border border-[#d6d6d6] px-2 py-1.5 text-[14px] normal-case tracking-normal font-normal text-[#050507]">
+                  {precincts.map((p) => <option key={p} value={p}>{p}{PRECINCT_NEIGHBORHOODS[p] ? ` · ${PRECINCT_NEIGHBORHOODS[p]}` : ''}</option>)}
+                </select>
+              </label>
+            )}
+            <label className="text-[11px] font-bold uppercase tracking-wider text-[#555]">Day
+              <input type="date" min="2018-01-01" max={maxDate && maxDate !== 'unknown' ? maxDate : undefined} value={date} onChange={(e) => setDate(e.target.value)} className="block mt-1 rounded border border-[#d6d6d6] px-2 py-1.5 text-[14px] font-normal text-[#050507]" />
+            </label>
+            {maxDate && maxDate !== 'unknown' && <span className="text-[12px] text-[#707175] pb-2">Latest day in the log: {S.apDate(`${+maxDate.slice(5, 7)}/${+maxDate.slice(8, 10)}/${maxDate.slice(0, 4)}`)}</span>}
+            {src && <a href={src} target="_blank" rel="noopener noreferrer" className="pb-2 text-[11px] font-bold uppercase tracking-wider underline">Open full page ↗</a>}
+          </div>
+          {src
+            ? <iframe title={`A day on the police radio in the ${key}`} src={src} loading="lazy" className="w-full h-[80vh] min-h-[640px] rounded border border-[#d6d6d6] bg-[#0b0f14]" />
+            : <p className="text-[14px] text-[#707175]">Finding the latest day in the dispatch log…</p>}
+          <p className="mt-2 text-[12px] text-[#707175]">From "A day on the police radio" (nyc-precinct-day). Source: NYPD Calls for Service, NYC Open Data. Response times are medians for dispatched calls; see that tool's notes.</p>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* COVERAGE VS. THE COUNTS — news volume (GDELT) against NYPD's own    */
+/* 28-day counts, each over the last four weeks vs. the four before.   */
+/* ------------------------------------------------------------------ */
+function CoverageCheck({ geo, geoData, prevData, weekEnd }) {
+  const [run, setRun] = useState(false);
+  const [results, setResults] = useState({});
+  const win = useMemo(() => PR.coverageWindows(weekEnd), [weekEnd]);
+  const inWindow = win && win.from.getTime() >= Date.now() - PR.GDELT_WINDOW_DAYS * 86400000;
+  useEffect(() => { setResults({}); setRun(false); }, [geo, weekEnd]);
+  useEffect(() => {
+    if (!run || !win || !inWindow) return undefined;
+    let alive = true;
+    PR.COVERAGE_FAMILIES.forEach((f) => {
+      const url = PR.timelineUrl(PR.buildGroupsQuery(f.groups, PR.geoTerms(geo, PRECINCT_NEIGHBORHOODS)), win.from, win.to);
+      setResults((r) => ({ ...r, [f.key]: { status: 'loading' } }));
+      PR.fetchTimeline(url).then((res) => {
+        if (!alive) return;
+        setResults((r) => ({ ...r, [f.key]: res.error ? { status: 'error', error: res.error } : { status: 'done', cov: PR.coverageChange(res.points, win) } }));
+      });
+    });
+    return () => { alive = false; };
+  }, [run, geo, win, inWindow]);
+  const line = (data, name) => data?.seven_major_felonies?.[name] || data?.additional_stats?.[name];
+  const rows = PR.COVERAGE_FAMILIES.map((f) => {
+    const a = line(geoData, f.line)?.twenty_eight_day?.current_year;
+    const b = line(prevData, f.line)?.twenty_eight_day?.current_year;
+    const crime = Number.isFinite(a) && Number.isFinite(b)
+      ? { cur: a, prior: b, pct: b > 0 ? ((a - b) / b) * 100 : null, z: S.poissonZ(a, b), verdict: S.verdictFor(S.poissonZ(a, b)) }
+      : null;
+    const r = results[f.key];
+    const verdict = r?.status === 'done' ? PR.coverageVerdict(crime, r.cov) : null;
+    return { ...f, crime, r, verdict };
+  });
+  const done = rows.filter((x) => x.verdict);
+  const judged = done.filter((x) => x.verdict.kind !== 'thin' && x.verdict.kind !== 'na');
+  const outs = judged.filter((x) => x.verdict.kind === 'out');
+  const allDone = run && rows.every((x) => x.r && x.r.status !== 'loading');
+  const where = geo === 'citywide' ? 'New York City' : `the ${geo}`;
+  const title = !run
+    ? `Is the news coverage of ${where} keeping pace with the counts?`
+    : !allDone ? `Checking coverage of ${where}, crime by crime…`
+      : judged.length === 0 ? `There was too little coverage of ${where} to judge.`
+        : outs.length === 0 ? `Over the past four weeks, coverage of ${where} didn't run against NYPD's counts in any of the ${nw(judged.length)} crime types with enough stories to judge.`
+          : `In ${nw(outs.length)} of ${nw(judged.length)} crime types, coverage of ${where} over the past four weeks ran against NYPD's counts.`;
+  return (
+    <section id="coverage" className="pt-14 pb-12 border-b border-[#e6e6e6] scroll-mt-14">
+      <SectionHead
+        id="coverage"
+        kicker="Coverage vs. the counts"
+        title={title}
+        dek="News volume from the GDELT index against NYPD's own 28-day counts, each for the last four weeks against the four before. Out of step means the coverage and the counts point different ways."
+        right={!run && <button type="button" disabled={!inWindow || !prevData} onClick={() => setRun(true)} className="rounded-full border-2 border-[#050507] px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] hover:bg-[#dde44c] disabled:opacity-40">Run the check</button>}
+      />
+      {!prevData && <p className="text-[14px] text-[#707175]">The archived report from four weeks earlier isn't available, so there's nothing to compare the counts with.</p>}
+      {prevData && !inWindow && <p className="text-[14px] text-[#707175]">This report is older than the news index's three-month window.</p>}
+      {run && (
+        <p className="mb-4 text-[13px] text-[#707175]">Ten searches, spaced out as GDELT asks: about a minute in all. Results fill in as they arrive.</p>
+      )}
+      <div className="vc-scroll-x">
+        <table className="w-full min-w-[760px] text-left border-collapse" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <thead>
+            <tr className="text-[11px] font-bold uppercase tracking-wider text-[#707175] border-b-2 border-[#050507]">
+              <th className="py-2 pr-3">Crime</th>
+              <th className="py-2 px-2 text-right">NYPD, last 4 wks vs. prior 4</th>
+              <th className="py-2 px-2">Chance test</th>
+              <th className="py-2 px-2 text-right">Stories, last 4 wks vs. prior 4</th>
+              <th className="py-2 px-2 text-right">Coverage change</th>
+              <th className="py-2 px-2">Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((x) => (
+              <tr key={x.key} className="border-b border-[#eee]">
+                <td className="py-2 pr-3 text-[14px] font-bold">{x.label}<div className="text-[11px] font-normal text-[#707175]">NYPD: {x.line}</div></td>
+                <td className="py-2 px-2 text-right text-[14px]">{x.crime ? <>{S.fmtInt(x.crime.cur)} vs. {S.fmtInt(x.crime.prior)} <span className="text-[#555]">({S.fmtPct(x.crime.pct, 0)})</span></> : '—'}</td>
+                <td className="py-2 px-2">{x.crime ? <Chip verdict={x.crime.verdict} small /> : '—'}</td>
+                <td className="py-2 px-2 text-right text-[14px]">{x.r?.status === 'done' ? `${S.fmtInt(x.r.cov.last)} vs. ${S.fmtInt(x.r.cov.prev)}` : x.r?.status === 'loading' ? '…' : x.r?.status === 'error' ? 'no answer' : ''}</td>
+                <td className="py-2 px-2 text-right text-[14px]">{x.r?.status === 'done' && x.r.cov.change != null ? `${S.fmtPct(x.r.cov.change, 0)}${x.r.cov.normalized ? '' : '*'}` : ''}</td>
+                <td className="py-2 px-2 text-[13px]">{x.verdict && <span className={`inline-block rounded-full px-2 py-0.5 font-bold ${x.verdict.kind === 'out' ? 'bg-[#fde5dd] text-[#050507] border border-[#ff7c53]' : 'text-[#555]'}`}>{x.verdict.label}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Receipt>
+        <p><strong>Counts:</strong> NYPD's 28-day count in this week's report against the 28-day count in the report four weeks earlier. Both are first counts, so revisions don't tilt the comparison. The chance test is the same one used above.</p>
+        <p><strong>Coverage:</strong> stories in the GDELT news index matching the crime words and {geo === 'citywide' ? 'a New York City place name' : `the ${geo} or its neighborhoods`}, over the same two windows. Where GDELT reports the total number of stories it monitored, the change is measured as a share of all coverage, so a swing in the index's overall volume doesn't register as interest; an asterisk marks raw counts.</p>
+        <p><strong>Out of step:</strong> coverage up {PR.COVERAGE_SWING}% or more while the count fell or held (a real drop, or a noisy change at or below zero); coverage down {PR.COVERAGE_SWING}% or more while the count rose or held; or a real rise in the count while coverage fell. Fewer than 15 stories across both windows (or 5 in the earlier one) is too thin to judge. The thresholds are blunt on purpose, and keyword matching is noisy: a story about a trial or an anniversary counts as coverage too.</p>
+      </Receipt>
+    </section>
+  );
+}
+
 const ARC_OPTIONS = [
   ['Murder', 'Murder', 'murders'], ['Shooting Inc.', 'Shootings', 'shooting incidents'], ['Robbery', 'Robbery', 'robberies'],
   ['Fel. Assault', 'Felony assault', 'felony assaults'], ['Burglary', 'Burglary', 'burglaries'], ['Gr. Larceny', 'Grand larceny', 'grand larcenies'],
@@ -296,6 +447,7 @@ export default function BoldApp() {
   const [rtci, setRtci] = useState(null);
   const [revs, setRevs] = useState(null);
   const [revStatus, setRevStatus] = useState('idle');
+  const [prev28, setPrev28] = useState(null);
   const [geo, setGeo] = useState(init.get('geo') || 'citywide');
   const [period, setPeriod] = useState(S.PERIODS[init.get('period')] ? init.get('period') : 'ytd');
   const [arcKey, setArcKey] = useState(ARC_OPTIONS.some((a) => a[0] === init.get('arc')) ? init.get('arc') : 'Murder');
@@ -335,7 +487,15 @@ export default function BoldApp() {
           .sort((a, b) => b.date.localeCompare(a.date)).slice(0, S.REVISION_WEEKS);
         return Promise.all(older.map((e) => fetch(DATA_BASE + e.path).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
       })
-      .then((snaps) => S.revisionFlows([...snaps.filter(Boolean).reverse(), raw]));
+      .then((snaps) => {
+        // Keep the report from exactly four weeks earlier: its 28-day counts (first counts, like this
+        // week's) are the comparison for the coverage check.
+        const t = S.parseMDY(raw.citywide?.report_period?.week_end);
+        const target = t ? Date.UTC(t.y, t.m - 1, t.d) - 28 * 86400000 : null;
+        const earlier = snaps.find((s) => { const q = S.parseMDY(s?.citywide?.report_period?.week_end); return q && Date.UTC(q.y, q.m - 1, q.d) === target; });
+        if (alive) setPrev28(earlier || null);
+        return S.revisionFlows([...snaps.filter(Boolean).reverse(), raw]);
+      });
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000));
     Promise.race([work, timeout])
       .then((f) => { if (alive) { setRevs(f); setRevStatus('done'); } })
@@ -595,7 +755,7 @@ export default function BoldApp() {
 
   const navItems = [
     ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
-    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['ledger', 'Ledger'], ['method', 'Method'],
+    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ...(press ? [['coverage', 'Coverage']] : []), ['dig', 'Dig deeper'], ['ledger', 'Ledger'], ['method', 'Method'],
   ];
 
   return (
@@ -632,6 +792,7 @@ export default function BoldApp() {
             <div className="mt-8 lg:mt-2 max-w-[260px]">
               <MiniMap dark fills={{ [selectedNum]: '#dde44c' }} selectedNum={selectedNum} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the ${activeGeo} highlighted among New York City's precincts.`} minWidth={160} />
               <p className="mt-2 text-[11px] uppercase tracking-widest text-white/50">{isSplit ? 'The 105th and 116th share one shape on this map' : 'Tap another precinct to switch'}</p>
+              <a href="#dig" className="mt-3 inline-block text-[11px] font-bold uppercase tracking-[0.14em] text-[#dde44c] hover:underline">Dig deeper: a day on its police radio ↓</a>
             </div>
           )}
           </div>
@@ -669,7 +830,7 @@ export default function BoldApp() {
               className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${press ? 'bg-[#050507] text-white border-[#050507]' : 'border-[#d6d6d6] text-[#555] hover:text-[#050507]'}`}>
               Press reports: {press ? 'on' : 'off'}
             </button>
-            <span className="hidden md:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : activeGeo}</span>
+            <span className="hidden xl:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : activeGeo}</span>
             {!isCity && <button onClick={() => selectGeo('citywide')} className="text-[11px] font-bold uppercase tracking-wider text-[#ff7c53] hover:text-[#050507]">← Citywide</button>}
           </span>
         </div>
@@ -835,6 +996,33 @@ export default function BoldApp() {
                     return (
                       <>
                         <p className="mt-2 text-[13px] text-[#555]">{S.fmtInt(placed)} of {S.fmtInt(pinState.articles.length)} matching stories name a neighborhood that belongs to a single precinct; each dot counts them. The rest aren't placed.</p>
+                        {(() => {
+                          // Where coverage and the counts diverge: much-covered places whose count isn't really rising,
+                          // and real rises that drew no placed story. A headline-only sample, so treat it as a lead.
+                          const covered = Object.entries(pins).map(([num, l]) => ({ num, n: l.length, u: units[num] })).filter((x) => x.u).sort((x, y) => y.n - x.n);
+                          const loud = covered.filter((x) => x.n >= 2 && x.u.real !== 'rise').slice(0, 5);
+                          const quiet = unitList.filter((u) => u.real === 'rise' && !pins[u.num]).sort((x, y) => y.z - x.z).slice(0, 6);
+                          if (!loud.length && !quiet.length) return null;
+                          const name = (u) => u.label.replace(' Precincts', '').replace(' Precinct', '');
+                          const said = (u) => (u.real === 'drop' ? 'a real drop' : u.fragile ? 'a fragile change' : u.verdict === 'none' ? 'none either year' : 'noise');
+                          return (
+                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
+                              {loud.length > 0 && (
+                                <div>
+                                  <div className="text-[11px] font-black uppercase tracking-[0.12em] mb-1">Covered, but not rising</div>
+                                  <ul className="space-y-1">{loud.map((x) => <li key={x.num}><button type="button" onClick={() => selectGeo(x.u.geoKey)} className="font-bold hover:underline">{name(x.u)}</button>: {x.n} stories; {measureNoun} {P.since} show {said(x.u)} ({S.fmtPct(x.u.pct, 0)})</li>)}</ul>
+                                </div>
+                              )}
+                              {quiet.length > 0 && (
+                                <div>
+                                  <div className="text-[11px] font-black uppercase tracking-[0.12em] mb-1">Rising, but no placed stories</div>
+                                  <ul className="space-y-1">{quiet.map((u) => <li key={u.num}><button type="button" onClick={() => selectGeo(u.geoKey)} className="font-bold hover:underline">{name(u)}</button>: {S.fmtInt(u.count)} vs. {S.fmtInt(u.prior)} {measureNoun} ({S.fmtPct(u.pct, 0)}), a real rise</li>)}</ul>
+                                </div>
+                              )}
+                              <p className="sm:col-span-2 text-[11px] text-[#707175]">Coverage window: the dates shown for the press layer; counts: {P.eyebrow.charAt(0).toLowerCase() + P.eyebrow.slice(1)}. Headline placement catches only a slice of coverage, so read these as leads, not findings.</p>
+                            </div>
+                          );
+                        })()}
                         <div className="mt-3 space-y-4 max-h-[420px] overflow-y-auto pr-2">
                           {groups.map(([num, list]) => (
                             <div key={num} className={num === pinSel ? 'rounded bg-[#f7f8dd] -mx-2 px-2 py-1' : ''}>
@@ -1027,6 +1215,17 @@ export default function BoldApp() {
               })()}
             </SourceLine>
           </section>
+        )}
+
+        {/* ============================ COVERAGE VS COUNTS (press layer) ============================ */}
+        {press && <CoverageCheck geo={activeGeo} geoData={geoData} prevData={prev28?.[activeGeo] || null} weekEnd={weekEnd} />}
+
+        {/* ============================ DIG DEEPER ============================ */}
+        {raw && Object.keys(raw).some((k) => k.includes('Precinct')) && (
+          <DigDeeper
+            initialKey={activeGeo.includes('Precinct') ? activeGeo : (conc?.top?.[0]?.label?.includes('+') ? S.SPLIT_PRECINCTS.parent : conc?.top?.[0]?.label) || '75th Precinct'}
+            precincts={Object.keys(raw).filter((k) => k.includes('Precinct')).sort((a, b) => parseInt(a, 10) - parseInt(b, 10))}
+          />
         )}
 
         {/* ============================ LEDGER ============================ */}

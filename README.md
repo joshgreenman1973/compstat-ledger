@@ -10,6 +10,10 @@ Two views of NYPD's weekly CompStat numbers, built from the same data:
 
 Maps: per-resident and chance-test choropleths, eight crime-by-crime small multiples, a 2010/1993 comparison map, and a locator on each precinct page. A "Press reports" toggle adds news coverage from the GDELT news index (last three months; keyword matches, never counted in any figure).
 
+With the press toggle on, a "Coverage vs. the counts" check compares the last four weeks of news volume (GDELT) with the four before, crime by crime, against NYPD's 28-day counts over the same weeks, and flags where they point different ways; the press map lists much-covered precincts that aren't rising and real rises that drew no placed story.
+
+"Dig deeper" (collapsed on every page) embeds a copy of the nyc-precinct-day explorer, "A day on the police radio," in `public/precinct-day/`, opened on the precinct in view and the latest day in NYPD's dispatch log. The copy adds only a `?pct=&date=` preselect; keep it in sync with nyc-precinct-day by hand.
+
 Run `npm start`, or `npx react-scripts test src/bold` for the stats and press tests.
 
 ---
