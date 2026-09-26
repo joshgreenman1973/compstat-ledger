@@ -52,18 +52,27 @@ const thenFill = (v, base) => {
   return sc.colors[sc.cuts.filter((c) => v > c).length];
 };
 
-// AP short date from a Date.
-const apShort = (d) => (d ? S.apDate(`${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`, { year: false }) : '');
+// AP short date from a Date, on the New York calendar (stories and report weeks run on local days).
+const NY_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' });
+const apShort = (d) => {
+  if (!d) return '';
+  const [m, day, y] = NY_DAY.format(d).split('/');
+  return S.apDate(`${m}/${day}/${y}`, { year: false });
+};
 
-function usePressArticles(url) {
+// Located stories for one crime family and window: fetched once per page, shared by every panel.
+function useStories(family, win) {
   const [state, setState] = useState({ status: 'idle' });
   useEffect(() => {
-    if (!url) { setState({ status: 'idle' }); return undefined; }
+    if (!family || !win || win.empty) { setState({ status: 'idle' }); return undefined; }
     let alive = true;
     setState({ status: 'loading' });
-    PR.fetchPress(url).then((r) => { if (alive) setState(r.error ? { status: 'error', error: r.error } : { status: 'done', articles: r.articles }); });
+    PR.fetchStories(family, win).then((r) => {
+      if (!alive) return;
+      setState(r.error ? { status: 'error', error: r.error } : { status: 'done', stories: PR.locateStories(r.articles, family, win), candidates: r.articles.length, complete: r.complete });
+    });
     return () => { alive = false; };
-  }, [url]);
+  }, [family, win]);
   return state;
 }
 
@@ -75,8 +84,9 @@ function PressList({ articles, limit = 6 }) {
       <ul className="mt-2 space-y-2">
         {shown.map((a) => (
           <li key={a.url} className="text-[14px] leading-snug">
-            <span className="text-[12px] text-[#707175] whitespace-nowrap mr-2" style={{ fontVariantNumeric: 'tabular-nums' }}>{apShort(a.date)} · {a.domain}</span>
+            <span className="text-[12px] text-[#707175] whitespace-nowrap mr-2" style={{ fontVariantNumeric: 'tabular-nums' }}>{apShort(a.date)} · {PR.OUTLET_NAMES[a.domain] || a.domain}</span>
             <a href={a.url} target="_blank" rel="noopener noreferrer nofollow" className="underline decoration-[#bbb] underline-offset-2 hover:decoration-[#050507]">{a.title}</a>
+            {a.via && <span className="ml-1 text-[12px] text-[#707175]">(placed by "{a.via}")</span>}
           </li>
         ))}
       </ul>
@@ -87,24 +97,53 @@ function PressList({ articles, limit = 6 }) {
   );
 }
 
-// Press reports for one crime family, one geography, one period.
+const FAMILY_WORDS = { murder: 'a word for a killing', shooting: 'a word for a shooting', violent: 'a word for violent crime', property: 'a word for property crime' };
+const PressStatus = ({ state }) => (
+  <>
+    {state.status === 'loading' && <p className="mt-2 text-[13px] text-[#707175]">Searching the news index… GDELT asks for five seconds between searches, so this can take a minute.</p>}
+    {state.status === 'error' && <p className="mt-2 text-[13px] text-[#707175]">The news index isn't answering. GDELT limits how often one connection can search and can shut it out for several minutes, so try again in 10 or 15 minutes.</p>}
+    {state.status === 'done' && !state.complete && <p className="mt-2 text-[12px] text-[#707175]">The index had more matches than it will page through, so the oldest stories in this window may be missing.</p>}
+  </>
+);
+
+// Press reports for one crime family, one geography, one period. Only stories whose headline puts
+// them in the place being viewed; see PR.placeHeadline for the rules.
 function PressPanel({ family, geo, periodId, reportPeriod, what }) {
   const win = useMemo(() => PR.pressWindow(periodId, reportPeriod), [periodId, reportPeriod]);
-  const url = useMemo(() => (win && !win.empty ? PR.gdeltUrl(PR.buildQuery(family, PR.geoTerms(geo, PRECINCT_NEIGHBORHOODS)), win) : null), [win, family, geo]);
-  const state = usePressArticles(url);
-  const where = geo === 'citywide' ? 'New York City' : geo;
+  const state = useStories(family, win);
+  const [showBoro, setShowBoro] = useState(false);
+  const scope = PR.geoScope(geo);
+  const here = state.status === 'done' ? PR.storiesFor(state.stories, geo) : [];
+  const boroOnly = state.status === 'done' && scope.kind === 'precinct' ? state.stories.filter((a) => a.boro === scope.boro && !a.precinct) : [];
+  const words = FAMILY_WORDS[family];
   return (
     <div className="mt-5 rounded border border-[#d6d6d6] bg-[#fafafa] p-4">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press reports: {what}</h4>
-        {win && !win.empty && <span className="text-[12px] text-[#707175]">{apShort(win.from)}–{apShort(win.to)}{win.clamped ? ' (news index covers the last three months)' : ''}</span>}
+        {win && !win.empty && <span className="text-[12px] text-[#707175]">{apShort(win.from)}–{apShort(win.to)}{win.clamped ? ' (the news index covers only the last three months)' : ''}</span>}
       </div>
       {(!win || win.empty) && <p className="mt-2 text-[13px] text-[#707175]">This period is older than the news index's three-month window.</p>}
-      {state.status === 'loading' && <p className="mt-2 text-[13px] text-[#707175]">Searching the news index… (it asks for a few seconds between searches)</p>}
-      {state.status === 'error' && <p className="mt-2 text-[13px] text-[#707175]">The news index didn't answer ({state.error.slice(0, 80)}). Try again in a minute.</p>}
-      {state.status === 'done' && state.articles.length === 0 && <p className="mt-2 text-[13px] text-[#707175]">No matching stories about {where} in this window.</p>}
-      {state.status === 'done' && state.articles.length > 0 && <PressList articles={state.articles} />}
-      <p className="mt-3 text-[11px] leading-snug text-[#707175]">Stories in the GDELT news index whose text matches {family === 'murder' ? 'murder-related' : family === 'shooting' ? 'shooting-related' : 'crime'} words and {geo === 'citywide' ? 'New York City' : `the ${geo} or its neighborhoods`}. Keyword matches, not verified and not counted in any figure on this page; a story can mention a place without the crime happening there.</p>
+      <PressStatus state={state} />
+      {state.status === 'done' && here.length === 0 && (
+        <p className="mt-2 text-[13px] text-[#707175]">
+          {scope.kind !== 'precinct' || state.stories.length === 0
+            ? `No stories in this window place themselves in ${scope.kind === 'precinct' ? 'the city' : scope.label}.`
+            : state.stories.length === 1
+              ? `The one story that places itself in the city doesn't name the ${scope.label} or a neighborhood lying inside it.`
+              : `None of the ${nw(state.stories.length)} stories that place themselves in the city name the ${scope.label} or a neighborhood lying inside it.`}
+        </p>
+      )}
+      {here.length > 0 && <PressList articles={here} />}
+      {boroOnly.length > 0 && (
+        <div className="mt-3">
+          <button type="button" onClick={() => setShowBoro((v) => !v)} className="text-[11px] font-bold uppercase tracking-wider text-[#555] hover:text-[#050507]">{showBoro ? 'Hide' : 'Show'} {S.fmtInt(boroOnly.length)} {scope.boro} {boroOnly.length === 1 ? 'story' : 'stories'} that can't be placed in a precinct</button>
+          {showBoro && <><p className="mt-1 text-[12px] text-[#707175]">These name only the borough, or a neighborhood that straddles precinct lines. They may or may not be in the {scope.label}.</p><PressList articles={boroOnly} limit={4} /></>}
+        </div>
+      )}
+      <p className="mt-3 text-[11px] leading-snug text-[#707175]">
+        From seven New York City news outlets in the GDELT news index: stories whose headline uses {words} and {scope.kind === 'citywide' ? 'names a place in the city (and none outside it)' : scope.kind === 'precinct' ? `names the ${scope.label} or a neighborhood lying at least ${Math.round(PR.PLACE_THRESHOLD * 100)}% inside it, by the city's neighborhood boundaries${scope.merged ? '. The boundary table predates the 116th Precinct, so the 105th and 116th share one area here' : ''}` : `puts them in ${scope.boro}. Headlines rarely say which half of the borough, so this covers all of ${scope.boro}, not just Patrol Borough ${geo}`}.
+        {' '}GDELT indexes only part of what those outlets publish, so this is a sample, not a tally, and several stories can cover one incident. Not verified and not counted in any figure on this page.
+      </p>
     </div>
   );
 }
@@ -162,100 +201,6 @@ function DigDeeper({ precincts, initialKey }) {
           <p className="mt-2 text-[12px] text-[#707175]">From "A day on the police radio" (nyc-precinct-day). Source: NYPD Calls for Service, NYC Open Data. Response times are medians for dispatched calls; see that tool's notes.</p>
         </div>
       )}
-    </section>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* COVERAGE VS. THE COUNTS — news volume (GDELT) against NYPD's own    */
-/* 28-day counts, each over the last four weeks vs. the four before.   */
-/* ------------------------------------------------------------------ */
-function CoverageCheck({ geo, geoData, prevData, weekEnd }) {
-  const [run, setRun] = useState(false);
-  const [results, setResults] = useState({});
-  const win = useMemo(() => PR.coverageWindows(weekEnd), [weekEnd]);
-  const inWindow = win && win.from.getTime() >= Date.now() - PR.GDELT_WINDOW_DAYS * 86400000;
-  useEffect(() => { setResults({}); setRun(false); }, [geo, weekEnd]);
-  useEffect(() => {
-    if (!run || !win || !inWindow) return undefined;
-    let alive = true;
-    PR.COVERAGE_FAMILIES.forEach((f) => {
-      const url = PR.timelineUrl(PR.buildGroupsQuery(f.groups, PR.geoTerms(geo, PRECINCT_NEIGHBORHOODS)), win.from, win.to);
-      setResults((r) => ({ ...r, [f.key]: { status: 'loading' } }));
-      PR.fetchTimeline(url).then((res) => {
-        if (!alive) return;
-        setResults((r) => ({ ...r, [f.key]: res.error ? { status: 'error', error: res.error } : { status: 'done', cov: PR.coverageChange(res.points, win) } }));
-      });
-    });
-    return () => { alive = false; };
-  }, [run, geo, win, inWindow]);
-  const line = (data, name) => data?.seven_major_felonies?.[name] || data?.additional_stats?.[name];
-  const rows = PR.COVERAGE_FAMILIES.map((f) => {
-    const a = line(geoData, f.line)?.twenty_eight_day?.current_year;
-    const b = line(prevData, f.line)?.twenty_eight_day?.current_year;
-    const crime = Number.isFinite(a) && Number.isFinite(b)
-      ? { cur: a, prior: b, pct: b > 0 ? ((a - b) / b) * 100 : null, z: S.poissonZ(a, b), verdict: S.verdictFor(S.poissonZ(a, b)) }
-      : null;
-    const r = results[f.key];
-    const verdict = r?.status === 'done' ? PR.coverageVerdict(crime, r.cov) : null;
-    return { ...f, crime, r, verdict };
-  });
-  const done = rows.filter((x) => x.verdict);
-  const judged = done.filter((x) => x.verdict.kind !== 'thin' && x.verdict.kind !== 'na');
-  const outs = judged.filter((x) => x.verdict.kind === 'out');
-  const allDone = run && rows.every((x) => x.r && x.r.status !== 'loading');
-  const where = geo === 'citywide' ? 'New York City' : `the ${geo}`;
-  const title = !run
-    ? `Is the news coverage of ${where} keeping pace with the counts?`
-    : !allDone ? `Checking coverage of ${where}, crime by crime…`
-      : judged.length === 0 ? `There was too little coverage of ${where} to judge.`
-        : outs.length === 0 ? `Over the past four weeks, coverage of ${where} didn't run against NYPD's counts in any of the ${nw(judged.length)} crime types with enough stories to judge.`
-          : `In ${nw(outs.length)} of ${nw(judged.length)} crime types, coverage of ${where} over the past four weeks ran against NYPD's counts.`;
-  return (
-    <section id="coverage" className="pt-14 pb-12 border-b border-[#e6e6e6] scroll-mt-14">
-      <SectionHead
-        id="coverage"
-        kicker="Coverage vs. the counts"
-        title={title}
-        dek="News volume from the GDELT index against NYPD's own 28-day counts, each for the last four weeks against the four before. Out of step means the coverage and the counts point different ways."
-        right={!run && <button type="button" disabled={!inWindow || !prevData} onClick={() => setRun(true)} className="rounded-full border-2 border-[#050507] px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] hover:bg-[#dde44c] disabled:opacity-40">Run the check</button>}
-      />
-      {!prevData && <p className="text-[14px] text-[#707175]">The archived report from four weeks earlier isn't available, so there's nothing to compare the counts with.</p>}
-      {prevData && !inWindow && <p className="text-[14px] text-[#707175]">This report is older than the news index's three-month window.</p>}
-      {run && (
-        <p className="mb-4 text-[13px] text-[#707175]">Ten searches, spaced out as GDELT asks: about a minute in all. Results fill in as they arrive.</p>
-      )}
-      <div className="vc-scroll-x">
-        <table className="w-full min-w-[760px] text-left border-collapse" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          <thead>
-            <tr className="text-[11px] font-bold uppercase tracking-wider text-[#707175] border-b-2 border-[#050507]">
-              <th className="py-2 pr-3">Crime</th>
-              <th className="py-2 px-2 text-right">NYPD, last 4 wks vs. prior 4</th>
-              <th className="py-2 px-2">Chance test</th>
-              <th className="py-2 px-2 text-right">Stories, last 4 wks vs. prior 4</th>
-              <th className="py-2 px-2 text-right">Coverage change</th>
-              <th className="py-2 px-2">Verdict</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((x) => (
-              <tr key={x.key} className="border-b border-[#eee]">
-                <td className="py-2 pr-3 text-[14px] font-bold">{x.label}<div className="text-[11px] font-normal text-[#707175]">NYPD: {x.line}</div></td>
-                <td className="py-2 px-2 text-right text-[14px]">{x.crime ? <>{S.fmtInt(x.crime.cur)} vs. {S.fmtInt(x.crime.prior)} <span className="text-[#555]">({S.fmtPct(x.crime.pct, 0)})</span></> : '—'}</td>
-                <td className="py-2 px-2">{x.crime ? <Chip verdict={x.crime.verdict} small /> : '—'}</td>
-                <td className="py-2 px-2 text-right text-[14px]">{x.r?.status === 'done' ? `${S.fmtInt(x.r.cov.last)} vs. ${S.fmtInt(x.r.cov.prev)}` : x.r?.status === 'loading' ? '…' : x.r?.status === 'error' ? 'no answer' : ''}</td>
-                <td className="py-2 px-2 text-right text-[14px]">{x.r?.status === 'done' && x.r.cov.change != null ? `${S.fmtPct(x.r.cov.change, 0)}${x.r.cov.normalized ? '' : '*'}` : ''}</td>
-                <td className="py-2 px-2 text-[13px]">{x.verdict && <span className={`inline-block rounded-full px-2 py-0.5 font-bold ${x.verdict.kind === 'out' ? 'bg-[#fde5dd] text-[#050507] border border-[#ff7c53]' : 'text-[#555]'}`}>{x.verdict.label}</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Receipt>
-        <p><strong>Counts:</strong> NYPD's 28-day count in this week's report against the 28-day count in the report four weeks earlier. Both are first counts, so revisions don't tilt the comparison. The chance test is the same one used above.</p>
-        <p><strong>Coverage:</strong> stories in the GDELT news index matching the crime words and {geo === 'citywide' ? 'a New York City place name' : `the ${geo} or its neighborhoods`}, over the same two windows. Where GDELT reports the total number of stories it monitored, the change is measured as a share of all coverage, so a swing in the index's overall volume doesn't register as interest; an asterisk marks raw counts.</p>
-        <p><strong>Out of step:</strong> coverage up {PR.COVERAGE_SWING}% or more while the count fell or held (a real drop, or a noisy change at or below zero); coverage down {PR.COVERAGE_SWING}% or more while the count rose or held; or a real rise in the count while coverage fell. Fewer than 15 stories across both windows (or 5 in the earlier one) is too thin to judge. The thresholds are blunt on purpose, and keyword matching is noisy: a story about a trial or an anniversary counts as coverage too.</p>
-      </Receipt>
     </section>
   );
 }
@@ -447,7 +392,6 @@ export default function BoldApp() {
   const [rtci, setRtci] = useState(null);
   const [revs, setRevs] = useState(null);
   const [revStatus, setRevStatus] = useState('idle');
-  const [prev28, setPrev28] = useState(null);
   const [geo, setGeo] = useState(init.get('geo') || 'citywide');
   const [period, setPeriod] = useState(S.PERIODS[init.get('period')] ? init.get('period') : 'ytd');
   const [arcKey, setArcKey] = useState(ARC_OPTIONS.some((a) => a[0] === init.get('arc')) ? init.get('arc') : 'Murder');
@@ -487,15 +431,7 @@ export default function BoldApp() {
           .sort((a, b) => b.date.localeCompare(a.date)).slice(0, S.REVISION_WEEKS);
         return Promise.all(older.map((e) => fetch(DATA_BASE + e.path).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
       })
-      .then((snaps) => {
-        // Keep the report from exactly four weeks earlier: its 28-day counts (first counts, like this
-        // week's) are the comparison for the coverage check.
-        const t = S.parseMDY(raw.citywide?.report_period?.week_end);
-        const target = t ? Date.UTC(t.y, t.m - 1, t.d) - 28 * 86400000 : null;
-        const earlier = snaps.find((s) => { const q = S.parseMDY(s?.citywide?.report_period?.week_end); return q && Date.UTC(q.y, q.m - 1, q.d) === target; });
-        if (alive) setPrev28(earlier || null);
-        return S.revisionFlows([...snaps.filter(Boolean).reverse(), raw]);
-      });
+      .then((snaps) => S.revisionFlows([...snaps.filter(Boolean).reverse(), raw]));
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000));
     Promise.race([work, timeout])
       .then((f) => { if (alive) { setRevs(f); setRevStatus('done'); } })
@@ -547,7 +483,7 @@ export default function BoldApp() {
   const P = useMemo(() => periodText(period, geoData), [period, geoData]);
 
   useEffect(() => {
-    if (weekEnd) document.title = `CompStat, Stress-Tested · Through ${S.apDate(weekEnd)}`;
+    if (weekEnd) document.title = `CompStat, Read Closely · Through ${S.apDate(weekEnd)}`;
   }, [weekEnd]);
 
   const fragileWeeks = S.fragileThreshold(period);
@@ -632,25 +568,18 @@ export default function BoldApp() {
   }, [raw, thenBase]);
 
   /* ---------------- press layer: map pins (citywide query for the map's measure) ---------------- */
-  const placeIndex = useMemo(() => PR.buildPlaceIndex(PRECINCT_NEIGHBORHOODS), []);
-  const pinUrl = useMemo(() => {
-    if (!press || !cityData) return null;
-    const win = PR.pressWindow(period, cityData.report_period);
-    return win && !win.empty ? PR.gdeltUrl(PR.buildQuery(PR.PRESS_TERMS_FOR_MEASURE[measure], PR.geoTerms('citywide')), win) : null;
-  }, [press, cityData, period, measure]);
-  const pinState = usePressArticles(pinUrl);
+  const pinWin = useMemo(() => (press && cityData ? PR.pressWindow(period, cityData.report_period) : null), [press, cityData, period]);
+  const pinState = useStories(press ? PR.PRESS_FAMILY_FOR_MEASURE[measure] : null, pinWin);
   const pins = useMemo(() => {
     if (!press || pinState.status !== 'done') return null;
     const out = {};
-    pinState.articles.forEach((a) => {
-      const hit = PR.placeHeadline(a.title, placeIndex);
-      if (!hit || !raw?.[hit.precinct]) return;
-      let num = String(parseInt(hit.precinct, 10));
-      if (hit.precinct === S.SPLIT_PRECINCTS.child) num = String(parseInt(S.SPLIT_PRECINCTS.parent, 10));
-      (out[num] = out[num] || []).push({ ...a, via: hit.via, precinct: hit.precinct });
+    pinState.stories.forEach((a) => {
+      if (!a.precinct || !raw?.[a.precinct]) return;
+      const num = String(parseInt(a.precinct, 10));
+      (out[num] = out[num] || []).push(a);
     });
     return out;
-  }, [press, pinState, placeIndex, raw]);
+  }, [press, pinState, raw]);
 
   const downloadCSV = useCallback((filename, table) => {
     const esc = (c) => { const s = c == null ? '' : String(c); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -666,7 +595,7 @@ export default function BoldApp() {
     <header className="bg-[#050507] text-white vc-noprint">
       <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-5 pb-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, stress-tested</span>
+          <span className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, read closely</span>
           <span className="rounded-full border border-white/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/70">Prototype</span>
         </div>
         {raw && (
@@ -755,7 +684,7 @@ export default function BoldApp() {
 
   const navItems = [
     ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
-    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ...(press ? [['coverage', 'Coverage']] : []), ['dig', 'Dig deeper'], ['ledger', 'Ledger'], ['method', 'Method'],
+    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['dig', 'Dig deeper'], ['ledger', 'Ledger'], ['method', 'Method'],
   ];
 
   return (
@@ -986,55 +915,34 @@ export default function BoldApp() {
               <div className="mt-3"><MapLegend mode={mapMode} cuts={cuts} periodNote={P.since} /></div>
               {press && (
                 <div className="mt-5 rounded border border-[#d6d6d6] bg-[#fafafa] p-4">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press layer: {PR.PRESS_TERMS_FOR_MEASURE[measure]} stories that name a precinct's neighborhood</h4>
-                  {pinState.status === 'loading' && <p className="mt-2 text-[13px] text-[#707175]">Searching the news index…</p>}
-                  {pinState.status === 'error' && <p className="mt-2 text-[13px] text-[#707175]">The news index didn't answer. Try again in a minute.</p>}
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press layer: {PR.FAMILIES[PR.PRESS_FAMILY_FOR_MEASURE[measure]].noun} stories placed by their headlines</h4>
                   {pinState.status === 'idle' && <p className="mt-2 text-[13px] text-[#707175]">This period is older than the news index's three-month window.</p>}
+                  <PressStatus state={pinState} />
                   {pinState.status === 'done' && pins && (() => {
                     const placed = Object.values(pins).reduce((n, l) => n + l.length, 0);
+                    const located = pinState.stories.length;
                     const groups = Object.entries(pins).sort((a, b) => (b[0] === pinSel) - (a[0] === pinSel) || b[1].length - a[1].length);
                     return (
                       <>
-                        <p className="mt-2 text-[13px] text-[#555]">{S.fmtInt(placed)} of {S.fmtInt(pinState.articles.length)} matching stories name a neighborhood that belongs to a single precinct; each dot counts them. The rest aren't placed.</p>
-                        {(() => {
-                          // Where coverage and the counts diverge: much-covered places whose count isn't really rising,
-                          // and real rises that drew no placed story. A headline-only sample, so treat it as a lead.
-                          const covered = Object.entries(pins).map(([num, l]) => ({ num, n: l.length, u: units[num] })).filter((x) => x.u).sort((x, y) => y.n - x.n);
-                          const loud = covered.filter((x) => x.n >= 2 && x.u.real !== 'rise').slice(0, 5);
-                          const quiet = unitList.filter((u) => u.real === 'rise' && !pins[u.num]).sort((x, y) => y.z - x.z).slice(0, 6);
-                          if (!loud.length && !quiet.length) return null;
-                          const name = (u) => u.label.replace(' Precincts', '').replace(' Precinct', '');
-                          const said = (u) => (u.real === 'drop' ? 'a real drop' : u.fragile ? 'a fragile change' : u.verdict === 'none' ? 'none either year' : 'noise');
-                          return (
-                            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-[13px]">
-                              {loud.length > 0 && (
-                                <div>
-                                  <div className="text-[11px] font-black uppercase tracking-[0.12em] mb-1">Covered, but not rising</div>
-                                  <ul className="space-y-1">{loud.map((x) => <li key={x.num}><button type="button" onClick={() => selectGeo(x.u.geoKey)} className="font-bold hover:underline">{name(x.u)}</button>: {x.n} stories; {measureNoun} {P.since} show {said(x.u)} ({S.fmtPct(x.u.pct, 0)})</li>)}</ul>
-                                </div>
-                              )}
-                              {quiet.length > 0 && (
-                                <div>
-                                  <div className="text-[11px] font-black uppercase tracking-[0.12em] mb-1">Rising, but no placed stories</div>
-                                  <ul className="space-y-1">{quiet.map((u) => <li key={u.num}><button type="button" onClick={() => selectGeo(u.geoKey)} className="font-bold hover:underline">{name(u)}</button>: {S.fmtInt(u.count)} vs. {S.fmtInt(u.prior)} {measureNoun} ({S.fmtPct(u.pct, 0)}), a real rise</li>)}</ul>
-                                </div>
-                              )}
-                              <p className="sm:col-span-2 text-[11px] text-[#707175]">Coverage window: the dates shown for the press layer; counts: {P.eyebrow.charAt(0).toLowerCase() + P.eyebrow.slice(1)}. Headline placement catches only a slice of coverage, so read these as leads, not findings.</p>
-                            </div>
-                          );
-                        })()}
-                        <div className="mt-3 space-y-4 max-h-[420px] overflow-y-auto pr-2">
-                          {groups.map(([num, list]) => (
-                            <div key={num} className={num === pinSel ? 'rounded bg-[#f7f8dd] -mx-2 px-2 py-1' : ''}>
-                              <button type="button" onClick={() => selectGeo(list[0].precinct === S.SPLIT_PRECINCTS.child ? S.SPLIT_PRECINCTS.child : (units[num]?.geoKey || list[0].precinct))} className="text-[13px] font-black hover:underline">{units[num]?.label || list[0].precinct} ({list.length})</button>
-                              <PressList articles={list} limit={3} />
-                            </div>
-                          ))}
-                        </div>
+                        <p className="mt-2 text-[13px] text-[#555]">
+                          {located === 0
+                            ? 'No stories in this window place themselves in the city.'
+                            : `${capFirst(nw(placed))} of the ${nw(located)} ${located === 1 ? 'story' : 'stories'} that place themselves in the city ${placed === 1 ? 'names' : 'name'} a neighborhood lying inside one precinct; each dot counts them. The rest name only the city, a borough or a neighborhood that straddles precinct lines, so they aren't placed.`}
+                        </p>
+                        {groups.length > 0 && (
+                          <div className="mt-3 space-y-4 max-h-[420px] overflow-y-auto pr-2">
+                            {groups.map(([num, list]) => (
+                              <div key={num} className={num === pinSel ? 'rounded bg-[#f7f8dd] -mx-2 px-2 py-1' : ''}>
+                                <button type="button" onClick={() => selectGeo(units[num]?.geoKey || list[0].precinct)} className="text-[13px] font-black hover:underline">{units[num]?.label || list[0].precinct} ({list.length})</button>
+                                <PressList articles={list} limit={3} />
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </>
                     );
                   })()}
-                  <p className="mt-3 text-[11px] leading-snug text-[#707175]">From the GDELT news index, placed by a neighborhood named in the headline (names shared by two precincts, or common elsewhere, are skipped). Keyword matches, not verified and not counted in any figure.</p>
+                  <p className="mt-3 text-[11px] leading-snug text-[#707175]">From seven New York City outlets in the GDELT news index. A story gets a dot only if its headline names a neighborhood lying at least {Math.round(PR.PLACE_THRESHOLD * 100)}% inside one precinct, by the city's neighborhood boundaries, and names no other place that disagrees. Several stories can cover one incident. Not verified and not counted in any figure.</p>
                 </div>
               )}
             </div>
@@ -1217,9 +1125,6 @@ export default function BoldApp() {
           </section>
         )}
 
-        {/* ============================ COVERAGE VS COUNTS (press layer) ============================ */}
-        {press && <CoverageCheck geo={activeGeo} geoData={geoData} prevData={prev28?.[activeGeo] || null} weekEnd={weekEnd} />}
-
         {/* ============================ DIG DEEPER ============================ */}
         {raw && Object.keys(raw).some((k) => k.includes('Precinct')) && (
           <DigDeeper
@@ -1335,7 +1240,7 @@ export default function BoldApp() {
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Press reports</h3>
-              <p>The press toggle searches the <a className="underline" href="https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/" target="_blank" rel="noopener noreferrer">GDELT news index</a> for stories using crime words (murder, shooting and so on) alongside the place you're viewing, within the period you've chosen. GDELT only covers the last three months, and asks for a pause of several seconds between searches. These are keyword matches: we don't verify them, we don't count them, and a story can name a neighborhood without the crime happening there. On the map, a story is pinned only if its headline names a neighborhood that belongs to a single precinct.</p>
+              <p>The press toggle searches the <a className="underline" href="https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/" target="_blank" rel="noopener noreferrer">GDELT news index</a>, which covers only the last three months and indexes only part of what any outlet publishes. We search seven New York City outlets it indexes regularly ({Object.values(PR.OUTLET_NAMES).join(', ').replace(/, ([^,]*)$/, ' and $1')}) for stories that mention NYPD and a crime word. A story is shown only if its headline uses a crime word and names a place in the city, and no place outside it. A place named as someone's home or office ("Queens man," "Brooklyn DA") or as a street ("Flatbush Avenue") doesn't count as the scene. Letters and opinion pieces are dropped. A story is placed in a precinct only when its headline names that precinct, or a neighborhood that lies at least {Math.round(PR.PLACE_THRESHOLD * 100)}% inside it by the city's 2020 neighborhood boundaries, and nothing in the headline points elsewhere. Neighborhoods that straddle precinct lines, such as Crown Heights, Bed-Stuy and Washington Heights, place a story in its borough but not in a precinct. These are leads: we don't verify them and never count them.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">What CompStat can't see</h3>
@@ -1351,7 +1256,7 @@ export default function BoldApp() {
       <footer className="bg-[#050507] text-white/80">
         <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
           <div>
-            <div className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, stress-tested</div>
+            <div className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, read closely</div>
             <p className="mt-3 max-w-xl text-[14px] leading-snug">An independent prototype, not an official Vital City product. Data refreshes after NYPD posts each weekly CompStat report.</p>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-[12px] font-bold uppercase tracking-[0.14em]">

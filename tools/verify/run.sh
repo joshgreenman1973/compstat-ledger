@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Independent check of the stress-tested view against NYPD's Sept. 20, 2026 report: builds the app,
+# Independent check of the "read closely" view against NYPD's Sept. 20, 2026 report: builds the app,
 # renders three pages offline with pinned data, re-derives every headline number in Python and
 # confirms the page prints exactly those. Needs git, curl, python3, node and Playwright
 # (once: cd tools/verify && npm i --no-save playwright && npx playwright install chromium).
@@ -20,5 +20,5 @@ python3 -m http.server "$PORT" --directory "$ROOT/build" > "$WORK/http.log" 2>&1
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null' EXIT
 sleep 1
-SP="$WORK" PORT="$PORT" node "$HERE/shot.js" '[{"name":"cw","w":1280,"expand":true,"text":true},{"name":"cw75","w":1280,"q":"?geo=75th+Precinct","expand":true,"text":true},{"name":"cwwk","w":1280,"q":"?period=wtd","expand":true,"text":true},{"name":"press","w":1280,"h":1200,"q":"?press=1","scroll":"coverage","gdelt":true,"gdeltWait":20000}]'
+SP="$WORK" PORT="$PORT" node "$HERE/shot.js" '[{"name":"cw","w":1280,"expand":true,"text":true},{"name":"cw75","w":1280,"q":"?geo=75th+Precinct","expand":true,"text":true},{"name":"cwwk","w":1280,"q":"?period=wtd","expand":true,"text":true},{"name":"press","w":1280,"h":1200,"q":"?press=1","scroll":"where","gdelt":true,"gdeltWait":20000,"text":true},{"name":"press75","w":1280,"h":1200,"q":"?press=1&geo=75th+Precinct","scroll":"every-one","gdelt":true,"gdeltWait":20000,"text":true}]'
 cd "$ROOT" && python3 "$HERE/check.py" "$WORK"

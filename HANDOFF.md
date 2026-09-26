@@ -1,6 +1,6 @@
-# Handoff: CompStat, stress-tested
+# Handoff: CompStat, read closely
 
-Written Sept. 26, 2026, at the end of the cloud Claude Code session that built this, for whoever picks it up next (you or a desktop Claude Code session). Everything described here is on this branch. The cloud container it was built in will be deleted.
+Written Sept. 26, 2026, at the end of the cloud Claude Code session that built this, and updated the same day by the desktop session that tested it live (see "Desktop session, Sept. 26"). Everything described here is on this branch.
 
 ## What this is
 
@@ -13,12 +13,13 @@ It is **not** an official Vital City product and carries no Vital City branding.
 - **Repo:** `joshgreenman1973/compstat-ledger`
 - **Branch:** `claude/compstat-bold-reimagining-vediu3`. All work is here; `main` has not been touched.
 - **Commits, oldest first:**
-  1. `3359645` Adds "CompStat, stress-tested," the bolder default view.
+  1. `3359645` Adds the bolder default view (first called "CompStat, stress-tested"; renamed "CompStat, read closely" Sept. 26).
   2. `2fff18e` Accounts for NYPD revisions.
   3. `ee97361` Drops Vital City branding and adds maps and the press-reports layer.
   4. `2b8d633` Adds the coverage-vs-counts check and the collapsed "Dig deeper" precinct-day view.
   5. `89434ba` Adds `vercel.json`, which stops Vercel from building preview sites for this branch.
-  6. The commit that adds this file, `CLAUDE.md` and `tools/verify/`.
+  6. `67ad5d9` Adds this file, `CLAUDE.md` and `tools/verify/`.
+  7. The desktop session's commit: the rename, the rebuilt press layer, the removal of "Coverage vs. the counts" and the precinct-day ordinal fix.
 - **No pull request exists.** Don't open one unless Josh asks. Merging would replace the live site's default view.
 
 ## Standing rules from Josh
@@ -43,24 +44,22 @@ git checkout package-lock.json   # npm install rewrites it; don't commit that ch
 npm start            # http://localhost:3000 ; classic view at ?classic=1
 ```
 
-- **Unit tests** (43, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
+- **Unit tests** (53, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
 
-## First things to do on the desktop
+## Desktop session, Sept. 26
 
-1. **Test the press layer live.** GDELT (the news index behind "Press reports" and "Coverage vs. the counts") was blocked from the cloud container, so both features have only been tested against a fake response (`tools/verify/gdelt-mock.json`, headlines marked [TEST]).
-   - Open `http://localhost:3000/?press=1` and wait. Requests are spaced 5.5 seconds apart because of GDELT's rate limit, so the coverage check takes a minute or two to fill in.
-   - Check that real stories load, that they're relevant and that headlines land on the right precincts.
-   - Check that each coverage verdict is defensible.
-   - Watch the browser console for GDELT's plain-text errors, like "Please limit requests" or "Queries containing OR must be surrounded by ()".
-2. **Test "Dig deeper" live.** It calls NYC Open Data (data.cityofnewyork.us), which was only mocked in the cloud. Open a precinct page and expand "Dig deeper."
-3. **Delete or lock the two old Vercel previews.** Vercel built them from the first two pushes, before `vercel.json` existed. They still show the Vital City wordmark:
-   - `compstat-ledger-7aakoqm9k-josh-greenmans-projects.vercel.app`
-   - `compstat-ledger-r36ccpk66-josh-greenmans-projects.vercel.app`
+The cloud session's checklist, and what happened to each item:
 
-   Open each in a private window. A Vercel login page means they're already protected, which is Vercel's default for newer projects. Otherwise go to Vercel → compstat-ledger → Deployments → each one → ⋯ → Delete. Alternatively, go to Settings → Deployment Protection → Vercel Authentication. Claude can't do this: there's no Vercel access from these sessions. The Vercel connector in claude.ai only lists and reads deployments; it can't delete them.
-4. **Optional: move the fork to a private repo.** Creating a repo failed from the cloud session with a GitHub permissions error (403). If Josh wants the code itself hidden, he has to create the private repo, and then the branch can be pushed there.
+1. **Press layer, tested live: it didn't hold up, so it was rebuilt.** The old query matched a crime word anywhere in a story's text plus a borough name anywhere. Of 75 citywide "murder" stories it returned, about 2 were New York City crimes. The rest were the Lindsay Clancy case in Massachusetts, movie lists, a book tour and "Brooklyn, Illinois." GDELT also returned stories up to a day past the requested end date, and its 429 rate-limit replies carry no CORS header, so the browser saw a bare "Failed to fetch" and never retried. See "Press placement" under the statistical rules for what replaced it.
+2. **"Coverage vs. the counts" was removed.** GDELT indexes only a slice of local coverage: about 20 located city shooting or stabbing stories in two weeks, often five outlets on one incident. At 10 to 20 stories a month, the 25% swing rule turns on two or three stories, and one big incident can flip a verdict. The "Covered, but not rising" and "Rising, but no placed stories" lists on the map went for the same reason. The code is in git history (`2b8d633`) if a sturdier source turns up.
+3. **"Dig deeper" works live.** The 75th Precinct on June 30 returned 453 dispatched jobs from NYC Open Data. The copy's precinct menu said "1th," "22th," "41th" and so on; fixed here. The original `nyc-precinct-day` has the same bug and was flagged separately.
+4. **The two old Vercel previews are protected.** Both redirect to Vercel's login (checked Sept. 26), so they aren't public. Delete them only if you want them gone.
+5. **Private repo:** not done; still Josh's call.
+6. **Renamed** from "CompStat, stress-tested" to "CompStat, read closely" at Josh's request.
+
+GDELT rate limits are harsher than documented. After a burst of requests it refused this connection for more than 15 minutes, answering every request with a 10-second stall and a 429, even at 15-second spacing. The page now spaces requests 6 seconds apart, retries twice (after 10 and 30 seconds), caches results in the browser tab for an hour and tells the reader to come back in 10 or 15 minutes if GDELT is refusing.
 
 ## How it's built
 
@@ -69,7 +68,9 @@ npm start            # http://localhost:3000 ; classic view at ?classic=1
 | `src/index.js` | Renders `BoldApp` by default and the original `App` at `?classic`. |
 | `src/App.js` | The original dashboard. The only changes are `export`s on constants the new view reuses: `GITHUB_USER`, `REPO_NAME`, `CITYWIDE_POPULATION`, `TOURIST_PRECINCTS`, `GEO_POPULATIONS`, `PRECINCT_NEIGHBORHOODS`, `RTCI_CSV_URL` and `toOrdinalPrecinct`. |
 | `src/bold/stats.js` | All the statistics as pure functions, unit-tested. The page's claims come from here. |
-| `src/bold/press.js` | The GDELT layer: query building, place matching, time windows, parsing, the rate-limited fetch queue and the coverage-vs-counts verdicts. |
+| `src/bold/press.js` | The GDELT layer: the local-outlet query, headline filters, place matching, New York time windows, parsing, the rate-limited and cached fetch queue, and which stories each view gets. |
+| `src/bold/press-places.json` | The headline gazetteer: 210 neighborhood names that lie at least 85% inside one precinct, and 74 that mark a story as local but can't place it. Generated; don't edit by hand. |
+| `tools/places/build_places.py` | Builds that table from the city's 2020 Neighborhood Tabulation Areas (NYC Open Data `9nt8-h7nd`) and the precinct shapes in `src/data/nyc_precincts.json`. Needs shapely and pyproj. |
 | `src/bold/BoldApp.js` | The page: data loading, URL state and every section. |
 | `src/bold/charts.js` | The signal board, unit chart, long-arc chart, precinct choropleth, small-multiple maps, legends and peer bars (d3-geo). |
 | `src/bold/ui.js` | Palette and verdict colors plus shared bits: chips, the "Fragile" tag, "Show the math," section heads and segmented toggles. |
@@ -87,7 +88,7 @@ Everything is fetched in the browser; there's no server.
 - **CompStat.** `latest_compstat.json` from `joshgreenman1973/nypd-compstat-scraper` (raw GitHub, `data/`). If that fails, the page falls back to the bundled citywide snapshot and says so.
 - **Revision archive.** The same repo's `data/index.json` plus the eight archived weekly reports before the current one, about 80 KB each gzipped.
 - **Other cities.** Real-Time Crime Index (AH Datalytics) scorecard CSV. If it's unreachable, the page uses a bundled 2025 snapshot and says so.
-- **Press.** GDELT DOC 2.0 API. It allows browser requests, covers roughly the last three months and allows one request every 5 seconds.
+- **Press.** GDELT DOC 2.0 API. It allows browser requests (except on its 429 replies), covers roughly the last three months, asks for one request every 5 seconds and rejects queries longer than about 245 characters. Of New York City outlets, it indexes the Post, the Daily News, Gothamist, amNY, NBC New York, ABC7 New York and Fox 5 New York with some regularity. The Staten Island Advance, The City, PIX11, NY1 and The New York Times returned nothing for a month of NYPD stories.
 - **Dig deeper.** NYC Open Data's NYPD calls-for-service dataset, `n2zq-pubd`.
 
 ### Page sections, top to bottom
@@ -97,13 +98,12 @@ Each section has an anchor you can link to.
 - **Verdict hero.** A headline generated from the data. Precinct pages add a locator map and a "Dig deeper" link.
 - **Sticky nav.** Includes the "Press reports" on/off toggle.
 - **`#signal`** Every change on the chance-test board.
-- **`#every-one`** Murders as individual units, this year against last. With press on, it adds a panel of matching stories.
+- **`#every-one`** Murders as individual units, this year against last. With press on, it adds a panel of stories for murders and one for shootings. Precinct pages show only stories placed in that precinct, and offer the borough's unplaceable stories behind a button; patrol-borough pages show the whole borough.
 - **`#arc`** Each major felony's annual history since 1993, citywide only, with this year's pace drawn as a range.
-- **`#where`** Choropleth by residents or by chance-test verdict. With press on, it adds story pins and two lists: "Covered, but not rising" and "Rising, but no placed stories."
+- **`#where`** Choropleth by residents or by chance-test verdict. With press on, it adds a dot per precinct counting the stories whose headlines place them there, and lists those stories.
 - **`#by-crime`** Eight small-multiple maps.
 - **`#then-now`** Each precinct against 2010 or 1993. Year to date only.
 - **`#cities`** NYC's murder rate against peer cities.
-- **`#coverage`** Coverage vs. the counts. Appears only with press on.
 - **`#dig`** Dig deeper, collapsed by default.
 - **`#ledger`** Every line with revision and cushion columns, downloadable as CSV.
 - **`#method`** The method notes.
@@ -150,16 +150,18 @@ Don't loosen these without a reason you can defend in print.
   - The Then and now section leaves out precincts whose boundaries were redrawn.
 - **Peer cities.** RTCI rows are matched by both agency and state. Comparisons use the previous full year, because each city's year-to-date window ends on a different date.
 - **Concentration ties** go to the more populous precinct, which makes the claim more conservative.
-- **Coverage vs. the counts.** Compares the last four weeks of GDELT story volume with the four weeks before, as a share of all coverage, family by family (murder, shootings, subway attacks and so on). It sets that against NYPD's 28-day counts for the same weeks.
-  - A 25% swing in coverage counts as a move.
-  - It needs at least 5 stories in the earlier window and 15 overall.
-  - The labels are "More coverage, not more crime," "Less coverage, not less crime," "More crime, not more coverage," "Same direction" and "No clear mismatch."
-  - Press matches are keyword hits. They are never counted in any figure.
-- **Place matching for stories.** Neighborhood names shared by two precincts, or common elsewhere, are dropped. Examples: Jamaica, Chelsea, Riverdale, Astoria, Elmhurst, Richmond Hill, Bayside and St. George. An explicit "75th Precinct" in a headline wins over a neighborhood name.
+- **Press placement.** GDELT only gathers candidates; the headline decides.
+  - The query asks for crime words and "NYPD" anywhere in the text, from the seven local outlets above. One citywide query per crime family serves every view, so moving between precincts costs no new searches.
+  - A story is shown only if its headline uses a crime word for that family and names a place in the city (NYC, a borough, NYPD, the subway or a neighborhood), and names no place outside it (Long Island, Mount Vernon, New Jersey, any other state and so on). Letters and opinion URLs are dropped, as are stories seen outside the report period in New York time.
+  - A place named as someone's home or office ("Queens man," "Brooklyn DA") or as a street, bridge or hospital ("Flatbush Avenue," "Coney Island Hospital") doesn't count as the scene.
+  - A story is placed in a precinct only when its headline names that precinct, or a neighborhood lying at least 85% inside it by area, and nothing in the headline points elsewhere. That includes a second neighborhood that straddles precinct lines, as in "shootings in Coney Island, Crown Heights."
+  - Names that straddle precinct lines (Crown Heights, Bed-Stuy, Harlem, Washington Heights, Williamsburg, the Upper West Side and others) give a borough, not a precinct. Flatbush, Long Island City and Fordham are held back too, because everyday use stretches past the official area.
+  - Names that mean something else in a headline (Jamaica, Chelsea, Madison, Corona, Clifton, South Beach and others) are never used. The lists are in `tools/places/build_places.py`.
+  - Checked against real GDELT results Sept. 26: every kept story was a New York City crime story with the right borough. The cost is recall. Only about 1 in 15 names a neighborhood that sits in one precinct, so pins are sparse.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of this handoff, 194 of 194 checks pass. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 26, 207 of 207 checks pass, including 13 on the press layer against the fake GDELT reply. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault isn't falling."
 - **Signal board:** 11 of 18 citywide year-to-date changes are bigger than chance. Misdemeanor assault is real but fragile.
@@ -175,15 +177,16 @@ The harness pins everything to the Sept. 20 report.
 
 1. `run.sh` clones the scraper repo at commit `c0165dc` and fetches the RTCI CSV.
 2. It builds the app and serves it on port 5055.
-3. `shot.js` renders the citywide page, the 75th Precinct page and the weekly view in headless Chromium. All outside requests are answered from local files, and GDELT is answered with the [TEST] mock. It dumps each page's visible text and fails on any console error.
+3. `shot.js` renders the citywide page, the 75th Precinct page and the weekly view in headless Chromium, plus the citywide and 75th Precinct pages with press on. All outside requests are answered from local files, and GDELT is answered with the [TEST] mock, which includes stories the filters must drop (Brooklyn, Illinois; a non-local outlet; an opinion URL; a story after the report week). It dumps each page's visible text and fails on any console error.
 4. `check.py` recomputes every headline number, every ledger line, the fragile set, the pace range, the concentration claim and the peer rates, then checks each against the page text.
 
 To set it up once: `cd tools/verify && npm i --no-save playwright && npx playwright install chromium`.
 
 ## Known limitations and loose ends
 
-- **GDELT's three-month window.** Press can't cover the full year to date. The page says when the window is clipped.
-- **Coverage measures volume, not tone.** Keyword matching also catches some stories that aren't about NYC. The ambiguous-name list helps but won't catch everything.
+- **GDELT's three-month window.** Press can't cover the full year to date. The page says when the window is clipped. The press mock's dates also sit inside that window, so the press checks in `run.sh` will start failing after about mid-December 2026 unless the mock's dates move.
+- **GDELT is a thin, fragile source.** It indexes a fraction of what local outlets publish, and it shuts out a connection for minutes after a burst. The press layer is a sample of leads, and the page says so. A sturdier option would be a scheduled job (like the CompStat scraper) that queries GDELT or outlet RSS feeds once a day and commits JSON for the page to read, which would also take GDELT out of the reader's browser.
+- **Headline placement is area-based.** A neighborhood that is 85% inside one precinct by area can still have a story in the other 15%. Headlines also use neighborhood names loosely. The threshold and the held-back names are the guard; they aren't a guarantee.
 - **The precinct-day copy drifts.** If `nyc-precinct-day` changes, copy it over again and keep the preselect snippet near the end.
 - **The revision allowance uses recent flow.** Revisions early in the year, or after a batch correction, may run faster or slower than the last 8 weeks suggest.
 - **Rape in the Then and now totals.** Year-over-year rape comparisons are flagged only when the prior-year window starts before Sept. 1, 2024, so 2026 against 2025 is clean. But Then and now compares the seven-major total, which counts rape under the broader 2024 definition, with 2010 and 1993. Rape is a small share of that total, so the effect is slight but upward. Consider saying so in that section.

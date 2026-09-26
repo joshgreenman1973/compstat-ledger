@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/* STATS LAYER FOR THE "STRESS-TESTED" VIEW                            */
+/* STATS LAYER FOR THE "READ CLOSELY" VIEW                             */
 /* Pure functions only — no React. Every claim the page makes is built */
 /* here from NYPD's own counts, so it can be unit-tested and so each   */
 /* claim can print its receipt (the inputs and the arithmetic).        */

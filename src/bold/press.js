@@ -1,107 +1,214 @@
 /* ------------------------------------------------------------------ */
 /* PRESS LAYER                                                         */
-/* News coverage from the GDELT DOC 2.0 API (free, no key, CORS "*").  */
-/* GDELT searches a rolling three-month window, matches by keyword and */
-/* asks callers to space requests at least five seconds apart. These   */
-/* are unverified keyword matches: context, never counted in a figure. */
+/* News stories from the GDELT DOC 2.0 API (free, no key, CORS "*").   */
+/* GDELT indexes only a slice of New York City's local coverage and    */
+/* matches words anywhere in a story, so the query only gathers        */
+/* candidates. A story is shown only when its headline puts it in the  */
+/* city, and pinned to a precinct only when its headline names a       */
+/* neighborhood lying almost entirely inside that precinct (the table  */
+/* is built from city boundaries by tools/places/build_places.py).     */
+/* These are leads: never counted in any figure on the page.           */
 /* ------------------------------------------------------------------ */
 import { parseMDY } from './stats';
+import GAZ from './press-places.json';
 
 export const GDELT_URL = 'https://api.gdeltproject.org/api/v2/doc/doc';
 export const GDELT_WINDOW_DAYS = 90;
-const SPACING_MS = 5500;
+export const MAX_QUERY = 245; // longer queries get "Your query was too short or too long"
+export const MAX_RECORDS = 250; // GDELT's cap per request
+const MAX_PAGES = 4;
+const SPACING_MS = 6000; // GDELT asks for one request every five seconds
+// GDELT answers bursts by refusing a connection for minutes, so retry sparingly.
+const RETRY_MS = [10000, 30000];
+const STORE_TTL = 60 * 60 * 1000; // reuse results for an hour so reloads don't search again
 
-// Crime families, phrased the way news copy words them.
-export const PRESS_TERMS = {
-  murder: ['murder', 'homicide', '"fatally shot"', '"stabbed to death"', '"shot dead"'],
-  shooting: ['shooting', 'gunfire', '"was shot"', '"shot and wounded"'],
-  violent: ['shooting', 'stabbing', 'slashing', 'robbery', 'assault', 'murder'],
-  property: ['burglary', 'burglar', '"stolen car"', '"car theft"', 'larceny', 'shoplifting'],
+// New York City outlets that GDELT indexes with some regularity. Checked Sept. 26, 2026: the Staten
+// Island Advance, The City, PIX11, NY1 and The New York Times returned nothing for a month of NYPD stories.
+export const LOCAL_OUTLETS = ['nypost.com', 'nydailynews.com', 'gothamist.com', 'amny.com', 'nbcnewyork.com', 'abc7ny.com', 'fox5ny.com'];
+export const OUTLET_NAMES = {
+  'nypost.com': 'New York Post', 'nydailynews.com': 'Daily News', 'gothamist.com': 'Gothamist', 'amny.com': 'amNY',
+  'nbcnewyork.com': 'NBC New York', 'abc7ny.com': 'ABC7 New York', 'fox5ny.com': 'Fox 5 New York',
 };
-export const PRESS_TERMS_FOR_MEASURE = { shootvic: 'shooting', violent: 'violent', murder: 'murder', majors: 'violent', property: 'property' };
 
-// CompStat-style neighborhood labels → how newsrooms write them.
-const CLEAN = [
-  [/\bWash\.\s*/g, 'Washington '], [/\bWall St\b/g, 'Wall Street'], [/\bStuy Town\b/g, 'Stuyvesant Town'],
-  [/\s+(North|South|East|West)$/g, ''],
-];
-export const cleanPlace = (s) => CLEAN.reduce((t, [re, rep]) => t.replace(re, rep), s.trim()).trim();
+/* --------------------------- crime words ---------------------------- */
+const MURDER_W = String.raw`murder(?:s|ed|er|ers|ing|ous)?|homicides?|slain|slay(?:s|ing|ings)?|shot dead|shot and killed|stabbed to death|beaten to death|strangled|kill(?:ed|ing|ings|er|ers)?|fatal(?:ly)?|butcher(?:ed|s)?|guns? down|gunned down|to death`;
+const SHOOT_W = String.raw`shoot(?:s|ing|ings|er|ers|out|outs)?|shot|gunfire|gunman|gunmen|gunned|guns? down|bullets?|opened fire`;
+const VIOLENT_W = String.raw`${MURDER_W}|${SHOOT_W}|gunpoint|stab(?:s|bed|bing|bings)?|slash(?:ed|ing|ings)|robb(?:ed|er|ers|ery|eries|ing)|mugg(?:ed|er|ers|ing|ings)|assault(?:s|ed|ing)?|attack(?:s|ed|er|ers|ing)?|beat(?:en|ing|down)|punch(?:ed|es|ing)|carjack(?:ed|er|ers|ing|ings)|pistol-whip(?:ped|ping)?|slugged|shov(?:e|ed|es|ing)`;
+const PROPERTY_W = String.raw`burglar(?:y|ies|s|ized)?|break-ins?|broke into|carjack(?:ed|er|ers|ing|ings)|stole|stolen|steal(?:s|ing)?|thefts?|thie(?:f|ves)|larcen(?:y|ies)|shoplift(?:s|ed|er|ers|ing)?|loot(?:s|ed|er|ers|ing)?|heists?`;
+const re = (w) => new RegExp(String.raw`\b(?:${w})\b`, 'i');
+// Deaths and injuries that aren't violent crime: dropped unless the headline also names violence.
+const ACCIDENT = /\b(?:crash\w*|struck|hit-and-run|run(?:s)? (?:him |her |them )?over|plow\w*|collision|drown\w*|overdos\w*|fire|blaze|fell|falls?|falling|truck|bus|car|SUV|driver|motorcycl\w*|scooter|e-?bikes?|moped|dirt bike|construction|electrocut\w*)\b/i;
+const VIOLENCE = /\b(?:murder(?:s|ed|er)?|homicides?|shot|shoot(?:s|ing|ings|er)?|stab(?:s|bed|bing)?|slash(?:ed|ing)|slain|beaten|bashed|pummeled|strangled|shov(?:e|ed|ing)|gunman|gunfire|opened fire|assaulted|attacked)\b/i;
+// "Dies," "dead" and "death" count as murder words only next to a word for violence.
+const DEATH = /\b(?:dies|died|dead|death|deadly)\b/i;
+const NOT_SHOOTING = /\b(?:photo ?shoot|film shoot|shot clock|flu shot|booster shot|mug ?shot|shot down|long shot|big shot)\b/i;
 
-// Place names that routinely mean somewhere else (a country, a TV show, a London club, other states).
-const AMBIGUOUS_ELSEWHERE = new Set(['Jamaica', 'Chelsea', 'Riverdale', 'Astoria', 'Elmhurst', 'Richmond Hill', 'Bayside', 'St. George']);
+export const FAMILIES = {
+  murder: { noun: 'murder', query: ['murder', 'homicide', 'killed', 'slain', '"shot dead"', '"stabbed to death"'], head: re(MURDER_W), accidents: true, deaths: true },
+  shooting: { noun: 'shooting', query: ['shooting', 'shot', 'gunfire', 'gunman'], head: re(SHOOT_W), not: NOT_SHOOTING },
+  violent: { noun: 'violent-crime', query: ['shooting', 'shot', 'stabbed', 'stabbing', 'robbery', 'assault', 'murder', 'killed'], head: re(VIOLENT_W), accidents: true, deaths: true, not: NOT_SHOOTING },
+  property: { noun: 'property-crime', query: ['burglary', 'burglar', 'carjacking', 'theft', 'stolen', 'shoplifting', 'larceny'], head: re(PROPERTY_W) },
+};
+export const PRESS_FAMILY_FOR_MEASURE = { shootvic: 'shooting', violent: 'violent', murder: 'murder', majors: 'violent', property: 'property' };
 
-// { name → precinct key } for names that point to exactly one precinct.
-export function buildPlaceIndex(neighborhoods) {
-  const seen = {};
-  Object.entries(neighborhoods || {}).forEach(([pct, hoods]) => {
-    hoods.split(',').map(cleanPlace).filter((n) => n.length >= 4).forEach((n) => {
-      (seen[n] = seen[n] || new Set()).add(pct);
-    });
-  });
-  const index = {};
-  Object.entries(seen).forEach(([name, set]) => {
-    if (set.size === 1 && !AMBIGUOUS_ELSEWHERE.has(name)) index[name] = [...set][0];
-  });
-  return index;
+export function headlineMatchesFamily(title, family) {
+  const f = FAMILIES[family];
+  if (!f) return false;
+  if (!f.head.test(title) && !(f.deaths && DEATH.test(title) && VIOLENCE.test(title))) return false;
+  if (f.not && f.not.test(title) && !VIOLENCE.test(title.replace(f.not, ''))) return false;
+  if (f.accidents && ACCIDENT.test(title) && !VIOLENCE.test(title)) return false;
+  return true;
 }
 
-// Precinct a headline names, if exactly one: an explicit "75th Precinct", else the longest
-// unambiguous neighborhood name found (so "South Jamaica" beats a shorter overlapping name).
-export function placeHeadline(title, placeIndex) {
-  const t = title || '';
-  const pm = t.match(/\b(\d{1,3})(st|nd|rd|th)\s+Precinct\b/i);
-  if (pm) return { precinct: `${parseInt(pm[1], 10)}${pm[2].toLowerCase()} Precinct`, via: pm[0] };
-  let best = null;
-  Object.keys(placeIndex).forEach((name) => {
-    const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-    if (re.test(t) && (!best || name.length > best.length)) best = name;
-  });
-  return best ? { precinct: placeIndex[best], via: best } : null;
-}
-
-// Geography terms for the query.
-export function geoTerms(geo, neighborhoods) {
-  if (geo === 'citywide') return ['NYPD', '"New York City"', 'Manhattan', 'Brooklyn', 'Bronx', 'Queens', '"Staten Island"'];
-  if (geo.includes('Precinct')) {
-    const hoods = (neighborhoods?.[geo] || '').split(',').map(cleanPlace).filter((n) => n.length >= 4);
-    return [`"${geo}"`, ...hoods.map((h) => (h.includes(' ') ? `"${h}"` : h))];
-  }
-  const boro = ['Manhattan', 'Brooklyn', 'Bronx', 'Queens', 'Staten Island'].find((b) => geo.includes(b));
-  return boro ? [boro.includes(' ') ? `"${boro}"` : boro, 'NYPD'] : ['NYPD'];
-}
-
+/* ----------------------------- the query ---------------------------- */
 const group = (xs) => (xs.length === 1 ? xs[0] : `(${xs.join(' OR ')})`);
-export const buildQuery = (family, geoList) => `${group(PRESS_TERMS[family])} ${group(geoList)} sourcelang:english`;
+// Crime words anywhere in the text, NYPD anywhere in the text, from a local outlet.
+export const familyQuery = (family) => `${group(FAMILIES[family].query)} NYPD ${group(LOCAL_OUTLETS.map((d) => `domain:${d}`))}`;
 
+/* ------------------------------ places ------------------------------ */
+// GDELT spaces out punctuation and drops possessive 's ("Bed - Stuy", "St . George", "Hell Kitchen").
+const OUTLET_SUFFIX = /\s+[-–|]\s+(?:NBC New York|ABC7 New York|FOX 5 New York|Fox 5 New York|amNY|Gothamist|New York Post|NY Daily News|New York Daily News)\s*$/i;
+export function normalizeTitle(t) {
+  return (t || '')
+    .replace(OUTLET_SUFFIX, '')
+    .replace(/^\s*Exclusive\s*\|\s*/i, '')
+    .replace(/\s+-\s+/g, '-')
+    .replace(/\b([A-Z])\s\.(?=\s?[A-Z]\s?\.)/g, '$1.')
+    .replace(/\s+([.,:;!?%)])/g, '$1')
+    .replace(/\b([A-Z])\.\s(?=[A-Z]\.)/g, '$1.')
+    .replace(/([(])\s+/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+const BOROUGHS = ['Staten Island', 'Brooklyn', 'Bronx', 'Queens', 'Manhattan'];
+const CITY_WORDS = /\b(?:NYC|N\.Y\.C\.|New York City|NYPD|Big Apple|[Ss]ubway|MTA)\b/;
+// Places outside the five boroughs. A headline naming one is dropped, even if it also names the city
+// ("Queens man killed in Long Island crash").
+const STATES = ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'West Virginia', 'Wisconsin', 'Wyoming'];
+const ELSEWHERE = ['Long Island(?! City| Rail| Railroad| Expressway)', 'LI', 'L\\.I\\.', 'Nassau', 'Suffolk', 'Westchester(?! Square| Ave| Avenue)', 'Yonkers', 'Mount Vernon', 'Mt\\. Vernon', 'New Rochelle', 'White Plains', 'Rockland', 'Hudson Valley', 'Catskills', '[Uu]pstate', 'Buffalo', 'Rochester', 'Albany', 'Syracuse', 'Utica', 'NJ', 'N\\.J\\.', 'Jersey City', 'Newark', 'Hoboken', 'Paterson', 'Conn\\.', 'Stamford', 'Bridgeport', 'New Haven', 'Philadelphia', 'Philly', 'Poconos', 'Boston', 'Miami', 'Los Angeles', 'LA', 'Chicago', 'Atlanta', 'Houston', 'Dallas', 'Detroit', 'Baltimore', 'Seattle', 'San Francisco', 'Las Vegas', 'Nashville', 'Memphis', 'New Orleans', 'Minneapolis', 'St\\. Louis', 'Cleveland', 'D\\.C\\.', 'Washington(?! Heights| Square| Ave| Avenue| Bridge| St| Street| Place| Park| Houses)', 'Brooklyn Park', 'Brooklyn Center', 'London', 'Paris', 'Toronto', 'Canada', 'Mexico', 'Israel', 'Gaza', 'England', 'Britain', 'UK', 'U\\.K\\.', ...STATES];
+const OUTSIDE_RE = new RegExp(String.raw`(?<![\w.])(?:${ELSEWHERE.join('|')})(?![\w])`);
+
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Every gazetteer name, plus spellings GDELT produces for names with apostrophes.
+const NAMES = (() => {
+  const out = {};
+  const add = (name, row, placeable) => {
+    out[name] = { ...row, placeable, name: row.alias_of || name };
+    if (name.includes("'s ")) { out[name.replace("'s ", 's ')] = out[name]; out[name.replace("'s ", ' ')] = out[name]; }
+  };
+  Object.entries(GAZ.localOnly).forEach(([n, r]) => add(n, r, false));
+  Object.entries(GAZ.places).forEach(([n, r]) => add(n, r, true));
+  return out;
+})();
+// Longest names first, so "East Flatbush" wins over "Flatbush" at the same spot.
+const PLACE_RE = new RegExp(String.raw`(?<![\w'-])(${[...BOROUGHS, ...Object.keys(NAMES)].sort((a, b) => b.length - a.length).map(esc).join('|')})(?![\w'])`, 'g');
+const PRECINCT_RE = /\b(\d{1,3})(?:st|nd|rd|th) Precinct\b/g;
+// After a place name, these make it a person's home, an office or a street, not where the crime happened:
+// "Queens man," "Brooklyn DA," "Flatbush Avenue," "Coney Island Hospital."
+const NOT_A_SCENE = /^\s*(?:man|woman|men|women|teens?|teenagers?|boys?|girls?|kids?|child|children|mom|mother|dad|father|sons?|daughters?|grand(?:ma|mother|pa|father)|brothers?|sisters?|residents?|natives?|couple|family|families|rapper|cops?|officers?|detectives?|sergeant|students?|workers?|drivers?|landlords?|tenants?|nurse|doctor|teacher|priest|pastor|rabbi|imam|lawmakers?|pols?|politicians?|councilm[ae]n|councilwoman|assemblym[ae]n|senator|congressman|gang|crew|DA|D\.A\.|district attorney|prosecutors?|judge|jury|grand jury|courts?|courthouse|courtroom|federal court|Supreme Court|Criminal Court|Family Court|jail|federal|feds|borough president|Ave|Avenue|Av|Road|Rd|Blvd|Boulevard|Street|St|Pkwy|Parkway|Expressway|Expwy|Bridge|Tunnel|Hospital|University|College|station|Station|[Ll]ine|Junction|Terminal|River|Creek|West|South|East|North)\b/;
+const DIRECTIONAL_BEFORE = /(?:East|West|North|South|Upper|Lower|Northern|Southern|Eastern|Western|Central)\s$/;
+const FROM_BEFORE = /\bfrom\s$/i;
+
+const ORD = (n) => { const v = n % 100; return `${n}${['th', 'st', 'nd', 'rd'][(v - 20) % 10] || ['th', 'st', 'nd', 'rd'][v] || 'th'}`; };
+export const precinctKey = (n) => `${ORD(n)} Precinct`;
+export const boroOfPrecinct = (n) => (n <= 34 ? 'Manhattan' : n <= 52 ? 'Bronx' : n <= 94 ? 'Brooklyn' : n <= 116 ? 'Queens' : 'Staten Island');
+
+// Where a headline says a story happened. `city` = in the five boroughs; `boro` = one borough;
+// `precinct` = one precinct, only when every placeable name in the headline agrees.
+export function placeHeadline(rawTitle) {
+  const t = normalizeTitle(rawTitle);
+  const outside = t.match(OUTSIDE_RE);
+  const res = { title: t, city: false, outside: outside ? outside[0] : null, boro: null, precinct: null, via: null };
+  const boros = new Set();
+  const pcts = new Map(); // precinct number -> the name that placed it
+  let loose = 0; // scenes named that straddle precinct lines ("shootings in Coney Island, Crown Heights")
+  let city = CITY_WORDS.test(t);
+  for (const m of t.matchAll(PRECINCT_RE)) {
+    const after = t.slice(m.index + m[0].length);
+    const n = parseInt(m[1], 10);
+    city = true;
+    if (/^\s*(?:cops?|officers?|sergeant|detectives?|commander|captain|stationhouse|station house)\b/i.test(after)) continue;
+    pcts.set(n, pcts.get(n) || m[0]);
+    boros.add(boroOfPrecinct(n));
+  }
+  for (const m of t.matchAll(PLACE_RE)) {
+    const name = m[1];
+    const before = t.slice(Math.max(0, m.index - 12), m.index);
+    const after = t.slice(m.index + name.length);
+    city = true; // any city place counts as local, even "Queens man"
+    if (NOT_A_SCENE.test(after) || FROM_BEFORE.test(before)) continue;
+    if (BOROUGHS.includes(name)) { boros.add(name); continue; }
+    const row = NAMES[name];
+    if (row.boro) boros.add(row.boro);
+    if (row.placeable && !DIRECTIONAL_BEFORE.test(before)) pcts.set(row.precinct, pcts.get(row.precinct) || row.name);
+    else loose += 1;
+  }
+  res.city = city && !res.outside;
+  if (!res.city) return res;
+  if (boros.size === 1) [res.boro] = boros;
+  if (pcts.size === 1 && boros.size <= 1 && loose === 0) {
+    const [[n, via]] = [...pcts];
+    res.precinct = precinctKey(n);
+    res.via = via;
+    res.boro = boroOfPrecinct(n);
+  }
+  return res;
+}
+
+const OPINION_URL = /\/(?:opinion|opinions|editorials?|letters|columnists?)\//i;
+const OPINION_TITLE = /^(?:readers sound off|letters?\b|opinion\b|editorial\b)|:\s*letters\s*$|\|\s*opinion\b/i;
+
+// Keep only stories that pass every test; attach where the headline puts them.
+export function locateStories(articles, family, win) {
+  return (articles || []).flatMap((a) => {
+    if (!LOCAL_OUTLETS.some((d) => a.domain === d || a.domain.endsWith(`.${d}`))) return [];
+    if (win && a.date && (a.date < win.from || a.date > win.to)) return [];
+    if (OPINION_URL.test(a.url) || OPINION_TITLE.test(a.title)) return [];
+    const place = placeHeadline(a.title);
+    if (!place.city || !headlineMatchesFamily(place.title, family)) return [];
+    return [{ ...a, title: place.title, boro: place.boro, precinct: place.precinct, via: place.via }];
+  });
+}
+
+/* ------------------------------ windows ----------------------------- */
 const pad = (n) => String(n).padStart(2, '0');
 const stamp = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+// Midnight in New York on a calendar date, as a UTC instant (NYPD's weeks run on local days).
+export function nyMidnight(y, m, d) {
+  const probe = new Date(Date.UTC(y, m - 1, d, 5)); // 00:00 EST or 01:00 EDT
+  const h = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(probe));
+  return new Date(probe.getTime() - h * 3600000);
+}
 
-// The report period, clamped to what GDELT can search. `now` is injectable for tests.
+// The report period in New York time, clamped to what GDELT can search. `now` is injectable for tests.
 export function pressWindow(periodId, reportPeriod, now = new Date()) {
   const end = parseMDY(reportPeriod?.week_end);
   if (!end) return null;
-  const endDate = new Date(Date.UTC(end.y, end.m - 1, end.d, 23, 59, 59));
-  let startDate;
+  const to = new Date(nyMidnight(end.y, end.m, end.d + 1).getTime() - 1000);
+  let from;
   if (periodId === 'wtd') {
     const s = parseMDY(reportPeriod?.week_start);
-    startDate = s ? new Date(Date.UTC(s.y, s.m - 1, s.d)) : new Date(endDate.getTime() - 6 * 86400000);
+    from = s ? nyMidnight(s.y, s.m, s.d) : nyMidnight(end.y, end.m, end.d - 6);
   } else if (periodId === 'd28') {
-    startDate = new Date(Date.UTC(end.y, end.m - 1, end.d) - 27 * 86400000);
+    from = nyMidnight(end.y, end.m, end.d - 27);
   } else {
-    startDate = new Date(Date.UTC(end.y, 0, 1));
+    from = nyMidnight(end.y, 1, 1);
   }
+  const requestedStart = from;
   const earliest = new Date(now.getTime() - GDELT_WINDOW_DAYS * 86400000);
-  const clamped = startDate < earliest;
-  const from = clamped ? earliest : startDate;
-  if (from >= endDate) return { empty: true, clamped, requestedStart: startDate, endDate };
-  return { from, to: endDate, clamped, requestedStart: startDate, start: stamp(from), end: stamp(endDate) };
+  const clamped = from < earliest;
+  if (clamped) from = earliest;
+  if (from >= to) return { empty: true, clamped, requestedStart, to };
+  return { from, to, clamped, requestedStart, start: stamp(from), end: stamp(to) };
 }
 
-export function gdeltUrl(query, win, max = 75) {
+export function gdeltUrl(query, win, max = MAX_RECORDS) {
   const p = new URLSearchParams({ query, mode: 'ArtList', format: 'json', maxrecords: String(max), sort: 'DateDesc', startdatetime: win.start, enddatetime: win.end });
   return `${GDELT_URL}?${p.toString()}`;
 }
 
+/* ------------------------------ parsing ----------------------------- */
 // "20260915T143000Z" → Date
 export function parseSeen(s) {
   const m = typeof s === 'string' && s.match(/^(\d{4})(\d{2})(\d{2})T?(\d{2})?(\d{2})?(\d{2})?/);
@@ -109,120 +216,105 @@ export function parseSeen(s) {
 }
 
 // GDELT answers errors (bad query, rate limit) as plain text, so parse defensively.
+// `count` is the raw number returned, before de-duplication, so callers can tell when a page was full.
 export function parseArticles(text) {
   let json;
   try { json = JSON.parse(text); } catch { return { error: (text || 'No response').slice(0, 200) }; }
-  const seen = new Set();
-  const articles = (json?.articles || []).map((a) => ({
-    url: a.url, title: (a.title || '').trim(), domain: a.domain || '', date: parseSeen(a.seendate),
-  })).filter((a) => {
+  const raw = Array.isArray(json?.articles) ? json.articles : [];
+  return { count: raw.length, articles: dedupe(raw.map((a) => ({ url: a.url, title: (a.title || '').trim(), domain: a.domain || '', date: parseSeen(a.seendate) }))) };
+}
+
+// Drop repeats of the same URL or the same headline (syndicated copies); newest first.
+export function dedupe(list) {
+  const urls = new Set(); const titles = new Set();
+  return list.filter((a) => {
     if (!a.url || !a.title) return false;
-    const key = a.title.toLowerCase().replace(/\W+/g, ' ').trim();
-    if (seen.has(key)) return false; // syndicated copies of the same story
-    seen.add(key);
+    const key = normalizeTitle(a.title).toLowerCase().replace(/\W+/g, ' ').trim();
+    if (urls.has(a.url) || titles.has(key)) return false;
+    urls.add(a.url); titles.add(key);
     return true;
   }).sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0));
-  return { articles };
 }
 
 /* ---------------------- polite, cached fetching ---------------------- */
-const cache = new Map();
+// One queue for the whole page, spaced as GDELT asks. When GDELT rate-limits it answers 429 without
+// CORS headers, so the browser reports a bare network error; both kinds of failure are retried.
 let lastRequest = 0;
 let chain = Promise.resolve();
-export function fetchPress(url, fetchImpl = (u) => fetch(u)) {
-  if (cache.has(url)) return cache.get(url);
-  const p = (chain = chain.then(async () => {
-    const wait = Math.max(0, lastRequest + SPACING_MS - Date.now());
-    if (wait) await new Promise((r) => setTimeout(r, wait));
-    lastRequest = Date.now();
-    const res = await fetchImpl(url);
-    return parseArticles(await res.text());
-  }).catch((e) => ({ error: String(e?.message || e) })));
-  cache.set(url, p);
-  p.then((r) => { if (r.error) cache.delete(url); });
+const realSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function queued(url, fetchImpl, sleep, spacing) {
+  const run = async () => {
+    for (let attempt = 0; ; attempt++) {
+      const wait = Math.max(0, lastRequest + spacing - Date.now());
+      if (wait) await sleep(wait);
+      lastRequest = Date.now();
+      let r;
+      try { const res = await fetchImpl(url); r = parseArticles(await res.text()); } catch (e) { r = { error: String(e?.message || e), network: true }; }
+      const retry = r.error && (r.network || /limit requests/i.test(r.error));
+      if (!retry || attempt >= RETRY_MS.length) return r;
+      await sleep(RETRY_MS[attempt]);
+    }
+  };
+  const p = chain.then(run);
+  chain = p.catch(() => {});
   return p;
 }
 
-/* ---------------------- coverage vs. the counts ---------------------- */
-// Each crime family: the CompStat line it's compared with, and the word groups a story must match
-// (groups are ANDed; words within a group are ORed).
-export const COVERAGE_FAMILIES = [
-  { key: 'murder', label: 'Murder', line: 'Murder', groups: [PRESS_TERMS.murder] },
-  { key: 'shooting', label: 'Shootings', line: 'Shooting Inc.', groups: [PRESS_TERMS.shooting] },
-  { key: 'robbery', label: 'Robbery', line: 'Robbery', groups: [['robbery', 'robbed', 'mugging', 'mugged']] },
-  { key: 'assault', label: 'Felony assault', line: 'Fel. Assault', groups: [['stabbing', 'stabbed', 'slashing', 'slashed', '"felony assault"']] },
-  { key: 'burglary', label: 'Burglary', line: 'Burglary', groups: [['burglary', 'burglar', '"break-in"']] },
-  { key: 'car', label: 'Vehicle theft', line: 'G.L.A.', groups: [['"stolen car"', '"car theft"', 'carjacking', '"stolen vehicle"']] },
-  { key: 'rape', label: 'Rape', line: 'Rape', groups: [['rape', '"sexual assault"']] },
-  { key: 'hate', label: 'Hate crimes', line: 'Hate Crimes', groups: [['"hate crime"', '"hate crimes"', '"bias attack"']] },
-  { key: 'subway', label: 'Transit crime', line: 'Transit', groups: [['subway', '"on a train"', '"subway station"'], ['attacked', 'stabbed', 'shoved', 'slashed', 'assaulted', 'robbed']] },
-  { key: 'retail', label: 'Retail theft', line: 'Retail Theft', groups: [['shoplifting', 'shoplifter', 'shoplifters', '"retail theft"']] },
-];
-export const buildGroupsQuery = (groups, geoList) => `${groups.map(group).join(' ')} ${group(geoList)} sourcelang:english`;
-
-export function timelineUrl(query, from, to) {
-  const p = new URLSearchParams({ query, mode: 'TimelineVolRaw', format: 'json', startdatetime: stamp(from), enddatetime: stamp(to) });
-  return `${GDELT_URL}?${p.toString()}`;
+// Results survive a reload for an hour (per browser tab). Storage can be missing or full; then we just search.
+const STORE = 'press:v1:';
+function readStore(key) {
+  try {
+    const v = JSON.parse(window.sessionStorage.getItem(STORE + key));
+    if (v && Date.now() - v.t < STORE_TTL) return { articles: v.a.map((a) => ({ ...a, date: a.date ? new Date(a.date) : null })), complete: v.c };
+  } catch { /* no storage */ }
+  return null;
+}
+function writeStore(key, r) {
+  try { window.sessionStorage.setItem(STORE + key, JSON.stringify({ t: Date.now(), a: r.articles, c: r.complete })); } catch { /* no storage */ }
 }
 
-// GDELT's TimelineVolRaw JSON: { timeline: [{ series, data: [{ date, value, norm }] }] }.
-export function parseTimeline(text) {
-  let json;
-  try { json = JSON.parse(text); } catch { return { error: (text || 'No response').slice(0, 200) }; }
-  const data = json?.timeline?.[0]?.data;
-  if (!Array.isArray(data)) return { error: 'No timeline in response' };
-  return { points: data.map((d) => ({ date: parseSeen(d.date), value: Number(d.value) || 0, norm: Number(d.norm) || 0 })).filter((d) => d.date) };
-}
-
-// The 56 days ending on the report's last day, split into two 28-day windows.
-export function coverageWindows(weekEnd) {
-  const end = parseMDY(weekEnd);
-  if (!end) return null;
-  const to = new Date(Date.UTC(end.y, end.m - 1, end.d, 23, 59, 59));
-  const mid = new Date(Date.UTC(end.y, end.m - 1, end.d) - 27 * 86400000); // first day of the last 28
-  const from = new Date(mid.getTime() - 28 * 86400000);
-  return { from, mid, to };
-}
-
-// Sum stories in each window. When GDELT supplies `norm` (all stories it monitored), the change is
-// measured as a share of all coverage, so a swing in GDELT's overall volume can't masquerade as interest.
-export function coverageChange(points, win) {
-  const sum = (a, b) => points.filter((p) => p.date >= a && p.date < b).reduce((s, p) => ({ v: s.v + p.value, n: s.n + p.norm }), { v: 0, n: 0 });
-  const prev = sum(win.from, win.mid);
-  const last = sum(win.mid, new Date(win.to.getTime() + 1000));
-  const useNorm = prev.n > 0 && last.n > 0;
-  const change = prev.v > 0 ? (useNorm ? ((last.v / last.n) / (prev.v / prev.n) - 1) : (last.v / prev.v - 1)) * 100 : null;
-  return { last: last.v, prev: prev.v, change, normalized: useNorm, enough: prev.v >= 5 && last.v + prev.v >= 15 };
-}
-
-// Out of step = coverage and the counts pointing different ways. A count "falls" if it's a real drop
-// or a noisy change at or below zero; it "rises" if it's a real rise or a noisy change at or above zero.
-// Thresholds are deliberately blunt.
-export const COVERAGE_SWING = 25;
-export function coverageVerdict(crime, cov) {
-  if (!cov || !cov.enough || cov.change == null) return { kind: 'thin', label: 'Too little coverage to judge' };
-  if (!crime || crime.verdict === 'none' || crime.verdict === 'flagged' || crime.pct == null) return { kind: 'na', label: 'No comparable count' };
-  const up = cov.change >= COVERAGE_SWING; const down = cov.change <= -COVERAGE_SWING;
-  const notRising = crime.verdict === 'drop' || (crime.verdict === 'noise' && crime.pct <= 0);
-  const notFalling = crime.verdict === 'rise' || (crime.verdict === 'noise' && crime.pct >= 0);
-  if (up && notRising) return { kind: 'out', label: 'More coverage, not more crime' };
-  if (down && notFalling) return { kind: 'out', label: 'Less coverage, not less crime' };
-  if (crime.verdict === 'rise' && cov.change <= 0) return { kind: 'out', label: 'More crime, not more coverage' };
-  if ((up && crime.pct > 0) || (down && crime.pct < 0)) return { kind: 'in', label: 'Same direction' };
-  return { kind: 'quiet', label: 'No clear mismatch' };
-}
-
-export function fetchTimeline(url, fetchImpl = (u) => fetch(u)) {
-  const key = `tl:${url}`;
+// All candidate stories for one crime family over one window, paging back when a response is full.
+const cache = new Map();
+export function fetchStories(family, win, { fetchImpl = (u) => fetch(u), sleep = realSleep, spacing = SPACING_MS, store = true } = {}) {
+  const key = `${family}|${win.start}|${win.end}`;
   if (cache.has(key)) return cache.get(key);
-  const p = (chain = chain.then(async () => {
-    const wait = Math.max(0, lastRequest + SPACING_MS - Date.now());
-    if (wait) await new Promise((r) => setTimeout(r, wait));
-    lastRequest = Date.now();
-    const res = await fetchImpl(url);
-    return parseTimeline(await res.text());
-  }).catch((e) => ({ error: String(e?.message || e) })));
+  const stored = store && readStore(key);
+  if (stored) { const p = Promise.resolve(stored); cache.set(key, p); return p; }
+  const p = (async () => {
+    const all = []; let end = win.end; let complete = false;
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const r = await queued(gdeltUrl(familyQuery(family), { start: win.start, end }), fetchImpl, sleep, spacing);
+      if (r.error) { if (!all.length) return { error: r.error }; break; }
+      all.push(...r.articles);
+      if (r.count < MAX_RECORDS) { complete = true; break; }
+      const oldest = r.articles.reduce((m, a) => (a.date && (!m || a.date < m) ? a.date : m), null);
+      if (!oldest || stamp(oldest) <= win.start || stamp(oldest) >= end) break;
+      end = stamp(oldest);
+    }
+    return { articles: dedupe(all), complete };
+  })();
   cache.set(key, p);
-  p.then((r) => { if (r.error) cache.delete(key); });
+  p.then((r) => { if (r.error) cache.delete(key); else if (store) writeStore(key, r); });
   return p;
+}
+
+/* ---------------------- which stories a view gets ---------------------- */
+export const PLACE_THRESHOLD = GAZ.threshold;
+const SPLIT = ['105th Precinct', '116th Precinct']; // the boundary table predates the 116th
+
+// What a geography means for placement: citywide, one precinct, or one borough (patrol boroughs
+// split a borough, but headlines rarely say which half).
+export function geoScope(geo) {
+  if (geo === 'citywide') return { kind: 'citywide', label: 'New York City' };
+  const n = parseInt(geo, 10);
+  if (geo.includes('Precinct') && n) return { kind: 'precinct', label: geo, boro: boroOfPrecinct(n), merged: SPLIT.includes(geo) };
+  const boro = ['Staten Island', ...BOROUGHS].find((b) => geo.startsWith(b));
+  return { kind: 'borough', label: boro || geo, boro };
+}
+
+export function storiesFor(stories, geo) {
+  const sc = geoScope(geo);
+  if (sc.kind === 'citywide') return stories;
+  if (sc.kind === 'precinct') return stories.filter((a) => a.precinct === geo || (sc.merged && SPLIT.includes(a.precinct)));
+  return stories.filter((a) => a.boro && a.boro === sc.boro);
 }

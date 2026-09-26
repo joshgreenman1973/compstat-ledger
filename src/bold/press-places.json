@@ -1,0 +1,3567 @@
+{
+ "_source": "NYC 2020 Neighborhood Tabulation Areas (NYC Open Data 9nt8-h7nd) intersected with the precinct shapes in src/data/nyc_precincts.json by tools/places/build_places.py",
+ "_rule": "A name places a story only if at least 85% of its area lies in one precinct.",
+ "threshold": 0.85,
+ "places": {
+  "Alley Pond Park": {
+   "boro": "Queens",
+   "share": 0.988,
+   "precinct": 111,
+   "split": [
+    [
+     111,
+     0.99
+    ]
+   ]
+  },
+  "Annadale": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ]
+  },
+  "Arden Heights": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ]
+  },
+  "Arrochar": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Astoria": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     1.0
+    ]
+   ]
+  },
+  "Astoria Park": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     1.0
+    ]
+   ]
+  },
+  "Baisley Park": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 113,
+   "split": [
+    [
+     113,
+     1.0
+    ]
+   ]
+  },
+  "Barren Island": {
+   "boro": "Brooklyn",
+   "share": 0.998,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     1.0
+    ]
+   ]
+  },
+  "Bath Beach": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 62,
+   "split": [
+    [
+     62,
+     1.0
+    ]
+   ]
+  },
+  "Battery Park City": {
+   "boro": "Manhattan",
+   "share": 0.922,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.92
+    ],
+    [
+     84,
+     0.05
+    ]
+   ]
+  },
+  "Bay Ridge": {
+   "boro": "Brooklyn",
+   "share": 0.996,
+   "precinct": 68,
+   "split": [
+    [
+     68,
+     1.0
+    ]
+   ]
+  },
+  "Bay Terrace": {
+   "boro": "Queens",
+   "share": 0.945,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     0.94
+    ],
+    [
+     111,
+     0.05
+    ]
+   ]
+  },
+  "Baychester": {
+   "boro": "Bronx",
+   "share": 0.994,
+   "precinct": 47,
+   "split": [
+    [
+     47,
+     0.99
+    ]
+   ]
+  },
+  "Bayside": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 111,
+   "split": [
+    [
+     111,
+     1.0
+    ]
+   ]
+  },
+  "Beechhurst": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     1.0
+    ]
+   ]
+  },
+  "Belle Harbor": {
+   "boro": "Queens",
+   "share": 0.996,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Bensonhurst": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 62,
+   "split": [
+    [
+     62,
+     1.0
+    ]
+   ]
+  },
+  "Bergen Beach": {
+   "boro": "Brooklyn",
+   "share": 0.99,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     0.99
+    ]
+   ]
+  },
+  "Boerum Hill": {
+   "boro": "Brooklyn",
+   "share": 0.966,
+   "precinct": 84,
+   "split": [
+    [
+     84,
+     0.97
+    ]
+   ]
+  },
+  "Borough Park": {
+   "boro": "Brooklyn",
+   "share": 0.974,
+   "precinct": 66,
+   "split": [
+    [
+     66,
+     0.97
+    ]
+   ]
+  },
+  "Breezy Point": {
+   "boro": "Queens",
+   "share": 0.996,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Breezy Point Tip": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Briarwood": {
+   "boro": "Queens",
+   "share": 0.958,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     0.96
+    ]
+   ]
+  },
+  "Brighton Beach": {
+   "boro": "Brooklyn",
+   "share": 0.919,
+   "precinct": 60,
+   "split": [
+    [
+     60,
+     0.92
+    ],
+    [
+     61,
+     0.08
+    ]
+   ]
+  },
+  "Broad Channel": {
+   "boro": "Queens",
+   "share": 0.996,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Broadway Flushing": {
+   "boro": "Queens",
+   "share": 0.985,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     0.99
+    ]
+   ]
+  },
+  "Brooklyn Heights": {
+   "boro": "Brooklyn",
+   "share": 1.0,
+   "precinct": 84,
+   "split": [
+    [
+     84,
+     1.0
+    ]
+   ]
+  },
+  "Brownsville": {
+   "boro": "Brooklyn",
+   "share": 0.996,
+   "precinct": 73,
+   "split": [
+    [
+     73,
+     1.0
+    ]
+   ]
+  },
+  "Bulls Head": {
+   "boro": "Staten Island",
+   "share": 0.998,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     1.0
+    ]
+   ]
+  },
+  "Bushwick": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 83,
+   "split": [
+    [
+     83,
+     1.0
+    ]
+   ]
+  },
+  "Calvert Vaux Park": {
+   "boro": "Brooklyn",
+   "share": 0.994,
+   "precinct": 60,
+   "split": [
+    [
+     60,
+     0.99
+    ]
+   ]
+  },
+  "Cambria Heights": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 105,
+   "split": [
+    [
+     105,
+     1.0
+    ]
+   ]
+  },
+  "Canarsie": {
+   "boro": "Brooklyn",
+   "share": 0.974,
+   "precinct": 69,
+   "split": [
+    [
+     69,
+     0.97
+    ]
+   ]
+  },
+  "Canarsie Park & Pier": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 69,
+   "split": [
+    [
+     69,
+     1.0
+    ]
+   ]
+  },
+  "Carnegie Hill": {
+   "boro": "Manhattan",
+   "share": 1.0,
+   "precinct": 19,
+   "split": [
+    [
+     19,
+     1.0
+    ]
+   ]
+  },
+  "Castle Hill": {
+   "boro": "Bronx",
+   "share": 0.853,
+   "precinct": 43,
+   "split": [
+    [
+     43,
+     0.85
+    ],
+    [
+     45,
+     0.15
+    ]
+   ]
+  },
+  "Central Park": {
+   "boro": "Manhattan",
+   "share": 0.997,
+   "precinct": 22,
+   "split": [
+    [
+     22,
+     1.0
+    ]
+   ]
+  },
+  "City Island": {
+   "boro": "Bronx",
+   "share": 0.994,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     0.99
+    ]
+   ]
+  },
+  "Claremont Park": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 44,
+   "split": [
+    [
+     44,
+     1.0
+    ]
+   ]
+  },
+  "Claremont Village": {
+   "boro": "Bronx",
+   "share": 0.92,
+   "precinct": 42,
+   "split": [
+    [
+     42,
+     0.92
+    ],
+    [
+     44,
+     0.06
+    ]
+   ]
+  },
+  "Clason Point": {
+   "boro": "Bronx",
+   "share": 0.997,
+   "precinct": 43,
+   "split": [
+    [
+     43,
+     1.0
+    ]
+   ]
+  },
+  "Clinton Hill": {
+   "boro": "Brooklyn",
+   "share": 0.946,
+   "precinct": 88,
+   "split": [
+    [
+     88,
+     0.95
+    ],
+    [
+     79,
+     0.05
+    ]
+   ]
+  },
+  "Co-op City": {
+   "boro": "Bronx",
+   "share": 0.955,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     0.95
+    ]
+   ]
+  },
+  "College Point": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     1.0
+    ]
+   ]
+  },
+  "Concourse Village": {
+   "boro": "Bronx",
+   "share": 0.876,
+   "precinct": 44,
+   "split": [
+    [
+     44,
+     0.88
+    ],
+    [
+     40,
+     0.08
+    ]
+   ]
+  },
+  "Coney Island": {
+   "boro": "Brooklyn",
+   "share": 0.996,
+   "precinct": 60,
+   "split": [
+    [
+     60,
+     1.0
+    ]
+   ]
+  },
+  "Crotona Park": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 42,
+   "split": [
+    [
+     42,
+     1.0
+    ]
+   ]
+  },
+  "Cunningham Park": {
+   "boro": "Queens",
+   "share": 0.994,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     0.99
+    ]
+   ]
+  },
+  "Cypress Hills": {
+   "boro": "Brooklyn",
+   "share": 0.998,
+   "precinct": 75,
+   "split": [
+    [
+     75,
+     1.0
+    ]
+   ]
+  },
+  "DUMBO": {
+   "boro": "Brooklyn",
+   "share": 0.966,
+   "precinct": 84,
+   "split": [
+    [
+     84,
+     0.97
+    ]
+   ]
+  },
+  "Ditmars": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     1.0
+    ]
+   ]
+  },
+  "Ditmas Park": {
+   "boro": "Brooklyn",
+   "share": 0.947,
+   "precinct": 70,
+   "split": [
+    [
+     70,
+     0.95
+    ],
+    [
+     66,
+     0.05
+    ]
+   ]
+  },
+  "Dongan Hills": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Douglaston": {
+   "boro": "Queens",
+   "share": 0.99,
+   "precinct": 111,
+   "split": [
+    [
+     111,
+     0.99
+    ]
+   ]
+  },
+  "Downtown Brooklyn": {
+   "boro": "Brooklyn",
+   "share": 0.966,
+   "precinct": 84,
+   "split": [
+    [
+     84,
+     0.97
+    ]
+   ]
+  },
+  "Dutch Kills": {
+   "boro": "Queens",
+   "share": 0.979,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     0.98
+    ]
+   ]
+  },
+  "Dyker Beach Park": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 68,
+   "split": [
+    [
+     68,
+     1.0
+    ]
+   ]
+  },
+  "Dyker Heights": {
+   "boro": "Brooklyn",
+   "share": 0.991,
+   "precinct": 68,
+   "split": [
+    [
+     68,
+     0.99
+    ]
+   ]
+  },
+  "East Elmhurst": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 115,
+   "split": [
+    [
+     115,
+     1.0
+    ]
+   ]
+  },
+  "East Flatbush": {
+   "boro": "Brooklyn",
+   "share": 0.957,
+   "precinct": 67,
+   "split": [
+    [
+     67,
+     0.96
+    ]
+   ]
+  },
+  "East Flushing": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     1.0
+    ]
+   ]
+  },
+  "East New York": {
+   "boro": "Brooklyn",
+   "share": 0.923,
+   "precinct": 75,
+   "split": [
+    [
+     75,
+     0.92
+    ],
+    [
+     69,
+     0.06
+    ]
+   ]
+  },
+  "East Village": {
+   "boro": "Manhattan",
+   "share": 0.993,
+   "precinct": 9,
+   "split": [
+    [
+     9,
+     0.99
+    ]
+   ]
+  },
+  "Edenwald": {
+   "boro": "Bronx",
+   "share": 0.994,
+   "precinct": 47,
+   "split": [
+    [
+     47,
+     0.99
+    ]
+   ]
+  },
+  "Electchester": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     1.0
+    ]
+   ]
+  },
+  "Ellis Island": {
+   "boro": "Manhattan",
+   "share": 0.876,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.88
+    ],
+    [
+     76,
+     0.09
+    ]
+   ]
+  },
+  "Elmhurst": {
+   "boro": "Queens",
+   "share": 0.96,
+   "precinct": 110,
+   "split": [
+    [
+     110,
+     0.96
+    ]
+   ]
+  },
+  "Far Rockaway": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 101,
+   "split": [
+    [
+     101,
+     1.0
+    ]
+   ]
+  },
+  "Ferry Point Park": {
+   "boro": "Bronx",
+   "share": 0.998,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     1.0
+    ]
+   ]
+  },
+  "Financial District": {
+   "boro": "Manhattan",
+   "share": 0.922,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.92
+    ],
+    [
+     84,
+     0.05
+    ]
+   ]
+  },
+  "Flatlands": {
+   "boro": "Brooklyn",
+   "share": 0.958,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     0.96
+    ]
+   ]
+  },
+  "Floyd Bennett Field": {
+   "boro": "Brooklyn",
+   "share": 0.998,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     1.0
+    ]
+   ]
+  },
+  "Fordham Heights": {
+   "boro": "Bronx",
+   "share": 0.96,
+   "precinct": 46,
+   "split": [
+    [
+     46,
+     0.96
+    ]
+   ]
+  },
+  "Forest Hills": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 112,
+   "split": [
+    [
+     112,
+     1.0
+    ]
+   ]
+  },
+  "Forest Park": {
+   "boro": "Queens",
+   "share": 0.992,
+   "precinct": 102,
+   "split": [
+    [
+     102,
+     0.99
+    ]
+   ]
+  },
+  "Fort Greene": {
+   "boro": "Brooklyn",
+   "share": 0.964,
+   "precinct": 88,
+   "split": [
+    [
+     88,
+     0.96
+    ]
+   ]
+  },
+  "Fort Tilden": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Fox Hills": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "Fresh Meadows": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     1.0
+    ]
+   ]
+  },
+  "Gerritsen Beach": {
+   "boro": "Brooklyn",
+   "share": 0.996,
+   "precinct": 61,
+   "split": [
+    [
+     61,
+     1.0
+    ]
+   ]
+  },
+  "Glen Oaks": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 105,
+   "split": [
+    [
+     105,
+     1.0
+    ]
+   ]
+  },
+  "Governors Island": {
+   "boro": "Manhattan",
+   "share": 0.876,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.88
+    ],
+    [
+     76,
+     0.09
+    ]
+   ]
+  },
+  "Gramercy": {
+   "boro": "Manhattan",
+   "share": 0.997,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     1.0
+    ]
+   ]
+  },
+  "Graniteville": {
+   "boro": "Staten Island",
+   "share": 0.999,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     1.0
+    ]
+   ]
+  },
+  "Grasmere": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Great Kills Park": {
+   "boro": "Staten Island",
+   "share": 0.998,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Greenpoint": {
+   "boro": "Brooklyn",
+   "share": 0.998,
+   "precinct": 94,
+   "split": [
+    [
+     94,
+     1.0
+    ]
+   ]
+  },
+  "Grymes Hill": {
+   "boro": "Staten Island",
+   "share": 0.999,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "Hallets Point": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     1.0
+    ]
+   ]
+  },
+  "Hamilton Heights": {
+   "boro": "Manhattan",
+   "share": 0.991,
+   "precinct": 30,
+   "split": [
+    [
+     30,
+     0.99
+    ]
+   ]
+  },
+  "Highbridge": {
+   "boro": "Bronx",
+   "share": 0.997,
+   "precinct": 44,
+   "split": [
+    [
+     44,
+     1.0
+    ]
+   ]
+  },
+  "Hoffman & Swinburne Islands": {
+   "boro": "Staten Island",
+   "share": 0.991,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.99
+    ]
+   ]
+  },
+  "Hollis Hills": {
+   "boro": "Queens",
+   "share": 0.996,
+   "precinct": 111,
+   "split": [
+    [
+     111,
+     1.0
+    ]
+   ]
+  },
+  "Holliswood": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     1.0
+    ]
+   ]
+  },
+  "Homecrest": {
+   "boro": "Brooklyn",
+   "share": 0.977,
+   "precinct": 61,
+   "split": [
+    [
+     61,
+     0.98
+    ]
+   ]
+  },
+  "Howard Beach": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 106,
+   "split": [
+    [
+     106,
+     1.0
+    ]
+   ]
+  },
+  "Huguenot": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ]
+  },
+  "Hunters Point": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 108,
+   "split": [
+    [
+     108,
+     1.0
+    ]
+   ]
+  },
+  "Hunts Point": {
+   "boro": "Bronx",
+   "share": 0.998,
+   "precinct": 41,
+   "split": [
+    [
+     41,
+     1.0
+    ]
+   ]
+  },
+  "Inwood Hill Park": {
+   "boro": "Manhattan",
+   "share": 0.994,
+   "precinct": 34,
+   "split": [
+    [
+     34,
+     0.99
+    ]
+   ]
+  },
+  "Jackson Heights": {
+   "boro": "Queens",
+   "share": 0.993,
+   "precinct": 115,
+   "split": [
+    [
+     115,
+     0.99
+    ]
+   ]
+  },
+  "Jacob Riis Park": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Jamaica Estates": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     1.0
+    ]
+   ]
+  },
+  "Jamaica Hills": {
+   "boro": "Queens",
+   "share": 0.958,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     0.96
+    ]
+   ]
+  },
+  "Kew Gardens": {
+   "boro": "Queens",
+   "share": 0.995,
+   "precinct": 102,
+   "split": [
+    [
+     102,
+     1.0
+    ]
+   ]
+  },
+  "Kew Gardens Hills": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     1.0
+    ]
+   ]
+  },
+  "Kingsbridge": {
+   "boro": "Bronx",
+   "share": 0.973,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     0.97
+    ]
+   ]
+  },
+  "Kingsbridge Heights": {
+   "boro": "Bronx",
+   "share": 0.986,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     0.99
+    ]
+   ]
+  },
+  "Kissena Park": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     1.0
+    ]
+   ]
+  },
+  "Laurelton": {
+   "boro": "Queens",
+   "share": 0.97,
+   "precinct": 105,
+   "split": [
+    [
+     105,
+     0.97
+    ]
+   ]
+  },
+  "Liberty Island": {
+   "boro": "Manhattan",
+   "share": 0.876,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.88
+    ],
+    [
+     76,
+     0.09
+    ]
+   ]
+  },
+  "Lincoln Square": {
+   "boro": "Manhattan",
+   "share": 0.917,
+   "precinct": 20,
+   "split": [
+    [
+     20,
+     0.92
+    ],
+    [
+     18,
+     0.08
+    ]
+   ]
+  },
+  "Lincoln Terrace Park": {
+   "boro": "Brooklyn",
+   "share": 0.994,
+   "precinct": 77,
+   "split": [
+    [
+     77,
+     0.99
+    ]
+   ]
+  },
+  "Lindenwood": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 106,
+   "split": [
+    [
+     106,
+     1.0
+    ]
+   ]
+  },
+  "Little Neck": {
+   "boro": "Queens",
+   "share": 0.99,
+   "precinct": 111,
+   "split": [
+    [
+     111,
+     0.99
+    ]
+   ]
+  },
+  "Lower East Side": {
+   "boro": "Manhattan",
+   "share": 0.85,
+   "precinct": 7,
+   "split": [
+    [
+     7,
+     0.85
+    ],
+    [
+     5,
+     0.15
+    ]
+   ]
+  },
+  "Macombs Dam Park": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 44,
+   "split": [
+    [
+     44,
+     1.0
+    ]
+   ]
+  },
+  "Manhattan Valley": {
+   "boro": "Manhattan",
+   "share": 0.998,
+   "precinct": 24,
+   "split": [
+    [
+     24,
+     1.0
+    ]
+   ]
+  },
+  "Mapleton": {
+   "boro": "Brooklyn",
+   "share": 0.935,
+   "precinct": 66,
+   "split": [
+    [
+     66,
+     0.93
+    ]
+   ]
+  },
+  "Marble Hill": {
+   "boro": "Bronx",
+   "share": 0.973,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     0.97
+    ]
+   ]
+  },
+  "Marine Park": {
+   "boro": "Brooklyn",
+   "share": 0.941,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     0.94
+    ],
+    [
+     61,
+     0.05
+    ]
+   ]
+  },
+  "Mariner's Harbor": {
+   "boro": "Staten Island",
+   "share": 0.999,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     1.0
+    ]
+   ]
+  },
+  "Maspeth": {
+   "boro": "Queens",
+   "share": 0.867,
+   "precinct": 104,
+   "split": [
+    [
+     104,
+     0.87
+    ],
+    [
+     108,
+     0.13
+    ]
+   ]
+  },
+  "McGuire Fields": {
+   "boro": "Brooklyn",
+   "share": 0.991,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     0.99
+    ]
+   ]
+  },
+  "Middle Village": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 104,
+   "split": [
+    [
+     104,
+     1.0
+    ]
+   ]
+  },
+  "Midland Beach": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Mill Basin": {
+   "boro": "Brooklyn",
+   "share": 0.99,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     0.99
+    ]
+   ]
+  },
+  "Miller Field": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Morningside Heights": {
+   "boro": "Manhattan",
+   "share": 0.997,
+   "precinct": 26,
+   "split": [
+    [
+     26,
+     1.0
+    ]
+   ]
+  },
+  "Morris Heights": {
+   "boro": "Bronx",
+   "share": 0.98,
+   "precinct": 46,
+   "split": [
+    [
+     46,
+     0.98
+    ]
+   ]
+  },
+  "Morris Park": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 49,
+   "split": [
+    [
+     49,
+     1.0
+    ]
+   ]
+  },
+  "Morrisania": {
+   "boro": "Bronx",
+   "share": 0.985,
+   "precinct": 42,
+   "split": [
+    [
+     42,
+     0.99
+    ]
+   ]
+  },
+  "Mott Haven": {
+   "boro": "Bronx",
+   "share": 0.998,
+   "precinct": 40,
+   "split": [
+    [
+     40,
+     1.0
+    ]
+   ]
+  },
+  "Mount Eden": {
+   "boro": "Bronx",
+   "share": 0.999,
+   "precinct": 44,
+   "split": [
+    [
+     44,
+     1.0
+    ]
+   ]
+  },
+  "New Brighton": {
+   "boro": "Staten Island",
+   "share": 0.998,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "New Dorp": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "New Springville": {
+   "boro": "Staten Island",
+   "share": 0.998,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     1.0
+    ]
+   ]
+  },
+  "North Corona": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 115,
+   "split": [
+    [
+     115,
+     1.0
+    ]
+   ]
+  },
+  "Oakland Gardens": {
+   "boro": "Queens",
+   "share": 0.996,
+   "precinct": 111,
+   "split": [
+    [
+     111,
+     1.0
+    ]
+   ]
+  },
+  "Ocean Hill": {
+   "boro": "Brooklyn",
+   "share": 0.918,
+   "precinct": 73,
+   "split": [
+    [
+     73,
+     0.92
+    ],
+    [
+     81,
+     0.05
+    ]
+   ]
+  },
+  "Old Astoria": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     1.0
+    ]
+   ]
+  },
+  "Olinville": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 47,
+   "split": [
+    [
+     47,
+     1.0
+    ]
+   ]
+  },
+  "Park Slope": {
+   "boro": "Brooklyn",
+   "share": 1.0,
+   "precinct": 78,
+   "split": [
+    [
+     78,
+     1.0
+    ]
+   ]
+  },
+  "Parkchester": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 43,
+   "split": [
+    [
+     43,
+     1.0
+    ]
+   ]
+  },
+  "Pelham Bay": {
+   "boro": "Bronx",
+   "share": 0.994,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     0.99
+    ]
+   ]
+  },
+  "Pelham Bay Park": {
+   "boro": "Bronx",
+   "share": 0.997,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     1.0
+    ]
+   ]
+  },
+  "Pelham Gardens": {
+   "boro": "Bronx",
+   "share": 0.971,
+   "precinct": 49,
+   "split": [
+    [
+     49,
+     0.97
+    ]
+   ]
+  },
+  "Pelham Parkway": {
+   "boro": "Bronx",
+   "share": 0.995,
+   "precinct": 49,
+   "split": [
+    [
+     49,
+     1.0
+    ]
+   ]
+  },
+  "Peter Cooper Village": {
+   "boro": "Manhattan",
+   "share": 0.995,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     0.99
+    ]
+   ]
+  },
+  "Plumb Island": {
+   "boro": "Brooklyn",
+   "share": 0.876,
+   "precinct": 63,
+   "split": [
+    [
+     63,
+     0.88
+    ],
+    [
+     61,
+     0.11
+    ]
+   ]
+  },
+  "Pomonok": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 107,
+   "split": [
+    [
+     107,
+     1.0
+    ]
+   ]
+  },
+  "Port Morris": {
+   "boro": "Bronx",
+   "share": 0.998,
+   "precinct": 40,
+   "split": [
+    [
+     40,
+     1.0
+    ]
+   ]
+  },
+  "Prince's Bay": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ]
+  },
+  "Prospect Lefferts Gardens": {
+   "boro": "Brooklyn",
+   "share": 0.998,
+   "precinct": 71,
+   "split": [
+    [
+     71,
+     1.0
+    ]
+   ]
+  },
+  "Prospect Park": {
+   "boro": "Brooklyn",
+   "share": 0.929,
+   "precinct": 78,
+   "split": [
+    [
+     78,
+     0.93
+    ],
+    [
+     70,
+     0.07
+    ]
+   ]
+  },
+  "Queens Village": {
+   "boro": "Queens",
+   "share": 0.997,
+   "precinct": 105,
+   "split": [
+    [
+     105,
+     1.0
+    ]
+   ]
+  },
+  "Queensboro Hill": {
+   "boro": "Queens",
+   "share": 0.944,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     0.94
+    ],
+    [
+     107,
+     0.06
+    ]
+   ]
+  },
+  "Queensbridge": {
+   "boro": "Queens",
+   "share": 0.979,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     0.98
+    ]
+   ]
+  },
+  "Randall's Island": {
+   "boro": "Manhattan",
+   "share": 0.994,
+   "precinct": 25,
+   "split": [
+    [
+     25,
+     0.99
+    ]
+   ]
+  },
+  "Ravenswood": {
+   "boro": "Queens",
+   "share": 0.979,
+   "precinct": 114,
+   "split": [
+    [
+     114,
+     0.98
+    ]
+   ]
+  },
+  "Rego Park": {
+   "boro": "Queens",
+   "share": 0.975,
+   "precinct": 112,
+   "split": [
+    [
+     112,
+     0.98
+    ]
+   ]
+  },
+  "Richmond Hill": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 102,
+   "split": [
+    [
+     102,
+     1.0
+    ]
+   ]
+  },
+  "Richmondtown": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     1.0
+    ]
+   ]
+  },
+  "Ridgewood": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 104,
+   "split": [
+    [
+     104,
+     1.0
+    ]
+   ]
+  },
+  "Riverdale": {
+   "boro": "Bronx",
+   "share": 0.999,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     1.0
+    ]
+   ]
+  },
+  "Rochdale Village": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 113,
+   "split": [
+    [
+     113,
+     1.0
+    ]
+   ]
+  },
+  "Rockaway Community Park": {
+   "boro": "Queens",
+   "share": 0.977,
+   "precinct": 101,
+   "split": [
+    [
+     101,
+     0.98
+    ]
+   ]
+  },
+  "Rockaway Park": {
+   "boro": "Queens",
+   "share": 0.996,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     1.0
+    ]
+   ]
+  },
+  "Rosebank": {
+   "boro": "Staten Island",
+   "share": 0.989,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     0.99
+    ]
+   ]
+  },
+  "Rossville": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ]
+  },
+  "Sea Gate": {
+   "boro": "Brooklyn",
+   "share": 0.996,
+   "precinct": 60,
+   "split": [
+    [
+     60,
+     1.0
+    ]
+   ]
+  },
+  "Sheepshead Bay": {
+   "boro": "Brooklyn",
+   "share": 0.996,
+   "precinct": 61,
+   "split": [
+    [
+     61,
+     1.0
+    ]
+   ]
+  },
+  "Shirley Chisholm State Park": {
+   "boro": "Brooklyn",
+   "share": 0.997,
+   "precinct": 75,
+   "split": [
+    [
+     75,
+     1.0
+    ]
+   ]
+  },
+  "Snug Harbor": {
+   "boro": "Staten Island",
+   "share": 0.998,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "Soundview": {
+   "boro": "Bronx",
+   "share": 0.986,
+   "precinct": 43,
+   "split": [
+    [
+     43,
+     0.99
+    ]
+   ]
+  },
+  "Soundview Park": {
+   "boro": "Bronx",
+   "share": 0.972,
+   "precinct": 43,
+   "split": [
+    [
+     43,
+     0.97
+    ]
+   ]
+  },
+  "South Ozone Park": {
+   "boro": "Queens",
+   "share": 0.991,
+   "precinct": 106,
+   "split": [
+    [
+     106,
+     0.99
+    ]
+   ]
+  },
+  "South Richmond Hill": {
+   "boro": "Queens",
+   "share": 1.0,
+   "precinct": 102,
+   "split": [
+    [
+     102,
+     1.0
+    ]
+   ]
+  },
+  "South Slope": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 72,
+   "split": [
+    [
+     72,
+     1.0
+    ]
+   ]
+  },
+  "South Williamsburg": {
+   "boro": "Brooklyn",
+   "share": 0.998,
+   "precinct": 90,
+   "split": [
+    [
+     90,
+     1.0
+    ]
+   ]
+  },
+  "Spring Creek Park": {
+   "boro": "Queens",
+   "share": 0.982,
+   "precinct": 106,
+   "split": [
+    [
+     106,
+     0.98
+    ]
+   ]
+  },
+  "Spuyten Duyvil": {
+   "boro": "Bronx",
+   "share": 0.999,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     1.0
+    ]
+   ]
+  },
+  "St. Albans": {
+   "boro": "Queens",
+   "share": 0.914,
+   "precinct": 113,
+   "split": [
+    [
+     113,
+     0.91
+    ],
+    [
+     103,
+     0.08
+    ]
+   ]
+  },
+  "St. George": {
+   "boro": "Staten Island",
+   "share": 0.998,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "St. Raymond Cemetery": {
+   "boro": "Bronx",
+   "share": 0.998,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     1.0
+    ]
+   ]
+  },
+  "Stapleton": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "Starrett City": {
+   "boro": "Brooklyn",
+   "share": 0.992,
+   "precinct": 75,
+   "split": [
+    [
+     75,
+     0.99
+    ]
+   ]
+  },
+  "Stuyvesant Town": {
+   "boro": "Manhattan",
+   "share": 0.995,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     0.99
+    ]
+   ]
+  },
+  "Sugar Hill": {
+   "boro": "Manhattan",
+   "share": 0.991,
+   "precinct": 30,
+   "split": [
+    [
+     30,
+     0.99
+    ]
+   ]
+  },
+  "The Battery": {
+   "boro": "Manhattan",
+   "share": 0.876,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.88
+    ],
+    [
+     76,
+     0.09
+    ]
+   ]
+  },
+  "Throgs Neck": {
+   "boro": "Bronx",
+   "share": 0.997,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     1.0
+    ]
+   ]
+  },
+  "Tompkinsville": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "Tottenville": {
+   "boro": "Staten Island",
+   "share": 0.999,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ]
+  },
+  "Tremont": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 48,
+   "split": [
+    [
+     48,
+     1.0
+    ]
+   ]
+  },
+  "Unionport": {
+   "boro": "Bronx",
+   "share": 0.853,
+   "precinct": 43,
+   "split": [
+    [
+     43,
+     0.85
+    ],
+    [
+     45,
+     0.15
+    ]
+   ]
+  },
+  "Upper East Side": {
+   "boro": "Manhattan",
+   "share": 0.883,
+   "precinct": 19,
+   "split": [
+    [
+     19,
+     0.88
+    ],
+    [
+     114,
+     0.11
+    ]
+   ]
+  },
+  "Van Cortlandt Park": {
+   "boro": "Bronx",
+   "share": 0.874,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     0.87
+    ],
+    [
+     47,
+     0.13
+    ]
+   ]
+  },
+  "Van Cortlandt Village": {
+   "boro": "Bronx",
+   "share": 0.986,
+   "precinct": 50,
+   "split": [
+    [
+     50,
+     0.99
+    ]
+   ]
+  },
+  "Van Nest": {
+   "boro": "Bronx",
+   "share": 0.995,
+   "precinct": 49,
+   "split": [
+    [
+     49,
+     1.0
+    ]
+   ]
+  },
+  "West New Brighton": {
+   "boro": "Staten Island",
+   "share": 0.999,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     1.0
+    ]
+   ]
+  },
+  "West Village": {
+   "boro": "Manhattan",
+   "share": 0.962,
+   "precinct": 6,
+   "split": [
+    [
+     6,
+     0.96
+    ]
+   ]
+  },
+  "Whitestone": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     1.0
+    ]
+   ]
+  },
+  "Williamsbridge": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 47,
+   "split": [
+    [
+     47,
+     1.0
+    ]
+   ]
+  },
+  "Windsor Terrace": {
+   "boro": "Brooklyn",
+   "share": 0.999,
+   "precinct": 72,
+   "split": [
+    [
+     72,
+     1.0
+    ]
+   ]
+  },
+  "Woodhaven": {
+   "boro": "Queens",
+   "share": 0.999,
+   "precinct": 102,
+   "split": [
+    [
+     102,
+     1.0
+    ]
+   ]
+  },
+  "Yankee Stadium": {
+   "boro": "Bronx",
+   "share": 1.0,
+   "precinct": 44,
+   "split": [
+    [
+     44,
+     1.0
+    ]
+   ]
+  },
+  "Yorkville": {
+   "boro": "Manhattan",
+   "share": 0.989,
+   "precinct": 19,
+   "split": [
+    [
+     19,
+     0.99
+    ]
+   ]
+  },
+  "Stuy Town": {
+   "boro": "Manhattan",
+   "share": 0.995,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     0.99
+    ]
+   ],
+   "alias_of": "Stuyvesant Town"
+  },
+  "Mariners Harbor": {
+   "boro": "Staten Island",
+   "share": 0.999,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     1.0
+    ]
+   ],
+   "alias_of": "Mariner's Harbor"
+  },
+  "Princes Bay": {
+   "boro": "Staten Island",
+   "share": 1.0,
+   "precinct": 123,
+   "split": [
+    [
+     123,
+     1.0
+    ]
+   ],
+   "alias_of": "Prince's Bay"
+  }
+ },
+ "localOnly": {
+  "Arverne": {
+   "boro": "Queens",
+   "share": 0.691,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     0.69
+    ],
+    [
+     101,
+     0.31
+    ]
+   ]
+  },
+  "Bedford Park": {
+   "boro": "Bronx",
+   "share": 0.754,
+   "precinct": 52,
+   "split": [
+    [
+     52,
+     0.75
+    ],
+    [
+     50,
+     0.25
+    ]
+   ]
+  },
+  "Bedford-Stuyvesant": {
+   "boro": "Brooklyn",
+   "share": 0.564,
+   "precinct": 79,
+   "split": [
+    [
+     79,
+     0.56
+    ],
+    [
+     81,
+     0.43
+    ]
+   ]
+  },
+  "Bronx Park": {
+   "boro": "Bronx",
+   "share": 0.801,
+   "precinct": 52,
+   "split": [
+    [
+     52,
+     0.8
+    ],
+    [
+     49,
+     0.15
+    ]
+   ]
+  },
+  "Carroll Gardens": {
+   "boro": "Brooklyn",
+   "share": 0.773,
+   "precinct": 76,
+   "split": [
+    [
+     76,
+     0.77
+    ],
+    [
+     78,
+     0.2
+    ]
+   ]
+  },
+  "Castleton Corners": {
+   "boro": "Staten Island",
+   "share": 0.529,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     0.53
+    ],
+    [
+     121,
+     0.47
+    ]
+   ]
+  },
+  "Chinatown": {
+   "boro": "Manhattan",
+   "share": 0.631,
+   "precinct": 5,
+   "split": [
+    [
+     5,
+     0.63
+    ],
+    [
+     7,
+     0.37
+    ]
+   ]
+  },
+  "Civic Center": {
+   "boro": "Manhattan",
+   "share": 0.761,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.76
+    ],
+    [
+     5,
+     0.24
+    ]
+   ]
+  },
+  "Cobble Hill": {
+   "boro": "Brooklyn",
+   "share": 0.773,
+   "precinct": 76,
+   "split": [
+    [
+     76,
+     0.77
+    ],
+    [
+     78,
+     0.2
+    ]
+   ]
+  },
+  "Corona Park": {
+   "boro": "Queens",
+   "share": 0.726,
+   "precinct": 110,
+   "split": [
+    [
+     110,
+     0.73
+    ],
+    [
+     112,
+     0.18
+    ],
+    [
+     107,
+     0.06
+    ]
+   ]
+  },
+  "Crotona Park East": {
+   "boro": "Bronx",
+   "share": 0.82,
+   "precinct": 42,
+   "split": [
+    [
+     42,
+     0.82
+    ],
+    [
+     43,
+     0.1
+    ],
+    [
+     41,
+     0.08
+    ]
+   ]
+  },
+  "Crown Heights": {
+   "boro": "Brooklyn",
+   "share": 0.634,
+   "precinct": 77,
+   "split": [
+    [
+     77,
+     0.63
+    ],
+    [
+     71,
+     0.36
+    ]
+   ]
+  },
+  "East Harlem": {
+   "boro": "Manhattan",
+   "share": 0.502,
+   "precinct": 23,
+   "split": [
+    [
+     23,
+     0.5
+    ],
+    [
+     25,
+     0.49
+    ]
+   ]
+  },
+  "East Midtown": {
+   "boro": "Manhattan",
+   "share": 0.804,
+   "precinct": 17,
+   "split": [
+    [
+     17,
+     0.8
+    ],
+    [
+     18,
+     0.15
+    ]
+   ]
+  },
+  "East Williamsburg": {
+   "boro": "Brooklyn",
+   "share": 0.668,
+   "precinct": 90,
+   "split": [
+    [
+     90,
+     0.67
+    ],
+    [
+     94,
+     0.33
+    ]
+   ]
+  },
+  "Edgemere": {
+   "boro": "Queens",
+   "share": 0.691,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     0.69
+    ],
+    [
+     101,
+     0.31
+    ]
+   ]
+  },
+  "Eltingville": {
+   "boro": "Staten Island",
+   "share": 0.747,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.75
+    ],
+    [
+     123,
+     0.25
+    ]
+   ]
+  },
+  "Emerson Hill": {
+   "boro": "Staten Island",
+   "share": 0.687,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.69
+    ],
+    [
+     121,
+     0.31
+    ]
+   ]
+  },
+  "Flatbush": {
+   "boro": "Brooklyn",
+   "share": 0.974,
+   "precinct": 70,
+   "split": [
+    [
+     70,
+     0.97
+    ]
+   ]
+  },
+  "Flatiron": {
+   "boro": "Manhattan",
+   "share": 0.577,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     0.58
+    ],
+    [
+     14,
+     0.37
+    ]
+   ]
+  },
+  "Flushing": {
+   "boro": "Queens",
+   "share": 0.834,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     0.83
+    ],
+    [
+     110,
+     0.16
+    ]
+   ]
+  },
+  "Flushing Meadows": {
+   "boro": "Queens",
+   "share": 0.726,
+   "precinct": 110,
+   "split": [
+    [
+     110,
+     0.73
+    ],
+    [
+     112,
+     0.18
+    ],
+    [
+     107,
+     0.06
+    ]
+   ]
+  },
+  "Fordham": {
+   "boro": "Bronx",
+   "share": 0.961,
+   "precinct": 52,
+   "split": [
+    [
+     52,
+     0.96
+    ]
+   ]
+  },
+  "Freshkills Park": {
+   "boro": "Staten Island",
+   "share": 0.514,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     0.51
+    ],
+    [
+     123,
+     0.49
+    ]
+   ]
+  },
+  "Gowanus": {
+   "boro": "Brooklyn",
+   "share": 0.773,
+   "precinct": 76,
+   "split": [
+    [
+     76,
+     0.77
+    ],
+    [
+     78,
+     0.2
+    ]
+   ]
+  },
+  "Gravesend": {
+   "boro": "Brooklyn",
+   "share": 0.4,
+   "precinct": 61,
+   "split": [
+    [
+     61,
+     0.4
+    ],
+    [
+     62,
+     0.34
+    ],
+    [
+     60,
+     0.25
+    ]
+   ]
+  },
+  "Great Kills": {
+   "boro": "Staten Island",
+   "share": 0.747,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.75
+    ],
+    [
+     123,
+     0.25
+    ]
+   ]
+  },
+  "Greenwich Village": {
+   "boro": "Manhattan",
+   "share": 0.762,
+   "precinct": 6,
+   "split": [
+    [
+     6,
+     0.76
+    ],
+    [
+     9,
+     0.24
+    ]
+   ]
+  },
+  "Harlem": {
+   "boro": "Manhattan",
+   "share": 0.599,
+   "precinct": 32,
+   "split": [
+    [
+     32,
+     0.6
+    ],
+    [
+     28,
+     0.4
+    ]
+   ]
+  },
+  "Hell's Kitchen": {
+   "boro": "Manhattan",
+   "share": 0.809,
+   "precinct": 18,
+   "split": [
+    [
+     18,
+     0.81
+    ],
+    [
+     10,
+     0.1
+    ],
+    [
+     14,
+     0.09
+    ]
+   ]
+  },
+  "Highbridge Park": {
+   "boro": "Manhattan",
+   "share": 0.518,
+   "precinct": 33,
+   "split": [
+    [
+     33,
+     0.52
+    ],
+    [
+     34,
+     0.48
+    ]
+   ]
+  },
+  "Hudson Square": {
+   "boro": "Manhattan",
+   "share": 0.629,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.63
+    ],
+    [
+     5,
+     0.37
+    ]
+   ]
+  },
+  "Hudson Yards": {
+   "boro": "Manhattan",
+   "share": 0.833,
+   "precinct": 10,
+   "split": [
+    [
+     10,
+     0.83
+    ],
+    [
+     13,
+     0.09
+    ],
+    [
+     14,
+     0.07
+    ]
+   ]
+  },
+  "Kips Bay": {
+   "boro": "Manhattan",
+   "share": 0.617,
+   "precinct": 17,
+   "split": [
+    [
+     17,
+     0.62
+    ],
+    [
+     13,
+     0.32
+    ],
+    [
+     14,
+     0.06
+    ]
+   ]
+  },
+  "Lenox Hill": {
+   "boro": "Manhattan",
+   "share": 0.706,
+   "precinct": 19,
+   "split": [
+    [
+     19,
+     0.71
+    ],
+    [
+     114,
+     0.29
+    ]
+   ]
+  },
+  "Lighthouse Hill": {
+   "boro": "Staten Island",
+   "share": 0.687,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.69
+    ],
+    [
+     121,
+     0.31
+    ]
+   ]
+  },
+  "Little Italy": {
+   "boro": "Manhattan",
+   "share": 0.629,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.63
+    ],
+    [
+     5,
+     0.37
+    ]
+   ]
+  },
+  "Long Island City": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 108,
+   "split": [
+    [
+     108,
+     1.0
+    ]
+   ]
+  },
+  "Manhattanville": {
+   "boro": "Manhattan",
+   "share": 0.723,
+   "precinct": 26,
+   "split": [
+    [
+     26,
+     0.72
+    ],
+    [
+     30,
+     0.27
+    ]
+   ]
+  },
+  "Manor Heights": {
+   "boro": "Staten Island",
+   "share": 0.687,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.69
+    ],
+    [
+     121,
+     0.31
+    ]
+   ]
+  },
+  "Midtown": {
+   "boro": "Manhattan",
+   "share": 0.576,
+   "precinct": 18,
+   "split": [
+    [
+     18,
+     0.58
+    ],
+    [
+     14,
+     0.4
+    ]
+   ]
+  },
+  "Midtown South": {
+   "boro": "Manhattan",
+   "share": 0.577,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     0.58
+    ],
+    [
+     14,
+     0.37
+    ]
+   ]
+  },
+  "Midwood": {
+   "boro": "Brooklyn",
+   "share": 0.505,
+   "precinct": 70,
+   "split": [
+    [
+     70,
+     0.5
+    ],
+    [
+     66,
+     0.46
+    ]
+   ]
+  },
+  "Murray Hill": {
+   "boro": null,
+   "share": 0.77,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     0.77
+    ],
+    [
+     17,
+     0.13
+    ],
+    [
+     13,
+     0.07
+    ]
+   ]
+  },
+  "New Lots": {
+   "boro": "Brooklyn",
+   "share": 0.827,
+   "precinct": 75,
+   "split": [
+    [
+     75,
+     0.83
+    ],
+    [
+     69,
+     0.13
+    ]
+   ]
+  },
+  "North & South Brother Islands": {
+   "boro": "Bronx",
+   "share": 0.735,
+   "precinct": 41,
+   "split": [
+    [
+     41,
+     0.73
+    ],
+    [
+     114,
+     0.25
+    ]
+   ]
+  },
+  "Ozone Park": {
+   "boro": "Queens",
+   "share": 0.584,
+   "precinct": 106,
+   "split": [
+    [
+     106,
+     0.58
+    ],
+    [
+     102,
+     0.42
+    ]
+   ]
+  },
+  "Port Richmond": {
+   "boro": "Staten Island",
+   "share": 0.647,
+   "precinct": 121,
+   "split": [
+    [
+     121,
+     0.65
+    ],
+    [
+     120,
+     0.35
+    ]
+   ]
+  },
+  "Prospect Heights": {
+   "boro": "Brooklyn",
+   "share": 0.614,
+   "precinct": 77,
+   "split": [
+    [
+     77,
+     0.61
+    ],
+    [
+     78,
+     0.38
+    ]
+   ]
+  },
+  "Red Hook": {
+   "boro": "Brooklyn",
+   "share": 0.773,
+   "precinct": 76,
+   "split": [
+    [
+     76,
+     0.77
+    ],
+    [
+     78,
+     0.2
+    ]
+   ]
+  },
+  "Rockaway Beach": {
+   "boro": "Queens",
+   "share": 0.691,
+   "precinct": 100,
+   "split": [
+    [
+     100,
+     0.69
+    ],
+    [
+     101,
+     0.31
+    ]
+   ]
+  },
+  "Roosevelt Island": {
+   "boro": "Manhattan",
+   "share": 0.706,
+   "precinct": 19,
+   "split": [
+    [
+     19,
+     0.71
+    ],
+    [
+     114,
+     0.29
+    ]
+   ]
+  },
+  "SoHo": {
+   "boro": "Manhattan",
+   "share": 0.629,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.63
+    ],
+    [
+     5,
+     0.37
+    ]
+   ]
+  },
+  "South Jamaica": {
+   "boro": "Queens",
+   "share": 0.729,
+   "precinct": 103,
+   "split": [
+    [
+     103,
+     0.73
+    ],
+    [
+     113,
+     0.27
+    ]
+   ]
+  },
+  "Springfield Gardens": {
+   "boro": "Queens",
+   "share": 0.577,
+   "precinct": 105,
+   "split": [
+    [
+     105,
+     0.58
+    ],
+    [
+     113,
+     0.42
+    ]
+   ]
+  },
+  "Sunset Park": {
+   "boro": "Brooklyn",
+   "share": 0.833,
+   "precinct": 72,
+   "split": [
+    [
+     72,
+     0.83
+    ],
+    [
+     66,
+     0.15
+    ]
+   ]
+  },
+  "Times Square": {
+   "boro": "Manhattan",
+   "share": 0.576,
+   "precinct": 18,
+   "split": [
+    [
+     18,
+     0.58
+    ],
+    [
+     14,
+     0.4
+    ]
+   ]
+  },
+  "Todt Hill": {
+   "boro": "Staten Island",
+   "share": 0.687,
+   "precinct": 122,
+   "split": [
+    [
+     122,
+     0.69
+    ],
+    [
+     121,
+     0.31
+    ]
+   ]
+  },
+  "Tribeca": {
+   "boro": "Manhattan",
+   "share": 0.761,
+   "precinct": 1,
+   "split": [
+    [
+     1,
+     0.76
+    ],
+    [
+     5,
+     0.24
+    ]
+   ]
+  },
+  "Turtle Bay": {
+   "boro": "Manhattan",
+   "share": 0.804,
+   "precinct": 17,
+   "split": [
+    [
+     17,
+     0.8
+    ],
+    [
+     18,
+     0.15
+    ]
+   ]
+  },
+  "Two Bridges": {
+   "boro": "Manhattan",
+   "share": 0.631,
+   "precinct": 5,
+   "split": [
+    [
+     5,
+     0.63
+    ],
+    [
+     7,
+     0.37
+    ]
+   ]
+  },
+  "Union Square": {
+   "boro": "Manhattan",
+   "share": 0.577,
+   "precinct": 13,
+   "split": [
+    [
+     13,
+     0.58
+    ],
+    [
+     14,
+     0.37
+    ]
+   ]
+  },
+  "University Heights": {
+   "boro": "Bronx",
+   "share": 0.525,
+   "precinct": 46,
+   "split": [
+    [
+     46,
+     0.53
+    ],
+    [
+     52,
+     0.46
+    ]
+   ]
+  },
+  "Upper West Side": {
+   "boro": "Manhattan",
+   "share": 0.507,
+   "precinct": 20,
+   "split": [
+    [
+     20,
+     0.51
+    ],
+    [
+     24,
+     0.47
+    ]
+   ]
+  },
+  "Washington Heights": {
+   "boro": "Manhattan",
+   "share": 0.522,
+   "precinct": 34,
+   "split": [
+    [
+     34,
+     0.52
+    ],
+    [
+     33,
+     0.48
+    ]
+   ]
+  },
+  "West Farms": {
+   "boro": "Bronx",
+   "share": 0.75,
+   "precinct": 48,
+   "split": [
+    [
+     48,
+     0.75
+    ],
+    [
+     49,
+     0.1
+    ],
+    [
+     43,
+     0.08
+    ]
+   ]
+  },
+  "West Harlem": {
+   "boro": "Manhattan",
+   "share": 0.723,
+   "precinct": 26,
+   "split": [
+    [
+     26,
+     0.72
+    ],
+    [
+     30,
+     0.27
+    ]
+   ]
+  },
+  "Westchester Square": {
+   "boro": "Bronx",
+   "share": 0.676,
+   "precinct": 45,
+   "split": [
+    [
+     45,
+     0.68
+    ],
+    [
+     43,
+     0.27
+    ],
+    [
+     49,
+     0.05
+    ]
+   ]
+  },
+  "Westerleigh": {
+   "boro": "Staten Island",
+   "share": 0.529,
+   "precinct": 120,
+   "split": [
+    [
+     120,
+     0.53
+    ],
+    [
+     121,
+     0.47
+    ]
+   ]
+  },
+  "Willets Point": {
+   "boro": "Queens",
+   "share": 0.834,
+   "precinct": 109,
+   "split": [
+    [
+     109,
+     0.83
+    ],
+    [
+     110,
+     0.16
+    ]
+   ]
+  },
+  "Williamsburg": {
+   "boro": "Brooklyn",
+   "share": 0.554,
+   "precinct": 90,
+   "split": [
+    [
+     90,
+     0.55
+    ],
+    [
+     94,
+     0.45
+    ]
+   ]
+  },
+  "Bed-Stuy": {
+   "boro": "Brooklyn",
+   "share": 0.564,
+   "precinct": 79,
+   "split": [
+    [
+     79,
+     0.56
+    ],
+    [
+     81,
+     0.43
+    ]
+   ],
+   "alias_of": "Bedford-Stuyvesant"
+  },
+  "LIC": {
+   "boro": "Queens",
+   "share": 0.998,
+   "precinct": 108,
+   "split": [
+    [
+     108,
+     1.0
+    ]
+   ],
+   "alias_of": "Long Island City"
+  },
+  "Hells Kitchen": {
+   "boro": "Manhattan",
+   "share": 0.809,
+   "precinct": 18,
+   "split": [
+    [
+     18,
+     0.81
+    ],
+    [
+     10,
+     0.1
+    ],
+    [
+     14,
+     0.09
+    ]
+   ],
+   "alias_of": "Hell's Kitchen"
+  }
+ }
+}

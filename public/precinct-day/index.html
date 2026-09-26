@@ -465,7 +465,7 @@ PRECINCTS.forEach(([boro,list])=>list.forEach(([c,n])=>{PCT_NAME[c]=n;PCT_BORO[c
 const pctSel=document.getElementById('pct');
 PRECINCTS.forEach(([boro,list])=>{
   const og=document.createElement('optgroup'); og.label=boro;
-  list.forEach(([c,n])=>{const o=document.createElement('option');o.value=c;o.textContent=`${c}${c<100?'th':'th'} — ${n}`;og.appendChild(o);});
+  list.forEach(([c,n])=>{const o=document.createElement('option');o.value=c;o.textContent=`${ordinal(c)} — ${n}`;og.appendChild(o);});
   pctSel.appendChild(og);
 });
 pctSel.value='75';
@@ -929,7 +929,7 @@ document.getElementById('rand').onclick=()=>{
 window.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.activeElement.tagName!=='BUTTON')load();});
 
 /* Preselect a precinct and day from the URL (?pct=75&date=2026-06-30), so another page can
-   open this explorer on a given precinct. Added in the compstat-stress-test fork. */
+   open this explorer on a given precinct. Added in the "CompStat, read closely" fork. */
 (function(){
   var q=new URLSearchParams(location.search), p=q.get('pct'), d=q.get('date');
   if(p && ALL_CODES.indexOf(+p)>-1) pctSel.value=String(+p);

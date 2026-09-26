@@ -1,4 +1,4 @@
-# CompStat, stress-tested (private fork)
+# CompStat, read closely (private fork)
 
 Read `HANDOFF.md` first: it explains what's built, how and what's left.
 

@@ -1,4 +1,4 @@
-/* Type for the stress-tested view: system grotesque for text and display, Georgia for decks. */
+/* Type for the "read closely" view: system grotesque for text and display, Georgia for decks. */
 .vc-root { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #050507; }
 .vc-display { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: -0.02em; }
 .vc-serif { font-family: Georgia, 'Times New Roman', serif; font-weight: 300; }

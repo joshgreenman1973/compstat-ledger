@@ -1,16 +1,14 @@
-# CompStat, stress-tested (private fork of CompStat Ledger)
+# CompStat, read closely (private fork of CompStat Ledger)
 
 An independent prototype, not an official Vital City product. Keep this fork private until it's ready;
 don't merge it into compstat-ledger, whose default view it would replace.
 
 Two views of NYPD's weekly CompStat numbers, built from the same data:
 
-- **CompStat, stress-tested** (default, `src/bold/`): leads with a verdict computed from the data, runs every year-over-year change through a chance test (Poisson, continuity-corrected), draws each major felony's annual history since 1993 with this year's pace as a range, maps where crime concentrates, and prints the arithmetic behind every generated claim ("Show the math"). The statistics live in `src/bold/stats.js` and are unit-tested in `src/bold/stats.test.js` against a bundled Sept. 20, 2026 report.
+- **CompStat, read closely** (default, `src/bold/`): leads with a verdict computed from the data, runs every year-over-year change through a chance test (Poisson, continuity-corrected), draws each major felony's annual history since 1993 with this year's pace as a range, maps where crime concentrates, and prints the arithmetic behind every generated claim ("Show the math"). The statistics live in `src/bold/stats.js` and are unit-tested in `src/bold/stats.test.js` against a bundled Sept. 20, 2026 report.
 - **Classic ledger** (`src/App.js`): the original dashboard, at `?classic=1`.
 
-Maps: per-resident and chance-test choropleths, eight crime-by-crime small multiples, a 2010/1993 comparison map, and a locator on each precinct page. A "Press reports" toggle adds news coverage from the GDELT news index (last three months; keyword matches, never counted in any figure).
-
-With the press toggle on, a "Coverage vs. the counts" check compares the last four weeks of news volume (GDELT) with the four before, crime by crime, against NYPD's 28-day counts over the same weeks, and flags where they point different ways; the press map lists much-covered precincts that aren't rising and real rises that drew no placed story.
+Maps: per-resident and chance-test choropleths, eight crime-by-crime small multiples, a 2010/1993 comparison map, and a locator on each precinct page. A "Press reports" toggle adds stories from seven New York City outlets in the GDELT news index (last three months only). A story is shown only if its headline names a place in the city and none outside it, and it is pinned to a precinct only if its headline names a neighborhood lying at least 85% inside that precinct, by the city's neighborhood boundaries (`tools/places/build_places.py`). Stories are leads, never counted in any figure.
 
 "Dig deeper" (collapsed on every page) embeds a copy of the nyc-precinct-day explorer, "A day on the police radio," in `public/precinct-day/`, opened on the precinct in view and the latest day in NYPD's dispatch log. The copy adds only a `?pct=&date=` preselect; keep it in sync with nyc-precinct-day by hand.
 
