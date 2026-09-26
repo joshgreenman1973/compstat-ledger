@@ -7,7 +7,8 @@ import {
 } from '../App';
 import * as S from './stats';
 import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine } from './ui';
-import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars } from './charts';
+import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP } from './charts';
+import * as PR from './press';
 import './bold.css';
 
 const DATA_BASE = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/`;
@@ -35,6 +36,78 @@ const MEASURES = {
   majors: { label: 'All seven majors', noun: 'major felonies', parts: S.MAJORS },
   property: { label: 'Property felonies', noun: 'property felonies', parts: S.PROPERTY },
 };
+
+// Small multiples: one map per crime, shaded by the chance test.
+const SMALL_MAPS = [['Murder', 'Murder'], ['Shooting Vic.', 'Shooting victims'], ['Robbery', 'Robbery'], ['Fel. Assault', 'Felony assault'],
+  ['Rape', 'Rape'], ['Burglary', 'Burglary'], ['Gr. Larceny', 'Grand larceny'], ['G.L.A.', 'Vehicle theft']];
+// Precincts whose lines were redrawn since 2010: the 121st (2013) was carved from the 120th and 122nd, and
+// the 116th from the 105th. NYPD's long-view percentages for them compare different territory.
+const REDRAWN = ['105th Precinct', '116th Precinct', '120th Precinct', '121st Precinct', '122nd Precinct'];
+const THEN_2010 = { cuts: [-25, -5, 5, 25], colors: ['#217ebe', '#90bfdf', '#e8e8ea', '#fabcaa', '#e03a30'], labels: ['25%+ below', '5–25% below', 'Within 5%', '5–25% above', '25%+ above'] };
+const THEN_1993 = { cuts: [-85, -75, -65, -50], colors: ['#1a5f8f', '#217ebe', '#4e98cb', '#90bfdf', '#d2e4f0'], labels: ['85%+ below', '75–85% below', '65–75% below', '50–65% below', 'Less than 50% below'] };
+const thenFill = (v, base) => {
+  if (v == null) return null;
+  const sc = base === 1993 ? THEN_1993 : THEN_2010;
+  if (base === 1993 && v >= 0) return '#e03a30';
+  return sc.colors[sc.cuts.filter((c) => v > c).length];
+};
+
+// AP short date from a Date.
+const apShort = (d) => (d ? S.apDate(`${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`, { year: false }) : '');
+
+function usePressArticles(url) {
+  const [state, setState] = useState({ status: 'idle' });
+  useEffect(() => {
+    if (!url) { setState({ status: 'idle' }); return undefined; }
+    let alive = true;
+    setState({ status: 'loading' });
+    PR.fetchPress(url).then((r) => { if (alive) setState(r.error ? { status: 'error', error: r.error } : { status: 'done', articles: r.articles }); });
+    return () => { alive = false; };
+  }, [url]);
+  return state;
+}
+
+function PressList({ articles, limit = 6 }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? articles : articles.slice(0, limit);
+  return (
+    <>
+      <ul className="mt-2 space-y-2">
+        {shown.map((a) => (
+          <li key={a.url} className="text-[14px] leading-snug">
+            <span className="text-[12px] text-[#707175] whitespace-nowrap mr-2" style={{ fontVariantNumeric: 'tabular-nums' }}>{apShort(a.date)} · {a.domain}</span>
+            <a href={a.url} target="_blank" rel="noopener noreferrer nofollow" className="underline decoration-[#bbb] underline-offset-2 hover:decoration-[#050507]">{a.title}</a>
+          </li>
+        ))}
+      </ul>
+      {articles.length > limit && (
+        <button type="button" onClick={() => setAll((v) => !v)} className="mt-2 text-[11px] font-bold uppercase tracking-wider text-[#555] hover:text-[#050507]">{all ? 'Show fewer' : `Show all ${articles.length}`}</button>
+      )}
+    </>
+  );
+}
+
+// Press reports for one crime family, one geography, one period.
+function PressPanel({ family, geo, periodId, reportPeriod, what }) {
+  const win = useMemo(() => PR.pressWindow(periodId, reportPeriod), [periodId, reportPeriod]);
+  const url = useMemo(() => (win && !win.empty ? PR.gdeltUrl(PR.buildQuery(family, PR.geoTerms(geo, PRECINCT_NEIGHBORHOODS)), win) : null), [win, family, geo]);
+  const state = usePressArticles(url);
+  const where = geo === 'citywide' ? 'New York City' : geo;
+  return (
+    <div className="mt-5 rounded border border-[#d6d6d6] bg-[#fafafa] p-4">
+      <div className="flex items-baseline justify-between gap-3 flex-wrap">
+        <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press reports: {what}</h4>
+        {win && !win.empty && <span className="text-[12px] text-[#707175]">{apShort(win.from)}–{apShort(win.to)}{win.clamped ? ' (news index covers the last three months)' : ''}</span>}
+      </div>
+      {(!win || win.empty) && <p className="mt-2 text-[13px] text-[#707175]">This period is older than the news index's three-month window.</p>}
+      {state.status === 'loading' && <p className="mt-2 text-[13px] text-[#707175]">Searching the news index… (it asks for a few seconds between searches)</p>}
+      {state.status === 'error' && <p className="mt-2 text-[13px] text-[#707175]">The news index didn't answer ({state.error.slice(0, 80)}). Try again in a minute.</p>}
+      {state.status === 'done' && state.articles.length === 0 && <p className="mt-2 text-[13px] text-[#707175]">No matching stories about {where} in this window.</p>}
+      {state.status === 'done' && state.articles.length > 0 && <PressList articles={state.articles} />}
+      <p className="mt-3 text-[11px] leading-snug text-[#707175]">Stories in the GDELT news index whose text matches {family === 'murder' ? 'murder-related' : family === 'shooting' ? 'shooting-related' : 'crime'} words and {geo === 'citywide' ? 'New York City' : `the ${geo} or its neighborhoods`}. Keyword matches, not verified and not counted in any figure on this page; a story can mention a place without the crime happening there.</p>
+    </div>
+  );
+}
 
 const ARC_OPTIONS = [
   ['Murder', 'Murder', 'murders'], ['Shooting Inc.', 'Shootings', 'shooting incidents'], ['Robbery', 'Robbery', 'robberies'],
@@ -97,6 +170,55 @@ function measureCounts(geoData, parts, pkey) {
     if (w && Number.isFinite(w.current_year) && Number.isFinite(w.prior_year)) { cur += w.current_year; prior += w.prior_year; any = true; }
   });
   return any ? { cur, prior } : null;
+}
+
+/* ------------------------------------------------------------------ */
+/* PRECINCT UNITS                                                      */
+/* Two views of the precincts: `precinctList` is every precinct NYPD   */
+/* reports, as reported (used for change tests); `units` folds the     */
+/* 116th into the 105th's footprint (used for maps and anything        */
+/* per-resident, since the map and 2020 populations predate the split).*/
+/* Each carries the chance test and, when the archive loaded, whether  */
+/* recent revisions could erase its change ("fragile").                */
+/* ------------------------------------------------------------------ */
+function buildUnits(raw, parts, pkey, revs, fragileWeeks) {
+  if (!raw) return { units: {}, precinctList: [] };
+  const flowFor = (keys) => {
+    if (!revs) return null;
+    let cur = 0; let prior = 0; let any = false;
+    keys.forEach((k) => parts.forEach((n) => { const f = revs.byGeo?.[k]?.[n]; if (f) { cur += f.cur; prior += f.prior; any = true; } }));
+    return any ? { cur, prior, weeks: revs.weeks } : null;
+  };
+  const finish = (u, keys) => {
+    u.pct = u.prior > 0 ? ((u.count - u.prior) / u.prior) * 100 : null;
+    u.z = S.poissonZ(u.count, u.prior);
+    u.verdict = S.verdictFor(u.z);
+    u.rate = u.pop ? (u.count / u.pop) * 100000 : null;
+    const risk = S.revisionRisk({ verdict: u.verdict, cur: u.count, prior: u.prior }, flowFor(keys), fragileWeeks);
+    u.fragile = !!risk?.fragile;
+    u.real = (u.verdict === 'drop' || u.verdict === 'rise') && !u.fragile ? u.verdict : null;
+    return u;
+  };
+  const each = [];
+  Object.keys(raw).filter((k) => k.includes('Precinct')).forEach((k) => {
+    const c = measureCounts(raw[k], parts, pkey);
+    if (!c) return;
+    const split = k === S.SPLIT_PRECINCTS.parent || k === S.SPLIT_PRECINCTS.child;
+    each.push({ num: String(parseInt(k, 10)), geoKey: k, label: k, hood: PRECINCT_NEIGHBORHOODS[k] || '', count: c.cur, prior: c.prior, pop: split ? null : (GEO_POPULATIONS[k] || null), tourist: TOURIST_PRECINCTS.includes(k), size: 1 });
+  });
+  const out = {};
+  each.forEach((u) => { out[u.num] = { ...u }; });
+  const par = String(parseInt(S.SPLIT_PRECINCTS.parent, 10)); const ch = String(parseInt(S.SPLIT_PRECINCTS.child, 10));
+  const keysFor = {};
+  each.forEach((u) => { keysFor[u.num] = [u.geoKey]; });
+  if (out[par] && out[ch]) {
+    out[par] = { ...out[par], label: '105th + 116th Precincts', hood: `${PRECINCT_NEIGHBORHOODS['105th Precinct'] || 'Southeast Queens'} and the new 116th`, count: out[par].count + out[ch].count, prior: out[par].prior + out[ch].prior, pop: GEO_POPULATIONS[S.SPLIT_PRECINCTS.parent] || null, merged: true, size: 2 };
+    keysFor[par] = [S.SPLIT_PRECINCTS.parent, S.SPLIT_PRECINCTS.child];
+    delete out[ch];
+  }
+  Object.values(out).forEach((u) => finish(u, keysFor[u.num]));
+  each.forEach((u) => finish(u, [u.geoKey]));
+  return { units: out, precinctList: each };
 }
 
 /* ------------------------------------------------------------------ */
@@ -181,6 +303,9 @@ export default function BoldApp() {
   const [mapMode, setMapMode] = useState(init.get('map') === 'signal' ? 'signal' : 'rate');
   const [scope, setScope] = useState(init.get('rows') === 'major' ? 'major' : 'all');
   const [peerKey, setPeerKey] = useState(S.PEER_GROUPS.some((g) => g.key === init.get('peers')) ? init.get('peers') : 'largest');
+  const [press, setPress] = useState(init.get('press') === '1');
+  const [thenBase, setThenBase] = useState(init.get('base') === '1993' ? 1993 : 2010);
+  const [pinSel, setPinSel] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -237,10 +362,12 @@ export default function BoldApp() {
     if (mapMode !== 'rate') p.set('map', mapMode);
     if (scope !== 'all') p.set('rows', scope);
     if (peerKey !== 'largest') p.set('peers', peerKey);
+    if (press) p.set('press', '1');
+    if (thenBase !== 2010) p.set('base', String(thenBase));
     const qs = p.toString();
     const url = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
     if (url !== window.location.pathname + window.location.search + window.location.hash) window.history.replaceState({}, '', url);
-  }, [raw, activeGeo, period, arcKey, measure, mapMode, scope, peerKey]);
+  }, [raw, activeGeo, period, arcKey, measure, mapMode, scope, peerKey, press, thenBase]);
 
   // Honor a #section deep link once content has rendered.
   const scrolledRef = useRef(false);
@@ -287,36 +414,7 @@ export default function BoldApp() {
   const measureDef = MEASURES[measure];
   const measureParts = useMemo(() => (rapeOK ? measureDef.parts : measureDef.parts.filter((n) => n !== 'Rape')), [measureDef, rapeOK]);
   const measureNoun = measureDef.noun + (measureParts.length !== measureDef.parts.length ? ' (excluding rape)' : '');
-  // Two views of the precincts: `precinctList` is every precinct NYPD reports, as reported (used for
-  // change tests); `units` folds the 116th into the 105th's footprint (used for the map and anything
-  // per-resident, since the map and 2020 populations predate the split).
-  const { units, precinctList } = useMemo(() => {
-    if (!raw) return { units: {}, precinctList: [] };
-    const finish = (u) => {
-      u.pct = u.prior > 0 ? ((u.count - u.prior) / u.prior) * 100 : null;
-      u.z = S.poissonZ(u.count, u.prior);
-      u.verdict = S.verdictFor(u.z);
-      u.rate = u.pop ? (u.count / u.pop) * 100000 : null;
-      return u;
-    };
-    const each = [];
-    Object.keys(raw).filter((k) => k.includes('Precinct')).forEach((k) => {
-      const c = measureCounts(raw[k], measureParts, pkey);
-      if (!c) return;
-      const split = k === S.SPLIT_PRECINCTS.parent || k === S.SPLIT_PRECINCTS.child;
-      each.push({ num: String(parseInt(k, 10)), geoKey: k, label: k, hood: PRECINCT_NEIGHBORHOODS[k] || '', count: c.cur, prior: c.prior, pop: split ? null : (GEO_POPULATIONS[k] || null), tourist: TOURIST_PRECINCTS.includes(k), size: 1 });
-    });
-    const out = {};
-    each.forEach((u) => { out[u.num] = { ...u }; });
-    const par = String(parseInt(S.SPLIT_PRECINCTS.parent, 10)); const ch = String(parseInt(S.SPLIT_PRECINCTS.child, 10));
-    if (out[par] && out[ch]) {
-      out[par] = { ...out[par], label: '105th + 116th Precincts', hood: `${PRECINCT_NEIGHBORHOODS['105th Precinct'] || 'Southeast Queens'} and the new 116th`, count: out[par].count + out[ch].count, prior: out[par].prior + out[ch].prior, pop: GEO_POPULATIONS[S.SPLIT_PRECINCTS.parent] || null, merged: true, size: 2 };
-      delete out[ch];
-    }
-    Object.values(out).forEach(finish);
-    each.forEach(finish);
-    return { units: out, precinctList: each };
-  }, [raw, measureParts, pkey]);
+  const { units, precinctList } = useMemo(() => buildUnits(raw, measureParts, pkey, revs, fragileWeeks), [raw, measureParts, pkey, revs, fragileWeeks]);
   const unitList = useMemo(() => Object.values(units), [units]);
   const rateUnits = useMemo(() => unitList.filter((u) => !u.tourist && u.rate != null), [unitList]);
   const zeroUnits = useMemo(() => rateUnits.filter((u) => u.count === 0).sort((a, b) => parseInt(a.num, 10) - parseInt(b.num, 10)), [rateUnits]);
@@ -354,6 +452,46 @@ export default function BoldApp() {
   const peerGroup = S.PEER_GROUPS.find((g) => g.key === peerKey) || S.PEER_GROUPS[0];
   const peers = useMemo(() => (rtci ? S.peerComparison(rtci, peerGroup) : null), [rtci, peerGroup]);
 
+  /* ---------------- crime-by-crime small multiples ---------------- */
+  const smalls = useMemo(() => SMALL_MAPS.filter(([name]) => rapeOK || name !== 'Rape').map(([name, label]) => {
+    const { units: u, precinctList: pl } = buildUnits(raw, [name], pkey, revs, fragileWeeks);
+    return { name, label, units: u, rises: pl.filter((x) => x.real === 'rise').length, drops: pl.filter((x) => x.real === 'drop').length, fragile: pl.filter((x) => x.fragile).length, n: pl.length };
+  }), [raw, pkey, revs, fragileWeeks, rapeOK]);
+
+  /* ---------------- then and now: NYPD's own long-view columns, by precinct ---------------- */
+  const thenNow = useMemo(() => {
+    if (!raw) return null;
+    const key = thenBase === 1993 ? '31_yr_pct' : '14_yr_pct';
+    const rows = [];
+    Object.keys(raw).filter((k) => k.includes('Precinct')).forEach((k) => {
+      const v = raw[k]?.total_seven_major?.historical?.[key];
+      rows.push({ geoKey: k, num: String(parseInt(k, 10)), hood: PRECINCT_NEIGHBORHOODS[k] || '', v: Number.isFinite(v) ? v : null, redrawn: REDRAWN.includes(k) });
+    });
+    const usable = rows.filter((r) => r.v != null && !r.redrawn);
+    return { key, rows, usable, above: usable.filter((r) => r.v > 0).length, below: usable.filter((r) => r.v < 0).length };
+  }, [raw, thenBase]);
+
+  /* ---------------- press layer: map pins (citywide query for the map's measure) ---------------- */
+  const placeIndex = useMemo(() => PR.buildPlaceIndex(PRECINCT_NEIGHBORHOODS), []);
+  const pinUrl = useMemo(() => {
+    if (!press || !cityData) return null;
+    const win = PR.pressWindow(period, cityData.report_period);
+    return win && !win.empty ? PR.gdeltUrl(PR.buildQuery(PR.PRESS_TERMS_FOR_MEASURE[measure], PR.geoTerms('citywide')), win) : null;
+  }, [press, cityData, period, measure]);
+  const pinState = usePressArticles(pinUrl);
+  const pins = useMemo(() => {
+    if (!press || pinState.status !== 'done') return null;
+    const out = {};
+    pinState.articles.forEach((a) => {
+      const hit = PR.placeHeadline(a.title, placeIndex);
+      if (!hit || !raw?.[hit.precinct]) return;
+      let num = String(parseInt(hit.precinct, 10));
+      if (hit.precinct === S.SPLIT_PRECINCTS.child) num = String(parseInt(S.SPLIT_PRECINCTS.parent, 10));
+      (out[num] = out[num] || []).push({ ...a, via: hit.via, precinct: hit.precinct });
+    });
+    return out;
+  }, [press, pinState, placeIndex, raw]);
+
   const downloadCSV = useCallback((filename, table) => {
     const esc = (c) => { const s = c == null ? '' : String(c); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const blob = new Blob([table.map((r) => r.map(esc).join(',')).join('\n')], { type: 'text/csv;charset=utf-8;' });
@@ -367,12 +505,9 @@ export default function BoldApp() {
   const masthead = (
     <header className="bg-[#050507] text-white vc-noprint">
       <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-5 pb-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <a href="https://www.vitalcitynyc.org/" target="_blank" rel="noopener noreferrer" aria-label="Vital City">
-            <img src={`${process.env.PUBLIC_URL}/vc-wordmark.jpg`} alt="Vital City" className="vc-wordmark-dark h-[18px] w-auto" />
-          </a>
-          <span className="h-5 w-px bg-white/25" />
-          <span className="text-[12px] font-bold uppercase tracking-[0.2em] text-white/80">CompStat, stress-tested</span>
+        <div className="flex items-center gap-3">
+          <span className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, stress-tested</span>
+          <span className="rounded-full border border-white/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/70">Prototype</span>
         </div>
         {raw && (
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -432,7 +567,8 @@ export default function BoldApp() {
       : `${S.fmtSigned(tr.cur)} major felonies`;
     const tilt = tr.cur > 0 ? 'Because they mostly add crimes, revisions tilt these comparisons toward decline.'
       : tr.cur < 0 ? 'Here they have mostly subtracted crimes, which tilts these comparisons toward increase.' : '';
-    return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against moved ${S.fmtSigned(tr.prior)}. ${tilt} A real change that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile and kept out of the headline.`.replace(/ {2,}/g, ' ');
+    const priorMoved = Math.round(tr.prior) === 0 ? "didn't move" : `moved ${S.fmtSigned(tr.prior)}`;
+    return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against ${priorMoved}. ${tilt} A real change that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile and kept out of the headline.`.replace(/ {2,}/g, ' ');
   })();
 
   const tiles = [
@@ -459,7 +595,7 @@ export default function BoldApp() {
 
   const navItems = [
     ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
-    ...(unitList.length > 0 ? [['where', 'Where']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['ledger', 'Ledger'], ['method', 'Method'],
+    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['ledger', 'Ledger'], ['method', 'Method'],
   ];
 
   return (
@@ -474,6 +610,8 @@ export default function BoldApp() {
               The live feed couldn't be reached, so this page is showing a copy of NYPD's citywide report for the week ending {S.apDate(weekEnd)}, bundled with the page. Precinct views need the live feed.
             </div>
           )}
+          <div className={selectedNum ? 'lg:grid lg:grid-cols-[1fr_260px] lg:gap-10' : ''}>
+          <div>
           <Kicker dark>{isCity ? 'Citywide' : activeGeo}{!isCity && PRECINCT_NEIGHBORHOODS[activeGeo] ? ` · ${PRECINCT_NEIGHBORHOODS[activeGeo]}` : ''} · {P.eyebrow}</Kicker>
           <h1 id="verdict-h" className="vc-display vc-hero-headline font-black leading-[0.98] tracking-tight text-[40px] sm:text-[60px] md:text-[76px] lg:text-[88px] max-w-[15ch]">
             {headline.sentences.map((s, i) => (
@@ -489,6 +627,14 @@ export default function BoldApp() {
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {PRECINCT_NEIGHBORHOODS[activeGeo]}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
           {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created from part of the 105th. NYPD reports each separately with prior-year comparisons, but the 2020 Census populations and precinct map predate the split, so per-resident rates for either alone would be wrong.</p>}
+          </div>
+          {selectedNum && (
+            <div className="mt-8 lg:mt-2 max-w-[260px]">
+              <MiniMap dark fills={{ [selectedNum]: '#dde44c' }} selectedNum={selectedNum} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the ${activeGeo} highlighted among New York City's precincts.`} minWidth={160} />
+              <p className="mt-2 text-[11px] uppercase tracking-widest text-white/50">{isSplit ? 'The 105th and 116th share one shape on this map' : 'Tap another precinct to switch'}</p>
+            </div>
+          )}
+          </div>
 
           <div className="mt-10 grid grid-cols-2 lg:grid-cols-4 border-t border-white/15">
             {tiles.map(({ key, label, r }) => (
@@ -519,6 +665,10 @@ export default function BoldApp() {
             <a key={id} href={`#${id}`} className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#555] hover:text-[#050507] px-2.5 py-1.5 rounded-full hover:bg-[#f7f8dd]">{label}</a>
           ))}
           <span className="ml-auto pl-3 flex items-center gap-3">
+            <button type="button" aria-pressed={press} onClick={() => setPress((v) => !v)} title="Show news coverage of these crimes, for this place and period, from the GDELT news index"
+              className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${press ? 'bg-[#050507] text-white border-[#050507]' : 'border-[#d6d6d6] text-[#555] hover:text-[#050507]'}`}>
+              Press reports: {press ? 'on' : 'off'}
+            </button>
             <span className="hidden md:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : activeGeo}</span>
             {!isCity && <button onClick={() => selectGeo('citywide')} className="text-[11px] font-bold uppercase tracking-wider text-[#ff7c53] hover:text-[#050507]">← Citywide</button>}
           </span>
@@ -565,6 +715,7 @@ export default function BoldApp() {
                     <span className="flex items-center gap-2 text-[13px]" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} <Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}</span>
                   </div>
                   <UnitChart cur={r.cur} prior={r.prior} noun={noun} priorLabel={P.priorLabel} curLabel={P.since} />
+                  {press && <PressPanel family={noun === 'murders' ? 'murder' : 'shooting'} geo={activeGeo} periodId={period} reportPeriod={geoData.report_period} what={noun === 'murders' ? 'Murders' : 'Shootings'} />}
                 </div>
               ))}
             </div>
@@ -647,8 +798,8 @@ export default function BoldApp() {
                 return `The ${activeGeo} ranks No. ${rank} of ${ranked.length} precincts for ${measureNoun} per resident, at ${rel}.`;
               }
               if (mapMode === 'signal') {
-                const up = precinctList.filter((u) => u.verdict === 'rise').length;
-                const down = precinctList.filter((u) => u.verdict === 'drop').length;
+                const up = precinctList.filter((u) => u.real === 'rise').length;
+                const down = precinctList.filter((u) => u.real === 'drop').length;
                 return `${capFirst(nw(up))} ${up === 1 ? 'precinct shows' : 'precincts show'} a real rise in ${measureNoun} ${P.since}; ${nw(down)} ${down === 1 ? 'shows' : 'show'} a real drop.`;
               }
               if (!conc || conc.total < 20) return `${capFirst(measureNoun)} by precinct ${P.since}.`;
@@ -656,7 +807,7 @@ export default function BoldApp() {
               return `At least half the city's ${measureNoun} ${P.since} ${verb} in ${nw(conc.kPrecincts)} of ${conc.nPrecincts} precincts, home to ${Math.round(conc.popShare * 100)}% of New Yorkers.`;
             })()}
             dek={mapMode === 'signal'
-              ? 'Each precinct is shaded by whether its change clears the same chance test used above. Click a precinct to open it.'
+              ? `Each precinct is shaded by whether its change clears the same chance test used above.${precinctList.some((u) => u.fragile) ? ` ${capFirst(nw(precinctList.filter((u) => u.fragile).length))} more ${precinctList.filter((u) => u.fragile).length === 1 ? 'clears' : 'clear'} it but ${precinctList.filter((u) => u.fragile).length === 1 ? 'is' : 'are'} fragile (recent revisions could erase ${precinctList.filter((u) => u.fragile).length === 1 ? 'it' : 'them'}), so ${precinctList.filter((u) => u.fragile).length === 1 ? 'it is' : 'they are'} shaded as noise.` : ''} Click a precinct to open it.`
               : 'Shaded by rate per 100,000 residents, in fifths. Click a precinct to open it.'}
           />
           <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -670,14 +821,40 @@ export default function BoldApp() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
             <div className="lg:col-span-3">
-              <PrecinctMap units={units} mode={mapMode} cuts={cuts} selectedNum={selectedNum} onSelect={selectGeo} measureNoun={measureNoun} />
+              <PrecinctMap units={units} mode={mapMode} cuts={cuts} selectedNum={selectedNum} onSelect={selectGeo} measureNoun={measureNoun} pins={press ? pins : null} onPin={setPinSel} />
               <div className="mt-3"><MapLegend mode={mapMode} cuts={cuts} periodNote={P.since} /></div>
+              {press && (
+                <div className="mt-5 rounded border border-[#d6d6d6] bg-[#fafafa] p-4">
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press layer: {PR.PRESS_TERMS_FOR_MEASURE[measure]} stories that name a precinct's neighborhood</h4>
+                  {pinState.status === 'loading' && <p className="mt-2 text-[13px] text-[#707175]">Searching the news index…</p>}
+                  {pinState.status === 'error' && <p className="mt-2 text-[13px] text-[#707175]">The news index didn't answer. Try again in a minute.</p>}
+                  {pinState.status === 'idle' && <p className="mt-2 text-[13px] text-[#707175]">This period is older than the news index's three-month window.</p>}
+                  {pinState.status === 'done' && pins && (() => {
+                    const placed = Object.values(pins).reduce((n, l) => n + l.length, 0);
+                    const groups = Object.entries(pins).sort((a, b) => (b[0] === pinSel) - (a[0] === pinSel) || b[1].length - a[1].length);
+                    return (
+                      <>
+                        <p className="mt-2 text-[13px] text-[#555]">{S.fmtInt(placed)} of {S.fmtInt(pinState.articles.length)} matching stories name a neighborhood that belongs to a single precinct; each dot counts them. The rest aren't placed.</p>
+                        <div className="mt-3 space-y-4 max-h-[420px] overflow-y-auto pr-2">
+                          {groups.map(([num, list]) => (
+                            <div key={num} className={num === pinSel ? 'rounded bg-[#f7f8dd] -mx-2 px-2 py-1' : ''}>
+                              <button type="button" onClick={() => selectGeo(list[0].precinct === S.SPLIT_PRECINCTS.child ? S.SPLIT_PRECINCTS.child : (units[num]?.geoKey || list[0].precinct))} className="text-[13px] font-black hover:underline">{units[num]?.label || list[0].precinct} ({list.length})</button>
+                              <PressList articles={list} limit={3} />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
+                  <p className="mt-3 text-[11px] leading-snug text-[#707175]">From the GDELT news index, placed by a neighborhood named in the headline (names shared by two precincts, or common elsewhere, are skipped). Keyword matches, not verified and not counted in any figure.</p>
+                </div>
+              )}
             </div>
             <div className="lg:col-span-2 space-y-8">
               {(mapMode === 'signal'
                 ? [
-                  ['Real rises', precinctList.filter((u) => u.verdict === 'rise').sort((a, b) => b.z - a.z), 'None'],
-                  ['Real drops', precinctList.filter((u) => u.verdict === 'drop').sort((a, b) => a.z - b.z), 'None'],
+                  ['Real rises', precinctList.filter((u) => u.real === 'rise').sort((a, b) => b.z - a.z), 'None'],
+                  ['Real drops', precinctList.filter((u) => u.real === 'drop').sort((a, b) => a.z - b.z), 'None'],
                 ]
                 : [
                   ['Highest rates', [...rateUnits].sort((a, b) => b.rate - a.rate).slice(0, 8), '—'],
@@ -725,6 +902,98 @@ export default function BoldApp() {
             Rates use 2020 Census population by precinct (John Keefe's census-by-precincts crosswalk). The 14th, 18th and 22nd precincts (Midtown and Central Park) draw far more workers and visitors than they have residents, so they're excluded from rate shading and rankings. The 116th Precinct was created from part of the 105th; the map and population figures predate the split, so the two are combined here.
           </SourceLine>
         </section>
+        )}
+
+        {/* ============================ CRIME BY CRIME ============================ */}
+        {smalls.length > 0 && smalls[0].n > 0 && (
+          <section id="by-crime" className="pt-14 pb-12 border-b border-[#e6e6e6] scroll-mt-14">
+            <SectionHead
+              id="by-crime"
+              kicker="Crime by crime"
+              title={(() => {
+                const d = smalls.reduce((n, x) => n + x.drops, 0); const r = smalls.reduce((n, x) => n + x.rises, 0);
+                return `Across ${nw(smalls.length)} crimes in ${smalls[0].n} precincts, NYPD's counts show ${S.fmtInt(d)} real ${d === 1 ? 'drop' : 'drops'} and ${S.fmtInt(r)} real ${r === 1 ? 'rise' : 'rises'} ${P.since}.`;
+              })()}
+              dek={`One map per crime, each precinct shaded by the chance test (fragile changes count as noise). Blue is a real drop, red a real rise, gray noise. Tap a precinct to open it.${!rapeOK ? ' Rape is left out because its legal definition changed within the comparison window.' : ''}`}
+            />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-8">
+              {smalls.map((m) => {
+                const fills = {}; const titles = {};
+                Object.values(m.units).forEach((u) => {
+                  const b = S.zBin(u.fragile ? 0 : u.z);
+                  if (b != null) fills[u.num] = SIGNAL_RAMP[b];
+                  titles[u.num] = `${u.label}: ${S.fmtInt(u.count)} vs. ${S.fmtInt(u.prior)}${u.pct != null ? ` (${S.fmtPct(u.pct, 0)})` : ''}, ${u.real ? `real ${u.real}` : u.fragile ? 'fragile' : u.verdict === 'none' ? 'none either year' : 'noise'}`;
+                });
+                return (
+                  <div key={m.name}>
+                    <div className="border-b border-[#050507] pb-1.5 mb-2">
+                      <h3 className="text-[13px] font-black uppercase tracking-[0.1em]">{m.label}</h3>
+                      <div className="text-[12px] text-[#555]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        <span style={{ color: SIGNAL_RAMP['-2'] }} aria-hidden="true">▼</span> {m.drops} real {m.drops === 1 ? 'drop' : 'drops'} · <span style={{ color: SIGNAL_RAMP['2'] }} aria-hidden="true">▲</span> {m.rises} real {m.rises === 1 ? 'rise' : 'rises'}
+                      </div>
+                    </div>
+                    <MiniMap fills={fills} titles={titles} selectedNum={selectedNum} onSelect={(num) => m.units[num] && selectGeo(m.units[num].geoKey)} label={`${m.label}: ${m.drops} precincts with a real drop and ${m.rises} with a real rise ${P.since}.`} />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4"><MapLegend mode="signal" cuts={[]} /></div>
+          </section>
+        )}
+
+        {/* ============================ THEN AND NOW ============================ */}
+        {period === 'ytd' && thenNow && thenNow.usable.length > 0 && (
+          <section id="then-now" className="pt-14 pb-12 border-b border-[#e6e6e6] scroll-mt-14">
+            <SectionHead
+              id="then-now"
+              kicker="Then and now"
+              title={thenBase === 2010
+                ? `Major felonies are running above their 2010 level in ${S.fmtInt(thenNow.above)} of ${S.fmtInt(thenNow.usable.length)} precincts.`
+                : `Major felonies are below their 1993 level in ${S.fmtInt(thenNow.below)} of ${S.fmtInt(thenNow.usable.length)} precincts, by ${Math.round(Math.min(...thenNow.usable.map((r) => Math.abs(r.v))))}% to ${Math.round(Math.max(...thenNow.usable.map((r) => Math.abs(r.v))))}%.`}
+              dek={`NYPD's own comparison of the seven major felonies so far this year with the same stretch of ${thenBase}, precinct by precinct. The 105th, 116th, 120th, 121st and 122nd are hatched and left out: their lines were redrawn when the 121st and 116th were created, so the comparison covers different ground.`}
+              right={<Segmented label="Base year" size="sm" value={String(thenBase)} onChange={(v) => setThenBase(+v)} options={[['2010', 'vs. 2010'], ['1993', 'vs. 1993']]} />}
+            />
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+              <div className="lg:col-span-3">
+                {(() => {
+                  const fills = {}; const titles = {}; const hatch = {};
+                  thenNow.rows.forEach((r) => {
+                    const num = r.num === '116' ? '105' : r.num;
+                    if (r.redrawn) { hatch[num] = true; titles[num] = `${r.geoKey}: lines redrawn since ${thenBase}, left out`; return; }
+                    const f = thenFill(r.v, thenBase);
+                    if (f) fills[num] = f;
+                    titles[num] = `${r.geoKey}${r.hood ? ` (${r.hood})` : ''}: ${r.v == null ? 'no comparison' : `${S.fmtPct(r.v, 0)} vs. ${thenBase}`}`;
+                  });
+                  return <MiniMap fills={fills} titles={titles} hatch={hatch} selectedNum={selectedNum} onSelect={(num) => { const r = thenNow.rows.find((x) => x.num === num); if (r) selectGeo(r.geoKey); }} label={`Map: seven major felonies this year versus the same stretch of ${thenBase}, by precinct.`} minWidth={260} />;
+                })()}
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-[#444]">
+                  {(thenBase === 1993 ? THEN_1993 : THEN_2010).labels.map((l, i) => <span key={l} className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: (thenBase === 1993 ? THEN_1993 : THEN_2010).colors[i] }} />{l}</span>)}
+                  <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #f1f1f1 0 2px, #9a9a9a 2px 3px)' }} />Lines redrawn</span>
+                </div>
+              </div>
+              <div className="lg:col-span-2 space-y-8">
+                {[
+                  [thenBase === 2010 ? 'Furthest above 2010' : 'Smallest declines since 1993', [...thenNow.usable].sort((a, b) => b.v - a.v).slice(0, 6)],
+                  [thenBase === 2010 ? 'Furthest below 2010' : 'Largest declines since 1993', [...thenNow.usable].sort((a, b) => a.v - b.v).slice(0, 6)],
+                ].map(([title, list]) => (
+                  <div key={title}>
+                    <h3 className="text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-1">{title}</h3>
+                    <ul>
+                      {list.map((r) => (
+                        <li key={r.geoKey}>
+                          <button type="button" onClick={() => selectGeo(r.geoKey)} className="w-full flex items-baseline justify-between gap-3 py-1.5 text-left border-b border-[#f0f0f0] hover:bg-[#f7f8dd]">
+                            <span className="min-w-0"><span className="text-[14px] font-bold">{r.geoKey.replace(' Precinct', '')}</span>{r.hood && <span className="text-[12px] text-[#707175]"> · {r.hood.split(',')[0]}</span>}</span>
+                            <strong className="text-[13px]" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtPct(r.v, 0)}</strong>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <SourceLine>NYPD CompStat's long-view columns (year to date versus the same stretch of {thenBase}), which NYPD computes per precinct. Citywide, the seven majors are {S.fmtPct(cityData?.total_seven_major?.historical?.[thenNow.key], 0)} versus {thenBase}.</SourceLine>
+          </section>
         )}
 
         {/* ============================ OTHER CITIES ============================ */}
@@ -866,6 +1135,10 @@ export default function BoldApp() {
               <p>NYPD's weekly numbers are first counts. Victims die and assaults become murders; cases get upgraded, downgraded or filed late. <a className="underline" href={VC_REVISIONS_URL} target="_blank" rel="noopener noreferrer">A Vital City analysis by John Hall</a>, a retired NYPD deputy inspector, found every one of 95 monthly reports from 2018 to 2025 was later revised upward, by about 2.7% on average and 13.5% for murder. Last year's comparison figures have mostly settled, so revisions tilt CompStat's comparisons toward decline. We measure the recent pace from consecutive archived reports (this week's year-to-date total, minus last week's, minus this week's own count) and mark a real change fragile if {nw(S.REVISION_WEEKS)} more weeks of revisions at that pace could erase it (fewer for 28-day and weekly counts, which can only absorb a few weeks' worth). Fragile changes never headline, and the full-year pace range is widened by the same allowance.</p>
             </div>
             <div>
+              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Press reports</h3>
+              <p>The press toggle searches the <a className="underline" href="https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/" target="_blank" rel="noopener noreferrer">GDELT news index</a> for stories using crime words (murder, shooting and so on) alongside the place you're viewing, within the period you've chosen. GDELT only covers the last three months, and asks for a pause of several seconds between searches. These are keyword matches: we don't verify them, we don't count them, and a story can name a neighborhood without the crime happening there. On the map, a story is pinned only if its headline names a neighborhood that belongs to a single precinct.</p>
+            </div>
+            <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">What CompStat can't see</h3>
               <p>These are crimes reported to and recorded by police. They miss what never gets reported, and they move when reporting, classification or enforcement changes. CompStat figures are preliminary and NYPD revises them. Per-resident rates use 2020 Census counts, which ignore commuters and visitors, and are withheld where that distortion is severe.</p>
             </div>
@@ -876,16 +1149,15 @@ export default function BoldApp() {
         </section>
       </main>
 
-      <footer className="bg-[#ff7c53] text-[#050507]">
+      <footer className="bg-[#050507] text-white/80">
         <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
           <div>
-            <img src={`${process.env.PUBLIC_URL}/vc-wordmark.jpg`} alt="Vital City" className="h-[22px] w-auto mix-blend-multiply" />
-            <p className="mt-3 max-w-xl text-[14px] leading-snug">An independent New York journal of public safety and urban policy. Data refreshes after NYPD posts each weekly CompStat report.</p>
+            <div className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, stress-tested</div>
+            <p className="mt-3 max-w-xl text-[14px] leading-snug">An independent prototype, not an official Vital City product. Data refreshes after NYPD posts each weekly CompStat report.</p>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-[12px] font-bold uppercase tracking-[0.14em]">
             <a className="hover:underline" href="https://compstat.nypdonline.org/" target="_blank" rel="noopener noreferrer">NYPD CompStat</a>
             <a className="hover:underline" href="?classic=1">Classic view</a>
-            <a className="hover:underline" href="https://github.com/joshgreenman1973/compstat-ledger" target="_blank" rel="noopener noreferrer">Source code</a>
           </div>
         </div>
       </footer>

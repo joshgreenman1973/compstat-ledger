@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-// Vital City brand tokens. Verdict colors are a blue/red diverging pair around a neutral
+// Palette tokens. Verdict colors are a blue/red diverging pair around a neutral
 // gray (validated for protan/deutan separation); ▼ / ▲ / ~ glyphs and text labels carry the
 // same meaning so color is never the only cue.
 export const C = {
@@ -16,13 +16,13 @@ export const VERDICT = {
   none: { label: 'Zero both years', glyph: '·', color: '#bbbbbb', onDark: '#777777', tint: '#f2f2f2' },
 };
 
-export function useWidth(initial = 800) {
+export function useWidth(initial = 800, min = 260) {
   const ref = useRef(null);
   const [w, setW] = useState(initial);
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
-    const measure = () => setW(Math.max(260, Math.round(el.getBoundingClientRect().width)));
+    const measure = () => setW(Math.max(min, Math.round(el.getBoundingClientRect().width)));
     measure();
     if (typeof ResizeObserver === 'undefined') {
       window.addEventListener('resize', measure);
@@ -31,7 +31,7 @@ export function useWidth(initial = 800) {
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [min]);
   return [ref, w];
 }
 

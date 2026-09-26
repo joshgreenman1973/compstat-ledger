@@ -227,7 +227,7 @@ export function LongArc({ series, pace, events = [], noun }) {
 export const RATE_RAMP = ['#fde5dd', '#fabcaa', '#f69577', '#fb693c', '#e03a30'];
 export const SIGNAL_RAMP = { '-2': '#217ebe', '-1': '#90bfdf', 0: '#e8e8ea', 1: '#fabcaa', 2: '#e03a30' };
 
-export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun }) {
+export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun, pins = null, onPin }) {
   const [ref, w] = useWidth(640);
   const [hover, setHover] = useState(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -239,7 +239,8 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
   const fillFor = (u) => {
     if (!u) return '#f4f4f4';
     if (mode === 'signal') {
-      const b = zBin(u.z);
+      // A change recent revisions could erase is shaded as noise, same rule as the headline.
+      const b = zBin(u.fragile ? 0 : u.z);
       return b == null ? '#f4f4f4' : SIGNAL_RAMP[b];
     }
     if (u.tourist || u.rate == null) return '#efefef';
@@ -280,6 +281,20 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
             </g>
           );
         })}
+        {pins && features.filter((f) => pins[f.properties.precinct]).map((f) => {
+          const num = f.properties.precinct; const n = pins[num].length;
+          const [cx, cy] = pathFn.centroid(f);
+          if (!Number.isFinite(cx)) return null;
+          const r = 7 + Math.min(10, Math.sqrt(n) * 3);
+          return (
+            <g key={`pin-${num}`} style={{ cursor: 'pointer' }} onClick={() => onPin && onPin(num)}>
+              <title>{`${n} press ${n === 1 ? 'report names' : 'reports name'} this precinct's area: ${pins[num].slice(0, 3).map((a) => a.title).join(' · ')}`}</title>
+              <circle cx={cx} cy={cy} r={r + 2} fill={C.white} />
+              <circle cx={cx} cy={cy} r={r} fill={C.ink} />
+              <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="800" fill={C.white}>{n}</text>
+            </g>
+          );
+        })}
       </svg>
       {hovered && (
         <div className="absolute pointer-events-none z-20 bg-white border border-[#ddd] shadow-xl rounded p-3 text-[12px] w-[230px]" style={{ left: clamp(mouse.x + 14, 0, w - 236), top: clamp(mouse.y - 10, 0, h - 150) }}>
@@ -291,6 +306,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
             {hovered.rate != null && !hovered.tourist && <div className="mt-1">{hovered.rate.toFixed(1)} per 100k residents</div>}
             {hovered.tourist && <div className="mt-1 text-[#707175] italic">Commuter and visitor hub; per-resident rate not meaningful</div>}
             {hovered.merged && <div className="mt-1 text-[#707175] italic">105th and 116th shown combined (see note)</div>}
+            {hovered.fragile && <div className="mt-1 text-[#707175] italic">Fragile: recent revisions could erase this change, so the map shades it as noise</div>}
           </div>
           <div className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-[#ff7c53]">Click to open</div>
         </div>
@@ -319,6 +335,49 @@ export function MapLegend({ mode, cuts, periodNote }) {
       <span className="text-[#707175]">Per 100k residents{periodNote ? `, ${periodNote}` : ''} (fifths):</span>
       {cuts.length === 4 && labels.map((l, i) => <span key={l} className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: RATE_RAMP[i] }} />{l}</span>)}
       <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #efefef 0 2px, #9a9a9a 2px 3px)' }} />Commuter and visitor hubs (14th, 18th, 22nd)</span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* MINI MAP — small multiples, the then-and-now map, the hero locator.  */
+/* Every shape carries a native tooltip; the lists beside each map     */
+/* carry the same values for keyboard and screen-reader users.         */
+/* ------------------------------------------------------------------ */
+let miniId = 0;
+export function MiniMap({ fills = {}, titles = {}, hatch = {}, selectedNum = null, onSelect, dark = false, label, minWidth = 120 }) {
+  const [ref, w] = useWidth(300, minWidth);
+  const h = Math.round(w * 0.98);
+  const pathFn = useMemo(() => geoPath().projection(geoMercator().fitSize([w, h], precinctGeoJSON)), [w, h]);
+  const [hatchId] = useState(() => `mm-hatch-${++miniId}`);
+  const ordered = [...precinctGeoJSON.features].sort((a, b) => (a.properties.precinct === selectedNum) - (b.properties.precinct === selectedNum));
+  return (
+    <div ref={ref} className="w-full">
+      <svg width={w} height={h} role="img" aria-label={label}>
+        <defs>
+          <pattern id={hatchId} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="5" stroke={dark ? '#ffffff' : '#707175'} strokeOpacity="0.45" strokeWidth="1" />
+          </pattern>
+        </defs>
+        {ordered.map((f) => {
+          const num = f.properties.precinct; const sel = num === selectedNum; const d = pathFn(f);
+          return (
+            <g key={num}>
+              <path
+                d={d}
+                fill={fills[num] || (dark ? '#232328' : '#f1f1f1')}
+                stroke={sel ? (dark ? C.chartreuse : C.ink) : (dark ? '#050507' : C.white)}
+                strokeWidth={sel ? 2 : 0.4}
+                style={{ cursor: onSelect ? 'pointer' : 'default' }}
+                onClick={() => onSelect && onSelect(num)}
+              >
+                {titles[num] && <title>{titles[num]}</title>}
+              </path>
+              {hatch[num] && <path d={d} fill={`url(#${hatchId})`} pointerEvents="none" />}
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

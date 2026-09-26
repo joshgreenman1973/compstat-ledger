@@ -1,9 +1,7 @@
-/* Type for the stress-tested view. Halyard / Gascogne are Vital City's faces; these stacks
-   fall back to the brand's named web fallbacks when the licensed fonts aren't installed. */
-.vc-root { font-family: 'Halyard Text', 'Halyard', 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #050507; }
-.vc-display { font-family: 'Halyard Display', 'Halyard', 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: -0.02em; }
-.vc-serif { font-family: 'Gascogne', Georgia, 'Times New Roman', serif; font-weight: 300; }
-.vc-wordmark-dark { filter: invert(1); mix-blend-mode: screen; }
+/* Type for the stress-tested view: system grotesque for text and display, Georgia for decks. */
+.vc-root { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #050507; }
+.vc-display { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; letter-spacing: -0.02em; }
+.vc-serif { font-family: Georgia, 'Times New Roman', serif; font-weight: 300; }
 .vc-root a:focus-visible, .vc-root button:focus-visible, .vc-root input:focus-visible {
   outline: 2px solid #dde44c; outline-offset: 2px;
 }
