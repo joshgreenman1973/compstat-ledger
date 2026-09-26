@@ -118,28 +118,12 @@ for a, s_ in big:
     expect(t, f'{rate[a]:.1f}', f'peer rate {a}')
 higher = sum(v > rate['New York City'] for a, v in rate.items() if a != 'New York City')
 expect(t, f'lower than in {words[higher].lower()} of the eight other largest U.S. cities', 'peer headline')
-# press layer, against the fake GDELT reply in gdelt-mock.json: only city stories from local outlets,
-# inside the report week, placed only where the headline allows
+# the press layer was removed Sept. 26, 2026; make sure no trace of it renders
 def absent(text, needle, why):
     global oks
     if needle in text: fails.append(f'SHOULD BE ABSENT [{why}]: {needle!r}')
     else: oks += 1
-pt = open(f'{SP}/press.txt').read()
-for needle, why in [('[TEST] Man shot in East New York stairwell', 'placed story'), ('(placed by "East New York")', 'placement shown'),
-                    ('[TEST] Shooting in Bed-Stuy leaves one hurt', 'city story, unplaced, title respaced'),
-                    ('[TEST] NYPD: gunfire reported in the 75th Precinct', 'outlet tag stripped'),
-                    ('Four of the five stories that place themselves in the city name a neighborhood lying inside one precinct', 'placement count')]:
-    expect(pt, needle, why)
-for needle, why in [('Brooklyn, Illinois', 'outside the city'), ('Shooting at a Queens bar', 'not a local outlet'),
-                    ('Shootings in the Bronx demand action', 'opinion'), ('after the report week', 'after the window'),
-                    ('Coverage vs. the counts', 'coverage check removed')]:
-    absent(pt, needle, why)
-p75all = open(f'{SP}/press75.txt').read()
-# just the 75th's own shooting panel (the citywide map's pin list further down lists every precinct)
-p75 = p75all[p75all.index('PRESS REPORTS: SHOOTINGS'):p75all.index('WHERE IT HAPPENS')]
-expect(p75, '[TEST] Man shot in East New York stairwell', '75th panel: placed story')
-absent(p75, '[TEST] Teen wounded in Brownsville shooting', '75th panel: 73rd story kept out')
-expect(p75.upper(), "SHOW 1 BROOKLYN STORY THAT CAN'T BE PLACED IN A PRECINCT", '75th panel: borough-only stories offered separately')
+absent(t.upper(), 'PRESS REPORTS', 'press layer removed')
 print(f'{oks} checks passed, {len(fails)} failed')
 print('\n'.join(fails[:40]))
 sys.exit(1 if fails else 0)

@@ -227,7 +227,7 @@ export function LongArc({ series, pace, events = [], noun }) {
 export const RATE_RAMP = ['#fde5dd', '#fabcaa', '#f69577', '#fb693c', '#e03a30'];
 export const SIGNAL_RAMP = { '-2': '#217ebe', '-1': '#90bfdf', 0: '#e8e8ea', 1: '#fabcaa', 2: '#e03a30' };
 
-export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun, pins = null, onPin }) {
+export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun }) {
   const [ref, w] = useWidth(640);
   const [hover, setHover] = useState(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -278,20 +278,6 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
                 onClick={() => u && onSelect(u.geoKey)}
               />
               {mode === 'rate' && u?.tourist && <path d={d} fill="url(#vc-hatch)" pointerEvents="none" />}
-            </g>
-          );
-        })}
-        {pins && features.filter((f) => pins[f.properties.precinct]).map((f) => {
-          const num = f.properties.precinct; const n = pins[num].length;
-          const [cx, cy] = pathFn.centroid(f);
-          if (!Number.isFinite(cx)) return null;
-          const r = 7 + Math.min(10, Math.sqrt(n) * 3);
-          return (
-            <g key={`pin-${num}`} style={{ cursor: 'pointer' }} onClick={() => onPin && onPin(num)}>
-              <title>{`${n} press ${n === 1 ? 'report names' : 'reports name'} this precinct's area: ${pins[num].slice(0, 3).map((a) => a.title).join(' · ')}`}</title>
-              <circle cx={cx} cy={cy} r={r + 2} fill={C.white} />
-              <circle cx={cx} cy={cy} r={r} fill={C.ink} />
-              <text x={cx} y={cy + 4} textAnchor="middle" fontSize="11" fontWeight="800" fill={C.white}>{n}</text>
             </g>
           );
         })}

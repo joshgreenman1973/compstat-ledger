@@ -8,7 +8,6 @@ import {
 import * as S from './stats';
 import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine } from './ui';
 import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP } from './charts';
-import * as PR from './press';
 import './bold.css';
 
 const DATA_BASE = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/`;
@@ -51,102 +50,6 @@ const thenFill = (v, base) => {
   if (base === 1993 && v >= 0) return '#e03a30';
   return sc.colors[sc.cuts.filter((c) => v > c).length];
 };
-
-// AP short date from a Date, on the New York calendar (stories and report weeks run on local days).
-const NY_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric' });
-const apShort = (d) => {
-  if (!d) return '';
-  const [m, day, y] = NY_DAY.format(d).split('/');
-  return S.apDate(`${m}/${day}/${y}`, { year: false });
-};
-
-// Located stories for one crime family and window: fetched once per page, shared by every panel.
-function useStories(family, win) {
-  const [state, setState] = useState({ status: 'idle' });
-  useEffect(() => {
-    if (!family || !win || win.empty) { setState({ status: 'idle' }); return undefined; }
-    let alive = true;
-    setState({ status: 'loading' });
-    PR.fetchStories(family, win).then((r) => {
-      if (!alive) return;
-      setState(r.error ? { status: 'error', error: r.error } : { status: 'done', stories: PR.locateStories(r.articles, family, win), candidates: r.articles.length, complete: r.complete });
-    });
-    return () => { alive = false; };
-  }, [family, win]);
-  return state;
-}
-
-function PressList({ articles, limit = 6 }) {
-  const [all, setAll] = useState(false);
-  const shown = all ? articles : articles.slice(0, limit);
-  return (
-    <>
-      <ul className="mt-2 space-y-2">
-        {shown.map((a) => (
-          <li key={a.url} className="text-[14px] leading-snug">
-            <span className="text-[12px] text-[#707175] whitespace-nowrap mr-2" style={{ fontVariantNumeric: 'tabular-nums' }}>{apShort(a.date)} · {PR.OUTLET_NAMES[a.domain] || a.domain}</span>
-            <a href={a.url} target="_blank" rel="noopener noreferrer nofollow" className="underline decoration-[#bbb] underline-offset-2 hover:decoration-[#050507]">{a.title}</a>
-            {a.via && <span className="ml-1 text-[12px] text-[#707175]">(placed by "{a.via}")</span>}
-          </li>
-        ))}
-      </ul>
-      {articles.length > limit && (
-        <button type="button" onClick={() => setAll((v) => !v)} className="mt-2 text-[11px] font-bold uppercase tracking-wider text-[#555] hover:text-[#050507]">{all ? 'Show fewer' : `Show all ${articles.length}`}</button>
-      )}
-    </>
-  );
-}
-
-const FAMILY_WORDS = { murder: 'a word for a killing', shooting: 'a word for a shooting', violent: 'a word for violent crime', property: 'a word for property crime' };
-const PressStatus = ({ state }) => (
-  <>
-    {state.status === 'loading' && <p className="mt-2 text-[13px] text-[#707175]">Searching the news index… GDELT asks for five seconds between searches, so this can take a minute.</p>}
-    {state.status === 'error' && <p className="mt-2 text-[13px] text-[#707175]">The news index isn't answering. GDELT limits how often one connection can search and can shut it out for several minutes, so try again in 10 or 15 minutes.</p>}
-    {state.status === 'done' && !state.complete && <p className="mt-2 text-[12px] text-[#707175]">The index had more matches than it will page through, so the oldest stories in this window may be missing.</p>}
-  </>
-);
-
-// Press reports for one crime family, one geography, one period. Only stories whose headline puts
-// them in the place being viewed; see PR.placeHeadline for the rules.
-function PressPanel({ family, geo, periodId, reportPeriod, what }) {
-  const win = useMemo(() => PR.pressWindow(periodId, reportPeriod), [periodId, reportPeriod]);
-  const state = useStories(family, win);
-  const [showBoro, setShowBoro] = useState(false);
-  const scope = PR.geoScope(geo);
-  const here = state.status === 'done' ? PR.storiesFor(state.stories, geo) : [];
-  const boroOnly = state.status === 'done' && scope.kind === 'precinct' ? state.stories.filter((a) => a.boro === scope.boro && !a.precinct) : [];
-  const words = FAMILY_WORDS[family];
-  return (
-    <div className="mt-5 rounded border border-[#d6d6d6] bg-[#fafafa] p-4">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press reports: {what}</h4>
-        {win && !win.empty && <span className="text-[12px] text-[#707175]">{apShort(win.from)}–{apShort(win.to)}{win.clamped ? ' (the news index covers only the last three months)' : ''}</span>}
-      </div>
-      {(!win || win.empty) && <p className="mt-2 text-[13px] text-[#707175]">This period is older than the news index's three-month window.</p>}
-      <PressStatus state={state} />
-      {state.status === 'done' && here.length === 0 && (
-        <p className="mt-2 text-[13px] text-[#707175]">
-          {scope.kind !== 'precinct' || state.stories.length === 0
-            ? `No stories in this window place themselves in ${scope.kind === 'precinct' ? 'the city' : scope.label}.`
-            : state.stories.length === 1
-              ? `The one story that places itself in the city doesn't name the ${scope.label} or a neighborhood lying inside it.`
-              : `None of the ${nw(state.stories.length)} stories that place themselves in the city name the ${scope.label} or a neighborhood lying inside it.`}
-        </p>
-      )}
-      {here.length > 0 && <PressList articles={here} />}
-      {boroOnly.length > 0 && (
-        <div className="mt-3">
-          <button type="button" onClick={() => setShowBoro((v) => !v)} className="text-[11px] font-bold uppercase tracking-wider text-[#555] hover:text-[#050507]">{showBoro ? 'Hide' : 'Show'} {S.fmtInt(boroOnly.length)} {scope.boro} {boroOnly.length === 1 ? 'story' : 'stories'} that can't be placed in a precinct</button>
-          {showBoro && <><p className="mt-1 text-[12px] text-[#707175]">These name only the borough, or a neighborhood that straddles precinct lines. They may or may not be in the {scope.label}.</p><PressList articles={boroOnly} limit={4} /></>}
-        </div>
-      )}
-      <p className="mt-3 text-[11px] leading-snug text-[#707175]">
-        From seven New York City news outlets in the GDELT news index: stories whose headline uses {words} and {scope.kind === 'citywide' ? 'names a place in the city (and none outside it)' : scope.kind === 'precinct' ? `names the ${scope.label} or a neighborhood lying at least ${Math.round(PR.PLACE_THRESHOLD * 100)}% inside it, by the city's neighborhood boundaries${scope.merged ? '. The boundary table predates the 116th Precinct, so the 105th and 116th share one area here' : ''}` : `puts them in ${scope.boro}. Headlines rarely say which half of the borough, so this covers all of ${scope.boro}, not just Patrol Borough ${geo}`}.
-        {' '}GDELT indexes only part of what those outlets publish, so this is a sample, not a tally, and several stories can cover one incident. Not verified and not counted in any figure on this page.
-      </p>
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
 /* DIG DEEPER — the precinct-day explorer (a copy lives in             */
@@ -399,9 +302,7 @@ export default function BoldApp() {
   const [mapMode, setMapMode] = useState(init.get('map') === 'signal' ? 'signal' : 'rate');
   const [scope, setScope] = useState(init.get('rows') === 'major' ? 'major' : 'all');
   const [peerKey, setPeerKey] = useState(S.PEER_GROUPS.some((g) => g.key === init.get('peers')) ? init.get('peers') : 'largest');
-  const [press, setPress] = useState(init.get('press') === '1');
   const [thenBase, setThenBase] = useState(init.get('base') === '1993' ? 1993 : 2010);
-  const [pinSel, setPinSel] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -458,12 +359,11 @@ export default function BoldApp() {
     if (mapMode !== 'rate') p.set('map', mapMode);
     if (scope !== 'all') p.set('rows', scope);
     if (peerKey !== 'largest') p.set('peers', peerKey);
-    if (press) p.set('press', '1');
     if (thenBase !== 2010) p.set('base', String(thenBase));
     const qs = p.toString();
     const url = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
     if (url !== window.location.pathname + window.location.search + window.location.hash) window.history.replaceState({}, '', url);
-  }, [raw, activeGeo, period, arcKey, measure, mapMode, scope, peerKey, press, thenBase]);
+  }, [raw, activeGeo, period, arcKey, measure, mapMode, scope, peerKey, thenBase]);
 
   // Honor a #section deep link once content has rendered.
   const scrolledRef = useRef(false);
@@ -566,20 +466,6 @@ export default function BoldApp() {
     const usable = rows.filter((r) => r.v != null && !r.redrawn);
     return { key, rows, usable, above: usable.filter((r) => r.v > 0).length, below: usable.filter((r) => r.v < 0).length };
   }, [raw, thenBase]);
-
-  /* ---------------- press layer: map pins (citywide query for the map's measure) ---------------- */
-  const pinWin = useMemo(() => (press && cityData ? PR.pressWindow(period, cityData.report_period) : null), [press, cityData, period]);
-  const pinState = useStories(press ? PR.PRESS_FAMILY_FOR_MEASURE[measure] : null, pinWin);
-  const pins = useMemo(() => {
-    if (!press || pinState.status !== 'done') return null;
-    const out = {};
-    pinState.stories.forEach((a) => {
-      if (!a.precinct || !raw?.[a.precinct]) return;
-      const num = String(parseInt(a.precinct, 10));
-      (out[num] = out[num] || []).push(a);
-    });
-    return out;
-  }, [press, pinState, raw]);
 
   const downloadCSV = useCallback((filename, table) => {
     const esc = (c) => { const s = c == null ? '' : String(c); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
@@ -755,10 +641,6 @@ export default function BoldApp() {
             <a key={id} href={`#${id}`} className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#555] hover:text-[#050507] px-2.5 py-1.5 rounded-full hover:bg-[#f7f8dd]">{label}</a>
           ))}
           <span className="ml-auto pl-3 flex items-center gap-3">
-            <button type="button" aria-pressed={press} onClick={() => setPress((v) => !v)} title="Show news coverage of these crimes, for this place and period, from the GDELT news index"
-              className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${press ? 'bg-[#050507] text-white border-[#050507]' : 'border-[#d6d6d6] text-[#555] hover:text-[#050507]'}`}>
-              Press reports: {press ? 'on' : 'off'}
-            </button>
             <span className="hidden xl:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : activeGeo}</span>
             {!isCity && <button onClick={() => selectGeo('citywide')} className="text-[11px] font-bold uppercase tracking-wider text-[#ff7c53] hover:text-[#050507]">← Citywide</button>}
           </span>
@@ -805,7 +687,6 @@ export default function BoldApp() {
                     <span className="flex items-center gap-2 text-[13px]" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} <Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}</span>
                   </div>
                   <UnitChart cur={r.cur} prior={r.prior} noun={noun} priorLabel={P.priorLabel} curLabel={P.since} />
-                  {press && <PressPanel family={noun === 'murders' ? 'murder' : 'shooting'} geo={activeGeo} periodId={period} reportPeriod={geoData.report_period} what={noun === 'murders' ? 'Murders' : 'Shootings'} />}
                 </div>
               ))}
             </div>
@@ -911,40 +792,8 @@ export default function BoldApp() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
             <div className="lg:col-span-3">
-              <PrecinctMap units={units} mode={mapMode} cuts={cuts} selectedNum={selectedNum} onSelect={selectGeo} measureNoun={measureNoun} pins={press ? pins : null} onPin={setPinSel} />
+              <PrecinctMap units={units} mode={mapMode} cuts={cuts} selectedNum={selectedNum} onSelect={selectGeo} measureNoun={measureNoun} />
               <div className="mt-3"><MapLegend mode={mapMode} cuts={cuts} periodNote={P.since} /></div>
-              {press && (
-                <div className="mt-5 rounded border border-[#d6d6d6] bg-[#fafafa] p-4">
-                  <h4 className="text-[11px] font-black uppercase tracking-[0.14em]">Press layer: {PR.FAMILIES[PR.PRESS_FAMILY_FOR_MEASURE[measure]].noun} stories placed by their headlines</h4>
-                  {pinState.status === 'idle' && <p className="mt-2 text-[13px] text-[#707175]">This period is older than the news index's three-month window.</p>}
-                  <PressStatus state={pinState} />
-                  {pinState.status === 'done' && pins && (() => {
-                    const placed = Object.values(pins).reduce((n, l) => n + l.length, 0);
-                    const located = pinState.stories.length;
-                    const groups = Object.entries(pins).sort((a, b) => (b[0] === pinSel) - (a[0] === pinSel) || b[1].length - a[1].length);
-                    return (
-                      <>
-                        <p className="mt-2 text-[13px] text-[#555]">
-                          {located === 0
-                            ? 'No stories in this window place themselves in the city.'
-                            : `${capFirst(nw(placed))} of the ${nw(located)} ${located === 1 ? 'story' : 'stories'} that place themselves in the city ${placed === 1 ? 'names' : 'name'} a neighborhood lying inside one precinct; each dot counts them. The rest name only the city, a borough or a neighborhood that straddles precinct lines, so they aren't placed.`}
-                        </p>
-                        {groups.length > 0 && (
-                          <div className="mt-3 space-y-4 max-h-[420px] overflow-y-auto pr-2">
-                            {groups.map(([num, list]) => (
-                              <div key={num} className={num === pinSel ? 'rounded bg-[#f7f8dd] -mx-2 px-2 py-1' : ''}>
-                                <button type="button" onClick={() => selectGeo(units[num]?.geoKey || list[0].precinct)} className="text-[13px] font-black hover:underline">{units[num]?.label || list[0].precinct} ({list.length})</button>
-                                <PressList articles={list} limit={3} />
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                  <p className="mt-3 text-[11px] leading-snug text-[#707175]">From seven New York City outlets in the GDELT news index. A story gets a dot only if its headline names a neighborhood lying at least {Math.round(PR.PLACE_THRESHOLD * 100)}% inside one precinct, by the city's neighborhood boundaries, and names no other place that disagrees. Several stories can cover one incident. Not verified and not counted in any figure.</p>
-                </div>
-              )}
             </div>
             <div className="lg:col-span-2 space-y-8">
               {(mapMode === 'signal'
@@ -1237,10 +1086,6 @@ export default function BoldApp() {
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Revisions</h3>
               <p>NYPD's weekly numbers are first counts. Victims die and assaults become murders; cases get upgraded, downgraded or filed late. <a className="underline" href={VC_REVISIONS_URL} target="_blank" rel="noopener noreferrer">A Vital City analysis by John Hall</a>, a retired NYPD deputy inspector, found every one of 95 monthly reports from 2018 to 2025 was later revised upward, by about 2.7% on average and 13.5% for murder. Last year's comparison figures have mostly settled, so revisions tilt CompStat's comparisons toward decline. We measure the recent pace from consecutive archived reports (this week's year-to-date total, minus last week's, minus this week's own count) and mark a real change fragile if {nw(S.REVISION_WEEKS)} more weeks of revisions at that pace could erase it (fewer for 28-day and weekly counts, which can only absorb a few weeks' worth). Fragile changes never headline, and the full-year pace range is widened by the same allowance.</p>
-            </div>
-            <div>
-              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Press reports</h3>
-              <p>The press toggle searches the <a className="underline" href="https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/" target="_blank" rel="noopener noreferrer">GDELT news index</a>, which covers only the last three months and indexes only part of what any outlet publishes. We search seven New York City outlets it indexes regularly ({Object.values(PR.OUTLET_NAMES).join(', ').replace(/, ([^,]*)$/, ' and $1')}) for stories that mention NYPD and a crime word. A story is shown only if its headline uses a crime word and names a place in the city, and no place outside it. A place named as someone's home or office ("Queens man," "Brooklyn DA") or as a street ("Flatbush Avenue") doesn't count as the scene. Letters and opinion pieces are dropped. A story is placed in a precinct only when its headline names that precinct, or a neighborhood that lies at least {Math.round(PR.PLACE_THRESHOLD * 100)}% inside it by the city's 2020 neighborhood boundaries, and nothing in the headline points elsewhere. Neighborhoods that straddle precinct lines, such as Crown Heights, Bed-Stuy and Washington Heights, place a story in its borough but not in a precinct. These are leads: we don't verify them and never count them.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">What CompStat can't see</h3>
