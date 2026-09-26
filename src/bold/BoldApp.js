@@ -52,11 +52,11 @@ const thenFill = (v, base) => {
 };
 
 /* ------------------------------------------------------------------ */
-/* DIG DEEPER — the precinct-day explorer (a copy lives in             */
+/* A DAY IN THE PRECINCT — the precinct-day explorer (a copy lives in  */
 /* public/precinct-day), collapsed until asked for, loaded on demand.  */
 /* ------------------------------------------------------------------ */
 const CFS_MAX_URL = 'https://data.cityofnewyork.us/resource/n2zq-pubd.json?$select=max(incident_date)%20as%20m';
-function DigDeeper({ precincts, initialKey }) {
+function PrecinctDay({ precincts, initialKey }) {
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState(initialKey);
   useEffect(() => setKey(initialKey), [initialKey]);
@@ -73,10 +73,10 @@ function DigDeeper({ precincts, initialKey }) {
   const pct = key ? parseInt(key, 10) : null;
   const src = pct && date ? `${process.env.PUBLIC_URL}/precinct-day/index.html?pct=${pct}&date=${date}` : null;
   return (
-    <section id="dig" className="py-8 border-b border-[#e6e6e6] scroll-mt-14">
+    <section id="day" className="py-8 border-b border-[#e6e6e6] scroll-mt-14">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full flex items-center justify-between gap-4 text-left group">
         <span>
-          <span className="block text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff7c53] mb-1">Dig deeper</span>
+          <span className="block text-[11px] font-bold uppercase tracking-[0.18em] text-[#ff7c53] mb-1">A day in the precinct</span>
           <span className="vc-display block text-[22px] sm:text-[26px] font-black leading-tight">A day on the police radio{key ? ` in the ${key}` : ''}</span>
         </span>
         <span className="flex-shrink-0 rounded-full border-2 border-[#050507] px-4 py-2 text-[11px] font-black uppercase tracking-[0.14em] group-hover:bg-[#dde44c]">{open ? 'Close' : 'Open'}</span>
@@ -570,7 +570,7 @@ export default function BoldApp() {
 
   const navItems = [
     ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
-    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['dig', 'Dig deeper'], ['ledger', 'Ledger'], ['method', 'Method'],
+    ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['day', 'A day in the precinct'], ['ledger', 'Ledger'], ['method', 'Method'],
   ];
 
   return (
@@ -607,7 +607,7 @@ export default function BoldApp() {
             <div className="mt-8 lg:mt-2 max-w-[260px]">
               <MiniMap dark fills={{ [selectedNum]: '#dde44c' }} selectedNum={selectedNum} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the ${activeGeo} highlighted among New York City's precincts.`} minWidth={160} />
               <p className="mt-2 text-[11px] uppercase tracking-widest text-white/50">{isSplit ? 'The 105th and 116th share one shape on this map' : 'Tap another precinct to switch'}</p>
-              <a href="#dig" className="mt-3 inline-block text-[11px] font-bold uppercase tracking-[0.14em] text-[#dde44c] hover:underline">Dig deeper: a day on its police radio ↓</a>
+              <a href="#day" className="mt-3 inline-block text-[11px] font-bold uppercase tracking-[0.14em] text-[#dde44c] hover:underline">A day in this precinct ↓</a>
             </div>
           )}
           </div>
@@ -974,9 +974,9 @@ export default function BoldApp() {
           </section>
         )}
 
-        {/* ============================ DIG DEEPER ============================ */}
+        {/* ============================ A DAY IN THE PRECINCT ============================ */}
         {raw && Object.keys(raw).some((k) => k.includes('Precinct')) && (
-          <DigDeeper
+          <PrecinctDay
             initialKey={activeGeo.includes('Precinct') ? activeGeo : (conc?.top?.[0]?.label?.includes('+') ? S.SPLIT_PRECINCTS.parent : conc?.top?.[0]?.label) || '75th Precinct'}
             precincts={Object.keys(raw).filter((k) => k.includes('Precinct')).sort((a, b) => parseInt(a, 10) - parseInt(b, 10))}
           />

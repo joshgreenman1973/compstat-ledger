@@ -10,7 +10,7 @@ Two views of NYPD's weekly CompStat numbers, built from the same data:
 
 Maps: per-resident and chance-test choropleths, eight crime-by-crime small multiples, a 2010/1993 comparison map, and a locator on each precinct page.
 
-"Dig deeper" (collapsed on every page) embeds a copy of the nyc-precinct-day explorer, "A day on the police radio," in `public/precinct-day/`, opened on the precinct in view and the latest day in NYPD's dispatch log. The copy adds only a `?pct=&date=` preselect; keep it in sync with nyc-precinct-day by hand.
+"A day in the precinct" (collapsed on every page; called "Dig deeper" until Sept. 26) embeds a copy of the nyc-precinct-day explorer, "A day on the police radio," in `public/precinct-day/`, opened on the precinct in view and the latest day in NYPD's dispatch log. The copy adds only a `?pct=&date=` preselect; keep it in sync with nyc-precinct-day by hand.
 
 Run `npm start`, or `npx react-scripts test src/bold` for the stats tests.
 

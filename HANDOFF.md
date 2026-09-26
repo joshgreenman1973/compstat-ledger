@@ -57,7 +57,7 @@ The cloud session's checklist, and what happened to each item:
 
 1. **Press layer: tested live, rebuilt, then removed.** It drew on the GDELT news index. The original query matched a crime word anywhere in a story plus a borough name anywhere; of 75 citywide "murder" stories, about 2 were New York City crimes (the rest included the Lindsay Clancy case in Massachusetts, movie lists and "Brooklyn, Illinois"). A rebuild that searched only local outlets and placed stories by their headlines against the city's neighborhood boundaries got the locations right, but GDELT's sample of local coverage was thin (about 20 located city shooting or stabbing stories in two weeks), and GDELT shut this connection out for more than an hour after a burst of test requests. Josh dropped the layer. The rebuild is in `237b9f4` if it's ever wanted, including `tools/places/build_places.py`, which maps neighborhood names to precincts from city boundaries and could be reused.
 2. **"Coverage vs. the counts" was removed** with it. At 10 to 20 located stories a month per crime, its 25% swing rule turned on two or three stories. The original is in `2b8d633`.
-3. **"Dig deeper" works live.** The 75th Precinct on June 30 returned 453 dispatched jobs from NYC Open Data. The copy's precinct menu said "1th," "22th," "41th" and so on; fixed here. The original `nyc-precinct-day` has the same bug and was flagged separately.
+3. **"Dig deeper" works live, and is now "A day in the precinct"** (Josh's pick; it's one precinct's dispatched jobs on one day). The 75th Precinct on June 30 returned 453 dispatched jobs from NYC Open Data. The copy's precinct menu said "1th," "22th," "41th" and so on; fixed here. The original `nyc-precinct-day` has the same bug and was flagged separately.
 4. **The two old Vercel previews are protected.** Both redirect to Vercel's login (checked Sept. 26), so they aren't public. Delete them only if you want them gone.
 5. **Private repo:** not done; still Josh's call.
 6. **Renamed** from "CompStat, stress-tested" to "CompStat, read closely" at Josh's request.
@@ -86,13 +86,13 @@ Everything is fetched in the browser; there's no server.
 - **CompStat.** `latest_compstat.json` from `joshgreenman1973/nypd-compstat-scraper` (raw GitHub, `data/`). If that fails, the page falls back to the bundled citywide snapshot and says so.
 - **Revision archive.** The same repo's `data/index.json` plus the eight archived weekly reports before the current one, about 80 KB each gzipped.
 - **Other cities.** Real-Time Crime Index (AH Datalytics) scorecard CSV. If it's unreachable, the page uses a bundled 2025 snapshot and says so.
-- **Dig deeper.** NYC Open Data's NYPD calls-for-service dataset, `n2zq-pubd`.
+- **A day in the precinct.** NYC Open Data's NYPD calls-for-service dataset, `n2zq-pubd`.
 
 ### Page sections, top to bottom
 
 Each section has an anchor you can link to.
 
-- **Verdict hero.** A headline generated from the data. Precinct pages add a locator map and a "Dig deeper" link.
+- **Verdict hero.** A headline generated from the data. Precinct pages add a locator map and an "A day in this precinct" link.
 - **Sticky nav.** Section links and a way back to citywide.
 - **`#signal`** Every change on the chance-test board.
 - **`#every-one`** Murders as individual units, this year against last.
@@ -101,7 +101,7 @@ Each section has an anchor you can link to.
 - **`#by-crime`** Eight small-multiple maps.
 - **`#then-now`** Each precinct against 2010 or 1993. Year to date only.
 - **`#cities`** NYC's murder rate against peer cities.
-- **`#dig`** Dig deeper, collapsed by default.
+- **`#day`** A day in the precinct (every job NYPD dispatched in one precinct on one day), collapsed by default. It was "Dig deeper" at `#dig` until Sept. 26.
 - **`#ledger`** Every line with revision and cushion columns, downloadable as CSV.
 - **`#method`** The method notes.
 
