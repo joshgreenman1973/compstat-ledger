@@ -20,12 +20,13 @@ It is **not** an official Vital City product and carries no Vital City branding.
   5. `89434ba` Adds `vercel.json`, which stops Vercel from building preview sites for this branch.
   6. `67ad5d9` Adds this file, `CLAUDE.md` and `tools/verify/`.
   7. `237b9f4` The rename, a rebuilt press layer, the removal of "Coverage vs. the counts" and the precinct-day ordinal fix.
-  8. The commit that removes the press layer entirely, at Josh's call.
+  8. `77f7ab3` Removes the press layer entirely, at Josh's call.
+  9. Adds `tools/deploy-pages.sh`, which publishes the noindexed GitHub Pages copy.
 - **No pull request exists.** Don't open one unless Josh asks. Merging would replace the live site's default view.
 
 ## Standing rules from Josh
 
-- **No public website yet.** Pushing to GitHub is fine. Don't merge to `main`, deploy anywhere or remove the `vercel.json` block. Note that the repo is on GitHub, so anyone who can see it can read this branch's code; "private" here means no hosted site.
+- **One public copy, for Josh to try out.** On Sept. 26 Josh asked for it on GitHub Pages: https://joshgreenman1973.github.io/compstat-read-closely/ (repo `joshgreenman1973/compstat-read-closely`, build output only). It's public to anyone with the link but marked noindex and blocked in robots.txt. Redeploy with `bash tools/deploy-pages.sh`. Otherwise the old rule stands: don't merge to `main`, deploy anywhere else or remove the `vercel.json` block. compstat-ledger's own Pages site and Vercel deployment still serve the classic view from `main`.
 - **Don't replace the original.** This is a fork. The classic view stays reachable, and `src/App.js` changed only by adding exports.
 - **Not a Vital City product.** No wordmark, logo or house branding. The footer says "An independent prototype, not an official Vital City product."
 - **Accuracy is the point.** Every number and every generated sentence must follow from NYPD's published figures. Bold framing is fine; overclaiming is not. When in doubt, say less.
@@ -48,6 +49,7 @@ npm start            # http://localhost:3000 ; classic view at ?classic=1
 - **Unit tests** (28, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
+- **Publish the test copy:** `bash tools/deploy-pages.sh` builds with the right base path, adds noindex and pushes to `joshgreenman1973/compstat-read-closely`.
 
 ## Desktop session, Sept. 26
 
