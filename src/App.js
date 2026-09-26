@@ -145,9 +145,9 @@ const CL = {BU:'Burglary',FA:'Fel. Assault',GA:'Grand Larceny Auto',GL:'Grand La
 const BC = {Bx:'#e7466d',Bk:'#394882',Mn:'#ff7c53',Qn:'#707175',SI:'#9b9fbc'}; // eslint-disable-line no-unused-vars
 const BL = {Bx:'Bronx',Bk:'Brooklyn',Mn:'Manhattan',Qn:'Queens',SI:'Staten Island'}; // eslint-disable-line no-unused-vars
 
-const GITHUB_USER = "joshgreenman1973";
-const REPO_NAME = "nypd-compstat-scraper";
-const CITYWIDE_POPULATION = 8804190; // 2020 Census
+export const GITHUB_USER = "joshgreenman1973";
+export const REPO_NAME = "nypd-compstat-scraper";
+export const CITYWIDE_POPULATION = 8804190; // 2020 Census
 const VOLATILITY_THRESHOLD = 30;
 
 const VC = {
@@ -158,7 +158,7 @@ const VC = {
 
 const VIOLENT_CRIMES = ["Murder", "Rape", "Robbery", "Fel. Assault", "Misd. Assault", "Shooting Inc.", "Shooting Vic.", "Hate Crimes"];
 const PROPERTY_CRIMES = ["Burglary", "Gr. Larceny", "G.L.A.", "Petit Larceny", "Retail Theft"];
-const TOURIST_PRECINCTS = ["14th Precinct", "18th Precinct", "22nd Precinct"];
+export const TOURIST_PRECINCTS = ["14th Precinct", "18th Precinct", "22nd Precinct"];
 
 const FALLBACK_DATA = {
   "citywide": {
@@ -179,7 +179,7 @@ const FALLBACK_DATA = {
 
 // 2020 Census populations via John Keefe's census-by-precincts crosswalk
 // (github.com/jkeefe/census-by-precincts). Patrol borough totals = sum of constituent precincts.
-const GEO_POPULATIONS = {
+export const GEO_POPULATIONS = {
   "1st Precinct": 84799, "5th Precinct": 50598, "6th Precinct": 64643, "7th Precinct": 57985, "9th Precinct": 75951,
   "10th Precinct": 65570, "13th Precinct": 100050, "14th Precinct": 28050, "17th Precinct": 89367, "18th Precinct": 67528,
   "19th Precinct": 220261, "20th Precinct": 114575, "22nd Precinct": 129,
@@ -225,7 +225,7 @@ const GEO_POPULATIONS_2010 = { // eslint-disable-line no-unused-vars
   "Bronx": 1382480, "Brooklyn South": 2056639, "Brooklyn North": 448056, "Manhattan South": 611934, "Manhattan North": 953815, "Queens South": 796151, "Queens North": 1457328, "Staten Island": 468730
 };
 
-const PRECINCT_NEIGHBORHOODS = {
+export const PRECINCT_NEIGHBORHOODS = {
   "1st Precinct": "Tribeca, Wall St", "5th Precinct": "Chinatown, Little Italy", "6th Precinct": "Greenwich Village",
   "7th Precinct": "Lower East Side", "9th Precinct": "East Village", "10th Precinct": "Chelsea",
   "13th Precinct": "Gramercy, Stuy Town", "14th Precinct": "Midtown South", "17th Precinct": "Midtown East",
@@ -359,7 +359,7 @@ const buildStorySummary = ({ parsedData, activeTab }) => {
   return [`${timeframe}, ${sentence1}`, sentence2].filter(Boolean).join(' ');
 };
 
-const toOrdinalPrecinct = (n) => {
+export const toOrdinalPrecinct = (n) => {
   const num = parseInt(n, 10);
   if ([11, 12, 13].includes(num % 100)) return num + "th Precinct";
   const last = num % 10;
@@ -452,7 +452,7 @@ const AnchorLink = ({ id, label, size = 14, className = "" }) => {
 /* Fetched live from GitHub: AH-Datalytics/rtci scorecard.csv          */
 /* Source: realtimecrimeindex.com                                      */
 /* ------------------------------------------------------------------ */
-const RTCI_CSV_URL = 'https://raw.githubusercontent.com/AH-Datalytics/rtci/main/docs/app_data/scorecard.csv';
+export const RTCI_CSV_URL = 'https://raw.githubusercontent.com/AH-Datalytics/rtci/main/docs/app_data/scorecard.csv';
 const rtciRate = (count, pop) => +((count / pop) * 100000).toFixed(1);
 
 // Fallback data in case fetch fails
@@ -1591,6 +1591,8 @@ export default function App() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams();
+    // Keep the classic view selected when this dashboard is reached via ?classic (see index.js).
+    if (new URLSearchParams(window.location.search).has('classic')) params.set('classic', '1');
     if (appView !== 'live') params.set('view', appView);
     if (activeTab !== 'ytd') params.set('tab', activeTab);
     if (activeGeo !== 'citywide') params.set('geo', activeGeo);

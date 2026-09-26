@@ -1,3 +1,14 @@
+# CompStat Ledger
+
+Two views of NYPD's weekly CompStat numbers, built from the same data:
+
+- **CompStat, stress-tested** (default, `src/bold/`): leads with a verdict computed from the data, runs every year-over-year change through a chance test (Poisson, continuity-corrected), draws each major felony's annual history since 1993 with this year's pace as a range, maps where crime concentrates, and prints the arithmetic behind every generated claim ("Show the math"). The statistics live in `src/bold/stats.js` and are unit-tested in `src/bold/stats.test.js` against a bundled Sept. 20, 2026 report.
+- **Classic ledger** (`src/App.js`): the original dashboard, at `?classic=1`.
+
+Run `npm start`, or `npx react-scripts test src/bold` for the stats tests.
+
+---
+
 # Getting Started with Create React App
 
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
