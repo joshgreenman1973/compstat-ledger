@@ -6,11 +6,13 @@ import {
   GITHUB_USER, REPO_NAME, RTCI_CSV_URL, toOrdinalPrecinct,
 } from '../App';
 import * as S from './stats';
-import { Chip, Receipt, Kicker, SectionHead, Segmented, SourceLine } from './ui';
+import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine } from './ui';
 import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars } from './charts';
 import './bold.css';
 
-const COMPSTAT_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/latest_compstat.json`;
+const DATA_BASE = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/`;
+const COMPSTAT_URL = `${DATA_BASE}latest_compstat.json`;
+const VC_REVISIONS_URL = 'https://www.vitalcitynyc.org/real-crime-numbers-nyc-nypd/';
 
 // Used only if the RTCI feed can't be reached: full-year 2025 murders and RTCI populations from
 // the scorecard last updated 2026-06-16.
@@ -45,6 +47,25 @@ const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
 const nw = (n) => (Number.isInteger(n) && n >= 0 && n < 10 ? WORDS[n] : S.fmtInt(n));
 const capFirst = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const pctWord = (v) => `${Math.round(Math.abs(v))}%`;
+const joinAnd = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+// "added 8 murders" / "removed 131" / "made no net change to"
+const weeksWord = (n) => `${nw(n)} ${n === 1 ? 'week' : 'weeks'}`;
+
+// The revision half of a receipt: what NYPD has been doing to this line, and what it would take to erase the verdict.
+function revisionSentence(r) {
+  const { rev, risk } = r;
+  const net = rev.cur > 0 ? `added ${S.fmtInt(rev.cur)}` : rev.cur < 0 ? `subtracted ${S.fmtInt(-rev.cur)}` : 'netted to zero';
+  const priorMoved = Math.round(rev.prior) === 0 ? "didn't move" : `moved ${S.fmtSigned(rev.prior)}`;
+  const base = `Revisions: over the past ${weeksWord(rev.weeks)}, NYPD's revisions to already-reported weeks ${net}; last year's figure ${priorMoved}.`;
+  if (!risk) return base;
+  const verb = r.verdict === 'drop' ? 'adding' : 'subtracting';
+  const share = r.cur > 0 ? ` (${((risk.breakEven / r.cur) * 100).toFixed(1)}% of this year's count)` : '';
+  const need = `Erasing this ${r.verdict} would take revisions ${verb} ${S.fmtInt(risk.breakEven)}${share}`;
+  if (!Number.isFinite(risk.weeksToErase)) return `${base} ${need}, and recent revisions have run the other way.`;
+  const wk = risk.weeksToErase;
+  const bar = `${nw(risk.thresholdWeeks)}-week bar`;
+  return `${base} ${need}: about ${wk < 10 ? wk.toFixed(1) : Math.round(wk)} weeks at the recent pace, ${risk.fragile ? `under our ${bar}, so it's marked fragile` : `beyond our ${bar}`}.`;
+}
 
 function periodText(periodId, geoData) {
   const end = S.parseMDY(geoData?.report_period?.week_end);
@@ -151,6 +172,8 @@ export default function BoldApp() {
   const [raw, setRaw] = useState(null);
   const [source, setSource] = useState('loading');
   const [rtci, setRtci] = useState(null);
+  const [revs, setRevs] = useState(null);
+  const [revStatus, setRevStatus] = useState('idle');
   const [geo, setGeo] = useState(init.get('geo') || 'citywide');
   const [period, setPeriod] = useState(S.PERIODS[init.get('period')] ? init.get('period') : 'ytd');
   const [arcKey, setArcKey] = useState(ARC_OPTIONS.some((a) => a[0] === init.get('arc')) ? init.get('arc') : 'Murder');
@@ -171,6 +194,29 @@ export default function BoldApp() {
       .catch(() => { if (alive) setRtci(RTCI_SNAPSHOT); });
     return () => { alive = false; };
   }, []);
+
+  // Revision pace: the scraper archives each weekly report, so the last few consecutive reports show
+  // how much NYPD has been adding to weeks it had already published (~80 KB each, gzipped).
+  useEffect(() => {
+    if (!raw || source !== 'live') return undefined;
+    let alive = true;
+    setRevStatus('loading');
+    const p = S.parseMDY(raw.citywide?.report_period?.week_end);
+    const endIso = p ? `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}` : '';
+    const work = fetch(`${DATA_BASE}index.json`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((index) => {
+        const older = (Array.isArray(index) ? index : []).filter((e) => e?.date && e?.path && e.date < endIso)
+          .sort((a, b) => b.date.localeCompare(a.date)).slice(0, S.REVISION_WEEKS);
+        return Promise.all(older.map((e) => fetch(DATA_BASE + e.path).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
+      })
+      .then((snaps) => S.revisionFlows([...snaps.filter(Boolean).reverse(), raw]));
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000));
+    Promise.race([work, timeout])
+      .then((f) => { if (alive) { setRevs(f); setRevStatus('done'); } })
+      .catch(() => { if (alive) setRevStatus('failed'); });
+    return () => { alive = false; };
+  }, [raw, source]);
 
   const activeGeo = raw && raw[geo] ? geo : 'citywide';
   // Picking a place from the map or a list jumps back up to its verdict.
@@ -217,11 +263,18 @@ export default function BoldApp() {
     if (weekEnd) document.title = `CompStat, Stress-Tested · Through ${S.apDate(weekEnd)}`;
   }, [weekEnd]);
 
-  const rows = useMemo(() => (geoData ? S.extractRows(geoData, period) : []), [geoData, period]);
+  const fragileWeeks = S.fragileThreshold(period);
+  const geoFlows = revs?.byGeo?.[activeGeo];
+  const rows = useMemo(() => (geoData ? S.withRevisions(S.extractRows(geoData, period), geoFlows, revs?.weeks, fragileWeeks) : []), [geoData, period, geoFlows, revs, fragileWeeks]);
   const ytdCityRows = useMemo(() => (cityData ? S.extractRows(cityData, 'ytd') : []), [cityData]);
   const cityRows = useMemo(() => (cityData ? S.extractRows(cityData, period) : []), [cityData, period]);
   const headline = useMemo(() => S.buildHeadline(rows), [rows]);
-  const total = useMemo(() => S.sumRows(rows, S.MAJORS, 'Seven major felonies'), [rows]);
+  const total = useMemo(() => {
+    const t = S.sumRows(rows, S.MAJORS, 'Seven major felonies');
+    if (!t || !geoFlows || !revs) return t;
+    const f = S.MAJORS.reduce((acc, n) => ({ cur: acc.cur + (geoFlows[n]?.cur || 0), prior: acc.prior + (geoFlows[n]?.prior || 0) }), { cur: 0, prior: 0 });
+    return S.withRevisions([t], { [t.name]: f }, revs.weeks, fragileWeeks)[0];
+  }, [rows, geoFlows, revs, fragileWeeks]);
   const byName = useMemo(() => Object.fromEntries(rows.map((r) => [r.name, r])), [rows]);
   const ratio = useMemo(() => S.frequencyRatio(rows), [rows]);
   const pop = geoPopulation(activeGeo);
@@ -284,10 +337,17 @@ export default function BoldApp() {
   const lastHist = arcSeries[arcSeries.length - 1];
   const cityWeekEnd = cityData?.report_period?.week_end;
   const arcFlagged = arcKey === 'Rape';
+  const arcFlow = revs?.byGeo?.citywide?.[arcKey];
   const pace = useMemo(() => {
     if (!arcRow || arcFlagged || !lastHist || lastHist.y !== reportYear - 1) return null;
-    return S.paceRange({ cur: arcRow.cur, priorYtd: arcRow.prior, priorFull: lastHist.val, weekEnd: cityWeekEnd });
-  }, [arcRow, arcFlagged, lastHist, reportYear, cityWeekEnd]);
+    const base = S.paceRange({ cur: arcRow.cur, priorYtd: arcRow.prior, priorFull: lastHist.val, weekEnd: cityWeekEnd });
+    if (!base || base.tooEarly || !arcFlow || !(revs?.weeks > 0)) return base;
+    // Widen the range by REVISION_WEEKS more weeks of revisions at the recent pace, so a claim about
+    // where the year will land has to survive the counts rising (or falling) as NYPD revises them.
+    const allowance = Math.round((arcFlow.cur / revs.weeks) * S.REVISION_WEEKS);
+    const adj = S.paceRange({ cur: arcRow.cur + allowance, priorYtd: arcRow.prior, priorFull: lastHist.val, weekEnd: cityWeekEnd });
+    return { ...base, low: Math.min(base.low, adj.low), high: Math.max(base.high, adj.high), allowance, adj };
+  }, [arcRow, arcFlagged, lastHist, reportYear, cityWeekEnd, arcFlow, revs]);
   const claim = S.arcClaim(arcSeries, pace);
 
   /* ---------------- peers ---------------- */
@@ -324,7 +384,7 @@ export default function BoldApp() {
     </header>
   );
 
-  if (!raw) {
+  if (!raw || (source === 'live' && (revStatus === 'idle' || revStatus === 'loading'))) {
     return (
       <div className="vc-root min-h-screen bg-[#050507]">
         {masthead}
@@ -359,8 +419,21 @@ export default function BoldApp() {
     <p key={`z-${r.name}`}>
       <strong>{r.label}:</strong> {S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} = {S.fmtSigned(r.diff)} ({S.fmtPct(r.pct)}). Chance test: (gap of {S.fmtInt(Math.abs(r.diff))}, minus 1) ÷ √({S.fmtInt(r.cur)} + {S.fmtInt(r.prior)}) = <strong>z = {r.z < 0 ? '−' : ''}{Math.abs(r.z).toFixed(2)}</strong>.{' '}
       {Math.abs(r.z) >= S.Z_CRIT ? "Beyond ±1.96: if the underlying rate hadn't changed, a gap this big would show up less than 5% of the time." : "Inside ±1.96: a gap this size shows up routinely even when the underlying rate hasn't changed."}
+      {r.rev && <>{' '}{revisionSentence(r)}</>}
     </p>
   ));
+
+  const revNote = (() => {
+    const tr = total?.rev;
+    if (!revs || !tr) return null;
+    const mf = geoFlows?.Murder?.cur;
+    const counts = Number.isFinite(mf)
+      ? `${S.fmtSigned(mf)} ${Math.abs(mf) === 1 ? 'murder' : 'murders'} and ${S.fmtSigned(tr.cur)} major felonies in all`
+      : `${S.fmtSigned(tr.cur)} major felonies`;
+    const tilt = tr.cur > 0 ? 'Because they mostly add crimes, revisions tilt these comparisons toward decline.'
+      : tr.cur < 0 ? 'Here they have mostly subtracted crimes, which tilts these comparisons toward increase.' : '';
+    return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against moved ${S.fmtSigned(tr.prior)}. ${tilt} A real change that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile and kept out of the headline.`.replace(/ {2,}/g, ' ');
+  })();
 
   const tiles = [
     m && { key: 'm', label: 'Murders', r: m },
@@ -379,6 +452,10 @@ export default function BoldApp() {
     : realCount === tested.length
       ? `All ${S.fmtInt(tested.length)} changes ${periodWord} are bigger than chance would produce.`
       : `${capFirst(nw(realCount))} of ${S.fmtInt(tested.length)} changes ${periodWord} ${realCount === 1 ? 'is' : 'are'} bigger than chance would produce.`;
+  const fragileRows = boardRows.filter((r) => r.fragile);
+  const fragileDek = fragileRows.length
+    ? ` ${capFirst(joinAnd(fragileRows.map((r) => r.label.charAt(0).toLowerCase() + r.label.slice(1))))} ${fragileRows.length === 1 ? 'clears' : 'clear'} it today but ${fragileRows.length === 1 ? 'is' : 'are'} fragile: ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase ${fragileRows.length === 1 ? 'it' : 'them'}.`
+    : '';
 
   const navItems = [
     ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
@@ -409,6 +486,7 @@ export default function BoldApp() {
               For every murder {P.since}, NYPD recorded <strong className="text-white">{ratio.display} felony assaults</strong>.
             </p>
           )}
+          {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {PRECINCT_NEIGHBORHOODS[activeGeo]}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
           {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created from part of the 105th. NYPD reports each separately with prior-year comparisons, but the 2020 Census populations and precinct map predate the split, so per-resident rates for either alone would be wrong.</p>}
 
@@ -418,7 +496,7 @@ export default function BoldApp() {
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">{label}</div>
                 <div className="vc-display font-black text-[40px] sm:text-[52px] leading-none mt-2">{S.fmtInt(r.cur)}</div>
                 <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
-                <div className="mt-2"><Chip verdict={r.verdict} dark small /></div>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5"><Chip verdict={r.verdict} dark small />{r.fragile && <FragileTag dark weeks={fragileWeeks} />}</div>
               </div>
             ))}
           </div>
@@ -455,10 +533,10 @@ export default function BoldApp() {
             id="signal"
             kicker="Signal or noise"
             title={boardTitle}
-            dek={`CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are noise.' : 'Not all of them mean something.'} The gray band shows how big a swing random variation alone could produce, given how many incidents there are. Only dots outside it are real movement.`}
+            dek={`CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are noise.' : 'Not all of them mean something.'} The gray band shows how big a swing random variation alone could produce, given how many incidents there are. Only dots outside it are real movement.${fragileDek}`}
             right={<Segmented label="Which offenses" size="sm" value={scope} onChange={setScope} options={[['all', 'Everything'], ['major', 'Seven majors']]} />}
           />
-          <SignalBoard rows={boardRows} />
+          <SignalBoard rows={boardRows} fragileWeeks={fragileWeeks} />
           <Receipt>
             <p>For each line, NYPD gives two counts from windows of equal length: {P.since} and {P.cmp}. If nothing had changed, each count would scatter around the same average roughly like a Poisson process, and z = (the gap between them, minus 1) ÷ √(this year + last year) would fall within ±1.96 about 95% of the time. The minus 1 is a standard correction that keeps small counts from being over-called.</p>
             {m && zLine(m)}
@@ -484,7 +562,7 @@ export default function BoldApp() {
                 <div key={title}>
                   <div className="flex items-baseline justify-between gap-3 mb-3 border-b border-[#050507] pb-2">
                     <h3 className="text-[15px] font-black uppercase tracking-[0.12em]">{title}</h3>
-                    <span className="flex items-center gap-2 text-[13px]" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} <Chip verdict={r.verdict} small /></span>
+                    <span className="flex items-center gap-2 text-[13px]" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} <Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}</span>
                   </div>
                   <UnitChart cur={r.cur} prior={r.prior} noun={noun} priorLabel={P.priorLabel} curLabel={P.since} />
                 </div>
@@ -538,6 +616,7 @@ export default function BoldApp() {
                 <p>Year to date through {S.apDate(cityWeekEnd)}: <strong>{S.fmtInt(arcRow.cur)}</strong> {arcOpt[2]} ({S.fmtInt(arcRow.prior)} at the same point in {reportYear - 1}).</p>
                 <p><strong>Calendar method:</strong> {S.fmtInt(arcRow.cur)} ÷ {(pace.elapsed * 100).toFixed(1)}% of the year elapsed = {S.fmtInt(pace.linear)}. Assumes the YTD window starts Jan. 1 and crime is spread evenly across the calendar.</p>
                 {pace.seasonal != null && <p><strong>Last-year's-shape method:</strong> by this date in {reportYear - 1}, NYPD had recorded {S.fmtInt(arcRow.prior)} of that year's {S.fmtInt(lastHist.val)} ({(pace.seasonalShare * 100).toFixed(1)}%). {S.fmtInt(arcRow.cur)} ÷ {(pace.seasonalShare * 100).toFixed(1)}% = {S.fmtInt(pace.seasonal)}.</p>}
+                {pace.allowance != null && <p><strong>Revision allowance:</strong> over the past {weeksWord(revs.weeks)}, NYPD's revisions to already-reported weeks came to {S.fmtSigned(arcFlow.cur)} {arcOpt[2]}. {capFirst(nw(S.REVISION_WEEKS))} more weeks at that pace would be {S.fmtSigned(pace.allowance)}, making the year-to-date {S.fmtInt(arcRow.cur + pace.allowance)} and the pace {S.fmtInt(Math.min(pace.adj.linear, pace.adj.seasonal ?? Infinity))}–{S.fmtInt(Math.max(pace.adj.linear, pace.adj.seasonal ?? -Infinity))}. The range shown spans both.</p>}
                 <p>The headline's comparison has to hold at the <em>high</em> end of the range for a low (or the low end for a high). {claim?.kind === 'low-since' && `${claim.since} had ${S.fmtInt(claim.sinceVal)}, at or below the high end, and every year since had more.`}{claim?.kind === 'record-low' && `The lowest full year in the series is ${S.fmtInt(Math.min(...arcSeries.map((d) => d.val)))}, above even the high end.`}{claim?.kind === 'high-since' && `${claim.since} had ${S.fmtInt(claim.sinceVal)}, at or above the low end, and every year since had fewer.`}</p>
               </Receipt>
             )}
@@ -693,10 +772,11 @@ export default function BoldApp() {
                 type="button"
                 onClick={() => {
                   const hc = S.historicalColumns(reportYear);
-                  const header = ['Offense (NYPD)', 'Label', 'Current', 'Prior year', 'Change', '% change', 'z', 'Verdict', 'Per 100k (this area)', 'Per 100k (citywide)', ...hc.map((c) => `YTD % vs ${c.year} (NYPD)`)];
+                  const header = ['Offense (NYPD)', 'Label', 'Current', 'Prior year', 'Change', '% change', 'z', 'Verdict', 'Fragile', `Net revisions, last ${revs?.weeks ?? 0} weeks`, 'Revision break-even', 'Weeks of revisions to erase', 'Per 100k (this area)', 'Per 100k (citywide)', ...hc.map((c) => `YTD % vs ${c.year} (NYPD)`)];
                   const data = rows.map((r) => {
                     const cw = cityRows.find((x) => x.name === r.name);
                     return [r.name, r.label, r.cur, r.prior, r.diff, r.pct == null ? '' : r.pct.toFixed(2), r.z == null ? '' : r.z.toFixed(3), r.verdict,
+                      r.fragile ? 'yes' : '', r.rev ? r.rev.cur : '', r.risk ? r.risk.breakEven : '', r.risk ? (Number.isFinite(r.risk.weeksToErase) ? r.risk.weeksToErase.toFixed(1) : 'never at recent pace') : '',
                       pop && !isTourist ? ((r.cur / pop) * 100000).toFixed(2) : '', cw ? ((cw.cur / CITYWIDE_POPULATION) * 100000).toFixed(2) : '',
                       ...hc.map((c) => (Number.isFinite(r.hist?.[c.key]) ? r.hist[c.key].toFixed(2) : ''))];
                   });
@@ -710,7 +790,7 @@ export default function BoldApp() {
             )}
           />
           <div className="vc-scroll-x">
-            <table className="w-full min-w-[860px] text-left border-collapse" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <table className="w-full min-w-[1040px] text-left border-collapse" style={{ fontVariantNumeric: 'tabular-nums' }}>
               <thead>
                 <tr className="text-[11px] font-bold uppercase tracking-wider text-[#707175] border-b-2 border-[#050507]">
                   <th className="py-2 pr-3">Offense</th>
@@ -719,6 +799,8 @@ export default function BoldApp() {
                   <th className="py-2 px-2 text-right">Change</th>
                   <th className="py-2 px-2 text-right">%</th>
                   <th className="py-2 px-2">Chance test</th>
+                  {revs && <th className="py-2 px-2 text-right" title={`Net revisions NYPD made in the past ${revs.weeks} weeks to already-reported weeks of this line`}>Revised, {revs.weeks} wks</th>}
+                  {revs && <th className="py-2 px-2 text-right" title="Revisions it would take to turn a real change into noise, and how many weeks that is at the recent pace ('opposite' = recent revisions run the other way)">Cushion</th>}
                   {pop && !isTourist && <th className="py-2 px-2 text-right">Per 100k</th>}
                   {!isCity && <th className="py-2 px-2 text-right">City per 100k</th>}
                   {period === 'ytd' && histCols.map((c) => <th key={c.key} className="py-2 px-2 text-right">vs. {c.year}</th>)}
@@ -738,7 +820,9 @@ export default function BoldApp() {
                       <td className="py-2 px-2 text-right text-[14px] text-[#555]">{S.fmtInt(r.prior)}</td>
                       <td className="py-2 px-2 text-right text-[14px]">{S.fmtSigned(r.diff)}</td>
                       <td className="py-2 px-2 text-right text-[14px]">{S.fmtPct(r.pct)}</td>
-                      <td className="py-2 px-2"><span className="inline-flex items-center gap-2"><Chip verdict={r.verdict} small /><span className="text-[12px] text-[#707175]">{r.z != null ? `z ${r.z < 0 ? '−' : ''}${Math.abs(r.z).toFixed(1)}` : ''}</span></span></td>
+                      <td className="py-2 px-2"><span className="inline-flex items-center gap-2"><Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}<span className="text-[12px] text-[#707175] whitespace-nowrap">{r.z != null ? `z ${r.z < 0 ? '−' : ''}${Math.abs(r.z).toFixed(1)}` : ''}</span></span></td>
+                      {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{r.rev ? S.fmtSigned(r.rev.cur) : '—'}</td>}
+                      {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555] whitespace-nowrap">{r.risk ? `${S.fmtInt(r.risk.breakEven)} · ${Number.isFinite(r.risk.weeksToErase) ? `${r.risk.weeksToErase < 10 ? r.risk.weeksToErase.toFixed(1) : Math.round(r.risk.weeksToErase)} wks` : 'opposite'}` : '—'}</td>}
                       {pop && !isTourist && <td className="py-2 px-2 text-right text-[13px]">{((r.cur / pop) * 100000).toFixed(1)}</td>}
                       {!isCity && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{cw ? ((cw.cur / CITYWIDE_POPULATION) * 100000).toFixed(1) : '—'}</td>}
                       {period === 'ytd' && histCols.map((c) => <td key={c.key} className="py-2 px-2 text-right text-[13px] text-[#555]">{S.fmtPct(r.hist?.[c.key], 0)}</td>)}
@@ -776,6 +860,10 @@ export default function BoldApp() {
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Rape</h3>
               <p>New York broadened the legal definition of rape on Sept. 1, 2024. Comparisons that reach back before that date are skewed upward, so we flag them and keep rape out of the long-arc projection. NYPD's separate federal-definition line ("UCR Rape*"), whose definition didn't change, is in the ledger.</p>
+            </div>
+            <div>
+              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Revisions</h3>
+              <p>NYPD's weekly numbers are first counts. Victims die and assaults become murders; cases get upgraded, downgraded or filed late. <a className="underline" href={VC_REVISIONS_URL} target="_blank" rel="noopener noreferrer">A Vital City analysis by John Hall</a>, a retired NYPD deputy inspector, found every one of 95 monthly reports from 2018 to 2025 was later revised upward, by about 2.7% on average and 13.5% for murder. Last year's comparison figures have mostly settled, so revisions tilt CompStat's comparisons toward decline. We measure the recent pace from consecutive archived reports (this week's year-to-date total, minus last week's, minus this week's own count) and mark a real change fragile if {nw(S.REVISION_WEEKS)} more weeks of revisions at that pace could erase it (fewer for 28-day and weekly counts, which can only absorb a few weeks' worth). Fragile changes never headline, and the full-year pace range is widened by the same allowance.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">What CompStat can't see</h3>

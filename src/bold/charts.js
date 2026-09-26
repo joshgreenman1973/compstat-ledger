@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from '../data/nyc_precincts.json';
-import { C, VERDICT, useWidth, Chip } from './ui';
+import { C, VERDICT, useWidth, Chip, FragileTag } from './ui';
 import { fmtInt, fmtPct, zBin, binFor } from './stats';
 
 const niceMax = (v) => [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100].find((s) => s >= v) || 100;
@@ -11,7 +11,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* SIGNAL BOARD — % change per offense, against the band chance alone  */
 /* could produce. Dots outside the gray band are real movement.        */
 /* ------------------------------------------------------------------ */
-export function SignalBoard({ rows }) {
+export function SignalBoard({ rows, fragileWeeks = 8 }) {
   const sorted = useMemo(() => [...rows].sort((a, b) => (b.pct ?? -Infinity) - (a.pct ?? -Infinity)), [rows]);
   const D = useMemo(() => {
     const m = Math.max(5, ...rows.filter((r) => r.pct != null).map((r) => Math.max(Math.abs(r.pct), r.band || 0)));
@@ -49,6 +49,7 @@ export function SignalBoard({ rows }) {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-[15px] text-[#050507] leading-tight">{r.label}</span>
                   <Chip verdict={r.verdict} small />
+                  {r.fragile && <FragileTag weeks={fragileWeeks} />}
                 </div>
               </div>
               <div className="order-last sm:order-none w-full sm:w-auto sm:flex-1 relative h-6" aria-hidden="true">
@@ -85,6 +86,7 @@ export function SignalBoard({ rows }) {
         <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.rise.color }} />Real rise</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full border-[2.5px]" style={{ borderColor: VERDICT.noise.color }} />Noise</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-6 h-3 rounded-sm bg-[#e4e4e8]" />Range chance alone could produce (95%)</span>
+        {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Real today; {fragileWeeks} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
         <span className="text-[#707175]">Axis capped at ±{D}%; ‹ › mark values beyond it.</span>
       </div>
     </div>

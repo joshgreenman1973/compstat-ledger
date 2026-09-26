@@ -4,6 +4,7 @@ import {
   extractRows, sumRows, poissonZ, verdictFor, noiseBandPct, buildHeadline, frequencyRatio,
   paceRange, arcClaim, concentration, rapeYoYComparable, apDate, parseRTCI, peerComparison,
   PEER_GROUPS, MAJORS, quantileCuts, binFor, zBin, historicalColumns,
+  revisionFlows, breakEven, revisionRisk, withRevisions,
 } from './stats';
 
 const cw = snapshot.citywide;
@@ -200,5 +201,59 @@ describe('peer cities', () => {
     expect(cmp.nyc.rate).toBeCloseTo(305 / 8496850 * 1e5, 6);
     expect(cmp.list.map((c) => c.agency)).toEqual(['San Diego', 'New York City', 'Chicago']);
     expect(cmp.higher).toBe(1);
+  });
+});
+
+describe('revisions', () => {
+  const snap = (end, rows) => ({
+    citywide: {
+      report_period: { week_end: end },
+      seven_major_felonies: Object.fromEntries(Object.entries(rows).map(([n, [ytdC, ytdP, wkC, wkP]]) => [n, {
+        year_to_date: { current_year: ytdC, prior_year: ytdP }, week_to_date: { current_year: wkC, prior_year: wkP },
+      }])),
+      additional_stats: {},
+    },
+  });
+  test('YTD(t) − YTD(t−1) − week(t) isolates revisions to earlier weeks', () => {
+    const flows = revisionFlows([
+      snap('9/6/2026', { Murder: [180, 230, 5, 6] }),
+      snap('9/13/2026', { Murder: [187, 236, 5, 6] }), // 180 + 5 = 185 → 2 added by revision
+      snap('9/20/2026', { Murder: [193, 242, 3, 6] }), // 187 + 3 = 190 → 3 added
+    ]);
+    expect(flows.weeks).toBe(2);
+    expect(flows.byGeo.citywide.Murder).toEqual({ cur: 5, prior: 0 });
+  });
+  test('stops at a missing week or a New Year boundary', () => {
+    const gap = revisionFlows([
+      snap('8/30/2026', { Murder: [170, 220, 5, 5] }),
+      snap('9/13/2026', { Murder: [187, 236, 5, 6] }),
+      snap('9/20/2026', { Murder: [193, 242, 3, 6] }),
+    ]);
+    expect(gap.weeks).toBe(1);
+    const ny = revisionFlows([snap('12/28/2025', { Murder: [300, 370, 5, 5] }), snap('1/4/2026', { Murder: [4, 6, 4, 6] })]);
+    expect(ny).toBeNull();
+  });
+  test('break-even: the smallest revision that turns a real change into noise', () => {
+    const m = row(ytd, 'Murder'); // 189 vs 250
+    expect(breakEven(m)).toBe(19); // 208 vs 250 is noise; 207 vs 250 is still real
+    expect(verdictFor(poissonZ(189 + 18, 250))).toBe('drop');
+    expect(verdictFor(poissonZ(189 + 19, 250))).toBe('noise');
+    const ma = row(ytd, 'Misd. Assault'); // a rise weakens if revised down
+    const be = breakEven(ma);
+    expect(verdictFor(poissonZ(ma.cur - be, ma.prior))).toBe('noise');
+    expect(verdictFor(poissonZ(ma.cur - be + 1, ma.prior))).toBe('rise');
+  });
+  test('fragile when fewer than eight weeks of recent revisions would erase it', () => {
+    const ma = row(ytd, 'Misd. Assault');
+    expect(revisionRisk(ma, { cur: -131, prior: 0, weeks: 8 }).fragile).toBe(true);
+    expect(revisionRisk(row(ytd, 'Murder'), { cur: 8, prior: 0, weeks: 8 }).fragile).toBe(false);
+    // Revisions running the other way can't erase it.
+    expect(revisionRisk(ma, { cur: 50, prior: 0, weeks: 8 }).weeksToErase).toBe(Infinity);
+  });
+  test('a fragile change never leads the headline', () => {
+    const rows = withRevisions(ytd, { Murder: { cur: 200, prior: 0 } }, 8); // absurd pace: murder fragile
+    const h = buildHeadline(rows);
+    expect(h.lead.name).not.toBe('Murder');
+    expect(rows.find((r) => r.name === 'Murder').fragile).toBe(true);
   });
 });

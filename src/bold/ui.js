@@ -49,6 +49,18 @@ export function Chip({ verdict, dark = false, small = false, title }) {
   );
 }
 
+// A real change that the recent pace of NYPD revisions could erase.
+export function FragileTag({ weeks, dark = false }) {
+  return (
+    <span
+      title={`Clears the chance test on today's counts, but ${weeks} more ${weeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it.`}
+      className={`inline-flex items-center rounded-full border border-dashed px-1.5 py-[1px] text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${dark ? 'border-white/60 text-white/80' : 'border-[#707175] text-[#444]'}`}
+    >
+      Fragile
+    </span>
+  );
+}
+
 // Every generated claim can show its inputs and arithmetic.
 export function Receipt({ children, dark = false, label = 'Show the math' }) {
   const [open, setOpen] = useState(false);

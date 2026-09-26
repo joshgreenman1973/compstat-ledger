@@ -162,6 +162,92 @@ export function historicalColumns(reportYear) {
   ];
 }
 
+/* ----------------------------- revisions ---------------------------- */
+// NYPD's counts are preliminary. Victims die and assaults become murders; cases are upgraded,
+// downgraded or added late. Every weekly report restates the year-to-date total, so two consecutive
+// reports isolate the revisions: YTD(this week) − YTD(last week) − this week's own count is what NYPD
+// added to (or took from) weeks it had already reported. The prior-year column is a year old and has
+// mostly settled, so revisions — which mostly add crimes — tilt CompStat's comparisons toward decline.
+// (Vital City's review of 95 monthly reports, 2018–25, found every one later revised upward.)
+export const REVISION_WEEKS = 8;
+const DAY_MS = 86400000;
+const mdyTime = (s) => { const p = parseMDY(s); return p ? Date.UTC(p.y, p.m - 1, p.d) : null; };
+
+// snapshots: full CompStat reports, oldest → newest. Uses the longest run of consecutive weekly
+// reports ending with the newest; a pair that straddles New Year (YTD resets) ends the run.
+// Returns { weeks, from, to, byGeo: { geo: { offense: { cur, prior } } } } or null.
+export function revisionFlows(snapshots) {
+  const snaps = (snapshots || []).filter((s) => mdyTime(s?.citywide?.report_period?.week_end) != null);
+  const pairs = [];
+  for (let i = snaps.length - 1; i > 0; i--) {
+    const a = snaps[i - 1]; const b = snaps[i];
+    const ta = mdyTime(a.citywide.report_period.week_end); const tb = mdyTime(b.citywide.report_period.week_end);
+    if (tb - ta !== 7 * DAY_MS || new Date(ta).getUTCFullYear() !== new Date(tb).getUTCFullYear()) break;
+    pairs.unshift([a, b]);
+  }
+  if (!pairs.length) return null;
+  const byGeo = {};
+  pairs.forEach(([a, b]) => {
+    Object.keys(b).forEach((geo) => {
+      if (!a[geo]) return;
+      ['seven_major_felonies', 'additional_stats'].forEach((grp) => {
+        Object.entries(b[geo][grp] || {}).forEach(([name, sb]) => {
+          const sa = a[geo][grp]?.[name];
+          const ya = sa?.year_to_date; const yb = sb?.year_to_date; const wb = sb?.week_to_date;
+          const ok = (o, k) => Number.isFinite(o?.[k]);
+          if (!(ok(ya, 'current_year') && ok(yb, 'current_year') && ok(wb, 'current_year'))) return;
+          const g = (byGeo[geo] = byGeo[geo] || {});
+          const f = (g[name] = g[name] || { cur: 0, prior: 0 });
+          f.cur += yb.current_year - ya.current_year - wb.current_year;
+          if (ok(ya, 'prior_year') && ok(yb, 'prior_year') && ok(wb, 'prior_year')) f.prior += yb.prior_year - ya.prior_year - wb.prior_year;
+        });
+      });
+    });
+  });
+  return { weeks: pairs.length, from: pairs[0][0].citywide.report_period.week_end, to: pairs[pairs.length - 1][1].citywide.report_period.week_end, byGeo };
+}
+
+// Smallest change to this year's count — in the direction that weakens the finding — that turns a
+// real change into noise. (A drop weakens as this year's count is revised up; a rise, as it's revised down.)
+export function breakEven(row) {
+  if (!row || (row.verdict !== 'drop' && row.verdict !== 'rise')) return null;
+  const dir = row.verdict === 'drop' ? 1 : -1;
+  let lo = 1; let hi = Math.abs(row.cur - row.prior); // at hi the two counts are equal: z = 0, noise
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (verdictFor(poissonZ(row.cur + dir * mid, row.prior)) === row.verdict) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+// How many weeks of revisions at the recent pace would erase a real change. "Fragile" if fewer than
+// REVISION_WEEKS — i.e., if the next two months of revisions looked like the last two, it could vanish.
+// The threshold never exceeds the window's own length: a single week's count can only absorb about one
+// week's worth of revisions, a 28-day count about four.
+export function revisionRisk(row, flow, thresholdWeeks = REVISION_WEEKS) {
+  if (!flow || !(flow.weeks > 0)) return null;
+  const be = breakEven(row);
+  if (be == null) return null;
+  const dir = row.verdict === 'drop' ? 1 : -1;
+  const perWeek = (dir * flow.cur) / flow.weeks; // revisions per week in the weakening direction
+  const weeksToErase = perWeek > 0 ? be / perWeek : Infinity;
+  return { breakEven: be, perWeek, weeksToErase, thresholdWeeks, fragile: weeksToErase < thresholdWeeks };
+}
+export const WINDOW_WEEKS = { ytd: Infinity, d28: 4, wtd: 1 };
+export const fragileThreshold = (periodId) => Math.min(REVISION_WEEKS, WINDOW_WEEKS[periodId] ?? Infinity);
+
+// Attach the recent revision flow and risk to each row (mutates copies, returns new array).
+export function withRevisions(rows, flowsForGeo, weeks, thresholdWeeks = REVISION_WEEKS) {
+  if (!flowsForGeo || !(weeks > 0)) return rows;
+  return rows.map((r) => {
+    const f = flowsForGeo[r.name];
+    if (!f) return r;
+    const rev = { cur: f.cur, prior: f.prior, weeks };
+    const risk = revisionRisk(r, rev, thresholdWeeks);
+    return { ...r, rev, risk, fragile: !!risk?.fragile };
+  });
+}
+
 /* ------------------------------ verdict ----------------------------- */
 // Ordered by seriousness: the headline leads with the gravest crime that moved beyond chance.
 export const HEADLINE_ORDER = ['Murder', 'Shooting Vic.', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'G.L.A.', 'Gr. Larceny'];
@@ -183,17 +269,27 @@ const clause = (r, kind) => {
 export function buildHeadline(rows) {
   const by = Object.fromEntries(rows.map((r) => [r.name, r]));
   const eligible = HEADLINE_ORDER.map((n) => by[n]).filter((r) => r && r.verdict !== 'flagged' && r.verdict !== 'none' && r.pct != null);
-  const lead = eligible.find((r) => r.verdict === 'drop' || r.verdict === 'rise');
+  // A real change that recent revisions could erase ("fragile") never headlines.
+  const firm = (r) => (r.verdict === 'drop' || r.verdict === 'rise') && !r.fragile;
+  // "Isn't falling" must survive the recent pace of downward revisions, if any.
+  const stuckHolds = (r) => r.cur + Math.min(0, r.rev?.cur || 0) >= r.prior;
+  const lead = eligible.find(firm);
   if (!lead) {
-    return { kind: 'noise', lead: null, counter: null, sentences: ['No major crime moved more than chance alone would explain.'] };
+    const fragileOnly = eligible.some((r) => (r.verdict === 'drop' || r.verdict === 'rise') && r.fragile);
+    return {
+      kind: 'noise', lead: null, counter: null,
+      sentences: [fragileOnly
+        ? "No major crime moved by enough to outlast both chance and NYPD's revisions."
+        : 'No major crime moved more than chance alone would explain.'],
+    };
   }
   const others = eligible.filter((r) => r !== lead);
   let counter = null; let counterKind = null;
   if (lead.verdict === 'drop') {
-    counter = others.find((r) => r.verdict === 'rise');
+    counter = others.find((r) => r.verdict === 'rise' && firm(r));
     if (counter) counterKind = 'rise';
     if (!counter) {
-      counter = STUCK_ORDER.map((n) => by[n]).find((r) => r && r !== lead && r.verdict === 'noise' && r.pct >= 0 && r.prior >= 30);
+      counter = STUCK_ORDER.map((n) => by[n]).find((r) => r && r !== lead && r.verdict === 'noise' && r.pct >= 0 && r.prior >= 30 && stuckHolds(r));
       if (counter) counterKind = 'stuck';
     }
     if (!counter) {
@@ -201,14 +297,14 @@ export function buildHeadline(rows) {
       if (counter) counterKind = 'flat';
     }
     if (!counter) {
-      counter = others.find((r) => r.verdict === 'drop');
+      counter = others.find((r) => r.verdict === 'drop' && firm(r));
       if (counter) counterKind = 'drop';
     }
   } else {
-    counter = others.find((r) => r.verdict === 'drop');
+    counter = others.find((r) => r.verdict === 'drop' && firm(r));
     if (counter) counterKind = 'drop';
     if (!counter) {
-      counter = others.find((r) => r.verdict === 'rise');
+      counter = others.find((r) => r.verdict === 'rise' && firm(r));
       if (counter) counterKind = 'rise';
     }
   }
