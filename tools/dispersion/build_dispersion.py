@@ -9,7 +9,9 @@ Method: for each place and each line, take the weekly counts from consecutive ar
 reports (this year's first counts and last year's settled counts for the same weeks). Differencing
 neighboring weeks removes slow trends and seasons: if counts were Poisson around a slowly moving mean,
 E[(x[t+1] - x[t])^2] = x[t] + x[t+1] on average. Dispersion = sum of squared differences / sum of
-(x[t] + x[t+1]), pooled over the places at each level (citywide, patrol borough, precinct).
+(x[t] + x[t+1]), pooled over the places at each level (citywide, borough, patrol borough, precinct). Boroughs ("county")
+are the sums of their patrol boroughs, as on the page (stats.withBoroughs), taken only in weeks that
+report all of a borough's patrol boroughs.
 Clustering that spans several weeks isn't caught, so these values are, if anything, too low.
 
 Run from the repo root:
@@ -31,6 +33,26 @@ def lines(geo):
             out[name] = (w.get('current_year'), w.get('prior_year'))
     return out
 
+BOROUGHS = {
+    'Manhattan': ['Manhattan South', 'Manhattan North'], 'Bronx': ['Bronx North', 'Bronx South'],
+    'Brooklyn': ['Brooklyn South', 'Brooklyn North'], 'Queens': ['Queens South', 'Queens North'],
+    'Staten Island': ['Staten Island'],
+}
+
+def borough_lines(snap, boro):
+    # Staten Island, and the Bronx before its July 2026 split, are one patrol borough: use it as reported.
+    if boro in snap:
+        return lines(snap[boro])
+    pbs = BOROUGHS[boro]
+    if not all(k in snap for k in pbs):
+        return None
+    parts = [lines(snap[k]) for k in pbs]
+    out = {}
+    for name in set().union(*parts):
+        vals = [p.get(name, (None, None)) for p in parts]
+        out[name] = tuple(sum(v[i] for v in vals) if all(isinstance(v[i], (int, float)) for v in vals) else None for i in (0, 1))
+    return out
+
 def level_of(key):
     if key == 'citywide': return 'city'
     return 'precinct' if 'Precinct' in key else 'borough'
@@ -45,14 +67,15 @@ def main():
         if (week_end(b) - week_end(a)).days != 7:
             continue
         pairs += 1
-        for key in b:
-            if key not in a:
-                continue
-            la, lb = lines(a[key]), lines(b[key])
+        places = [(key, level_of(key), lines(a[key]), lines(b[key])) for key in b if key in a]
+        for boro in BOROUGHS:
+            la, lb = borough_lines(a, boro), borough_lines(b, boro)
+            if la is not None and lb is not None:
+                places.append((boro, 'county', la, lb))
+        for key, lvl, la, lb in places:
             # the seven-major total, measured directly, to check whether lines move together
             la['_majors'] = tuple(sum(la.get(n, (0, 0))[i] or 0 for n in majors) for i in (0, 1))
             lb['_majors'] = tuple(sum(lb.get(n, (0, 0))[i] or 0 for n in majors) for i in (0, 1))
-            lvl = level_of(key)
             for name, (ca, pa) in la.items():
                 cb, pb = lb.get(name, (None, None))
                 for x0, x1 in ((ca, cb), (pa, pb)):
@@ -75,7 +98,7 @@ def main():
     }
     json.dump(result, open('src/bold/dispersion.json', 'w'), indent=1)
     for name, v in sorted(out.items()):
-        print(f"{name:20} city {v.get('city', '-'):>5}  borough {v.get('borough', '-'):>5}  precinct {v.get('precinct', '-'):>5}")
+        print(f"{name:20} city {v.get('city', '-'):>5}  county {v.get('county', '-'):>5}  borough {v.get('borough', '-'):>5}  precinct {v.get('precinct', '-'):>5}")
     print(pairs, 'consecutive pairs')
 
 if __name__ == '__main__':

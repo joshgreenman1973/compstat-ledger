@@ -105,6 +105,17 @@ Every change on the page compares a stretch of this year with the same dates a y
 - **Small bases.** As in the original ledger (its `VOLATILITY_THRESHOLD`), a percent change on a line with fewer than 30 last year is grayed out and starred everywhere it appears (`S.SMALL_BASE`, the `Pct` component, the signal board), and headlines and sentences give counts instead ("up from two at this point in 2025").
 - **Motion.** Small, one-time grace notes as each piece scrolls into view (`useReveal`, `Reveal`, `CountUp` in `ui.js`; styles in `bold.css`): bars grow from zero, sparklines and the long-arc line draw, tags and headings fade up, hero numbers count up, signal-board dots slide on the Percent / Number switch, and map fills ease. Everything is visible without JavaScript, and `prefers-reduced-motion` turns it all off. The verification harness renders with reduced motion so counts are final.
 
+## Borough pages, current populations and map hover cards (Sept. 27)
+
+- **Boroughs.** `?geo=Manhattan|Bronx|Brooklyn|Queens|Staten Island`, listed first in the picker. NYPD reports patrol boroughs, not boroughs, so `S.withBoroughs` sums each borough's patrol boroughs (Staten Island, and the Bronx before its July 2026 split, are used as reported). It runs on the live report, the offline snapshot and every archived week before revision flows. Summing patrol boroughs, not precincts, keeps the cases NYPD logs without a precinct (Bronx South runs above its precincts). Checked on the Sept. 20 report: the five boroughs add up to NYPD's citywide figure on every value.
+  - Long-view columns: each patrol borough's base-year count is recovered as count ÷ (1 + percent) and the bases summed (`S.sumLine`). Rebuilding the citywide columns this way reproduces NYPD's. A part at zero leaves the sum without a long view.
+  - Chance test: a borough level (`'county'` in `dispersion.json`, since `'borough'` already meant patrol boroughs), measured the same way; weeks without all of a borough's patrol boroughs (Brooklyn's are missing March to mid-May 2026) are skipped. Staten Island now uses it.
+  - Population: the sum of the borough's precincts, because police lines don't follow county lines (Marble Hill is in the 50th; Roosevelt and Rikers islands are in the 114th).
+  - Hero: a locator map with the borough's precincts highlighted (patrol-borough pages get one too) and a note that the figures sum NYPD's patrol-borough reports.
+- **Populations.** Rates use the Census Bureau's July 1, 2025 estimates (`src/bold/population.js`); see the table below.
+- **Hover cards** on every map: the small multiples and the hero locator show a card like the main precinct map's.
+- Fixed along the way: the scale line no longer offers a change that rounds to 0.0% ("a 0.0% drop … is 1 fewer assaults"), and the signal-board receipt no longer says murder and rape are unwidened on pages where they are (precincts, and rape in boroughs); receipts show dispersion to two decimals.
+
 ## How it's built
 
 | Path | What it does |
@@ -204,7 +215,7 @@ Don't loosen these without a reason you can defend in print.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 476 of 476 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also checks the precinct 2020 counts against Keefe's file and the per-resident rates against July 2025 populations, re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 783 of 783 checks pass (five rendered pages: citywide year to date and week, the 75th Precinct, Brooklyn and the Bronx), including an independent Python reimplementation of the notable-trends tests. `check.py` now also checks the precinct 2020 counts against Keefe's file and the per-resident rates against July 2025 populations, re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.

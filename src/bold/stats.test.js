@@ -1,3 +1,4 @@
+import * as S from './stats';
 import snapshot from './snapshot-2026-09-20.json';
 import crimeHistory from '../data/crime_history.json';
 import {
@@ -400,5 +401,53 @@ describe('small bases', () => {
   test('headlines on a small base give counts', () => {
     expect(clause({ name: 'Robbery', label: 'Robbery', cur: 12, prior: 25, pct: -52 }, 'drop')).toBe('Robberies fell to 12 from 25.');
     expect(clause({ name: 'Robbery', label: 'Robbery', cur: 20, prior: 30, pct: -33.3 }, 'drop')).toBe('Robbery is down 33%.');
+  });
+});
+
+describe('boroughs', () => {
+  const line = (wc, wp, yc, yp, h) => ({
+    week_to_date: { current_year: wc, prior_year: wp }, year_to_date: { current_year: yc, prior_year: yp },
+    ...(h ? { historical: h } : {}),
+  });
+  test('sumLine adds counts and leaves out any a part lacks', () => {
+    const s = S.sumLine([line(1, 2, 100, 80), line(3, null, 50, 20)]);
+    expect(s.week_to_date.current_year).toBe(4);
+    expect(s.week_to_date.prior_year).toBe(null);
+    expect(s.year_to_date).toMatchObject({ current_year: 150, prior_year: 100 });
+    expect(s.year_to_date.pct_change).toBeCloseTo(50);
+  });
+  test('long-view percents are rebuilt from each part\'s base-year count', () => {
+    // bases: 100 / 0.5 = 200 and 50 / 1.25 = 40; (150 / 240 − 1) = −37.5%
+    const s = S.sumLine([line(0, 0, 100, 90, { '31_yr_pct': -50 }), line(0, 0, 50, 40, { '31_yr_pct': 25 })]);
+    expect(s.historical['31_yr_pct']).toBeCloseTo(-37.5);
+    // a part at zero can't reveal its base, so the sum gets no long view
+    const z = S.sumLine([line(0, 0, 100, 90, { '31_yr_pct': -50 }), line(0, 0, 0, 3, { '31_yr_pct': -100 })]);
+    expect(z.historical).toBeUndefined();
+  });
+  test('withBoroughs sums patrol boroughs and leaves reported ones alone', () => {
+    const g = (n) => ({ report_period: { week_end: '9/20/2026' }, seven_major_felonies: { Murder: line(n, n, n, n) }, additional_stats: {}, total_seven_major: line(n, n, n, n) });
+    const rep = S.withBoroughs({
+      citywide: g(99), 'Brooklyn South': g(3), 'Brooklyn North': g(4), Bronx: g(7), 'Staten Island': g(1), 'Queens South': g(2),
+    });
+    expect(rep.Brooklyn.seven_major_felonies.Murder.year_to_date.current_year).toBe(7);
+    expect(rep.Brooklyn.total_seven_major.year_to_date.current_year).toBe(7);
+    expect(rep.Brooklyn.summedFrom).toEqual(['Brooklyn South', 'Brooklyn North']);
+    expect(rep.Bronx.summedFrom).toBeUndefined(); // the Bronx before its split, as reported
+    expect(rep['Staten Island'].summedFrom).toBeUndefined();
+    expect(rep.Queens).toBeUndefined(); // Queens North missing: no Queens
+    expect(rep.Manhattan).toBeUndefined();
+    expect(S.withBoroughs({ citywide: g(1) })).toEqual({ citywide: g(1) });
+  });
+  test('levels, membership and wording', () => {
+    expect(S.LEVEL('Brooklyn')).toBe('county');
+    expect(S.LEVEL('Staten Island')).toBe('county');
+    expect(S.LEVEL('Bronx North')).toBe('borough');
+    expect(S.dispersionFor('Murder', 'county')).toBeGreaterThanOrEqual(1);
+    expect(S.inBorough('Bronx', '50th Precinct')).toBe(true);
+    expect(S.inBorough('Queens', '116th Precinct')).toBe(true);
+    expect(S.inBorough('Queens', '75th Precinct')).toBe(false);
+    expect(S.inBoroughPhrase('Bronx')).toBe('in the Bronx');
+    expect(S.inBoroughPhrase('Staten Island')).toBe('on Staten Island');
+    expect(S.inBoroughPhrase('Queens')).toBe('in Queens');
   });
 });

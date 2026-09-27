@@ -7,96 +7,115 @@
   "Burglary": {
    "borough": 1.08,
    "city": 1.69,
+   "county": 0.96,
    "precinct": 1.12
   },
   "Fel. Assault": {
    "borough": 1.31,
    "city": 2.64,
+   "county": 1.5,
    "precinct": 1.26
   },
   "G.L.A.": {
    "borough": 1.28,
    "city": 2.28,
+   "county": 1.39,
    "precinct": 1.17
   },
   "Gr. Larceny": {
    "borough": 1.13,
    "city": 1.95,
+   "county": 1.32,
    "precinct": 1.09
   },
   "Hate Crimes": {
    "borough": 1.56,
    "city": 1.59,
+   "county": 1.8,
    "precinct": 1.34
   },
   "Housing": {
    "borough": 1.1,
    "city": 1.08,
+   "county": 1.06,
    "precinct": 1.14
   },
   "Misd. Assault": {
    "borough": 1.47,
    "city": 2.95,
+   "county": 1.56,
    "precinct": 1.27
   },
   "Murder": {
    "borough": 0.96,
    "city": 0.65,
+   "county": 0.92,
    "precinct": 1.15
   },
   "Other Sex Crimes": {
    "borough": 0.93,
    "city": 1.29,
+   "county": 0.98,
    "precinct": 1.09
   },
   "Petit Larceny": {
    "borough": 1.68,
    "city": 4.27,
+   "county": 1.93,
    "precinct": 1.65
   },
   "Rape": {
    "borough": 0.96,
    "city": 0.89,
+   "county": 1.07,
    "precinct": 1.04
   },
   "Retail Theft": {
    "borough": 1.61,
    "city": 3.23,
+   "county": 1.86,
    "precinct": 1.53
   },
   "Robbery": {
    "borough": 0.96,
    "city": 1.57,
+   "county": 1.01,
    "precinct": 1.03
   },
   "Shooting Inc.": {
    "borough": 1.02,
    "city": 1.31,
+   "county": 1.19,
    "precinct": 1.02
   },
   "Shooting Vic.": {
    "borough": 1.75,
    "city": 2.33,
+   "county": 2.05,
    "precinct": 1.76
   },
   "Traffic Fatalities": {
    "borough": 0.95,
    "city": 1.12,
+   "county": 0.93,
    "precinct": 1.01
   },
   "Transit": {
    "borough": 0.92,
    "city": 1.37,
+   "county": 0.96,
    "precinct": 1.03
   },
   "UCR Rape*": {
    "borough": 0.87,
    "city": 1.01,
+   "county": 1.0,
    "precinct": 1.03
   },
   "_majors": {
    "borough": 1.1,
    "city": 2.32,
+   "county": 1.37,
    "precinct": 1.1
   }
  }

@@ -54,7 +54,10 @@ LBLS = {'Petit Larceny': 'Petit larceny', 'Misd. Assault': 'Misdemeanor assault'
 # ---- archive: dispersion and revision flows, from scratch ----
 arch = {os.path.basename(f)[:-5]: json.load(open(f)) for f in glob.glob(f'{SP}/scraper/data/archive/*.json')}
 dates = sorted(arch)
-def lvl(k): return 'city' if k == 'citywide' else 'precinct' if 'Precinct' in k else 'borough'
+# NYPD's own entries: Staten Island and the pre-split Bronx pool with the patrol boroughs here, as in
+# build_dispersion.py; as boroughs they're pooled again, at the county level, below.
+def raw_lvl(k): return 'city' if k == 'citywide' else 'precinct' if 'Precinct' in k else 'borough'
+def lvl(k): return 'city' if k == 'citywide' else 'precinct' if 'Precinct' in k else 'county' if k in ('Manhattan', 'Bronx', 'Brooklyn', 'Queens', 'Staten Island') else 'borough'
 num = {}; den = {}
 for a_, b_ in zip(dates, dates[1:]):
     if (date.fromisoformat(b_) - date.fromisoformat(a_)).days != 7: continue
@@ -71,7 +74,62 @@ for a_, b_ in zip(dates, dates[1:]):
         for n, pairs in series.items():
             for x0, x1 in pairs:
                 if x0 is None or x1 is None: continue
-                k = (lvl(geo), n); num[k] = num.get(k, 0) + (x1 - x0) ** 2; den[k] = den.get(k, 0) + x0 + x1
+                k = (raw_lvl(geo), n); num[k] = num.get(k, 0) + (x1 - x0) ** 2; den[k] = den.get(k, 0) + x0 + x1
+# Boroughs, re-derived here: the sum of a borough's patrol boroughs, or the entry as reported when NYPD
+# reports the whole borough (Staten Island; the Bronx before July 2026). Long-view percents come from
+# the summed base-year counts (count / (1 + pct)); a part at zero or missing leaves the sum without one.
+BOROS = {'Manhattan': ['Manhattan South', 'Manhattan North'], 'Bronx': ['Bronx North', 'Bronx South'],
+         'Brooklyn': ['Brooklyn South', 'Brooklyn North'], 'Queens': ['Queens South', 'Queens North'], 'Staten Island': ['Staten Island']}
+isnum = lambda x: isinstance(x, (int, float))
+def sum_line(parts):
+    parts = [p or {} for p in parts]
+    line = {per: {s_: (sum(v) if all(isnum(x) for x in v) else None) for s_ in ('current_year', 'prior_year') for v in [[(p.get(per) or {}).get(s_) for p in parts]]}
+            for per in ('week_to_date', 'twenty_eight_day', 'year_to_date')}
+    cs = [(p.get('year_to_date') or {}).get('current_year') for p in parts]
+    line['historical'] = {}
+    for hk in ('2_yr_pct', '14_yr_pct', '31_yr_pct'):
+        hs = [(p.get('historical') or {}).get(hk) for p in parts]
+        if all(isnum(c) and c > 0 for c in cs) and all(isnum(x) and x > -100 for x in hs):
+            line['historical'][hk] = (sum(cs) / sum(c / (1 + x / 100) for c, x in zip(cs, hs)) - 1) * 100
+    return line
+def add_boroughs(rep):
+    out = dict(rep)
+    for b, pbs in BOROS.items():
+        if b in rep or not all(k in rep for k in pbs): continue
+        out[b] = {grp: {n: sum_line([rep[k][grp].get(n) for k in pbs]) for n in set().union(*(rep[k][grp] for k in pbs))} for grp in ('seven_major_felonies', 'additional_stats')}
+        out[b]['total_seven_major'] = sum_line([rep[k]['total_seven_major'] for k in pbs])
+    return out
+archB = {k: add_boroughs(v) for k, v in arch.items()}
+for a_, b_ in zip(dates, dates[1:]):
+    if (date.fromisoformat(b_) - date.fromisoformat(a_)).days != 7: continue
+    A, B = archB[a_], archB[b_]
+    for geo in BOROS:
+        if geo not in A or geo not in B: continue
+        names = set(A[geo]['seven_major_felonies']) | set(A[geo]['additional_stats'])
+        series = {}
+        for n in names:
+            sa, sb = get(geo, n, A), get(geo, n, B)
+            if not sa or not sb: continue
+            series[n] = [(sa['week_to_date'][s_], sb['week_to_date'][s_]) for s_ in ('current_year', 'prior_year')]
+        series['_majors'] = [tuple(sum((get(geo, n, X) or {}).get('week_to_date', {}).get(s_) or 0 for n in MAJ) for X in (A, B)) for s_ in ('current_year', 'prior_year')]
+        for n, pairs in series.items():
+            for x0, x1 in pairs:
+                if x0 is None or x1 is None: continue
+                k = ('county', n); num[k] = num.get(k, 0) + (x1 - x0) ** 2; den[k] = den.get(k, 0) + x0 + x1
+arch = archB  # revision flows below read boroughs too
+d = add_boroughs(d)
+# the method rests on the patrol boroughs adding up to NYPD's citywide figures: check every value
+cw_ok = [(n, per, s_) for g in ('seven_major_felonies', 'additional_stats') for n in d['citywide'][g] for per in ('week_to_date', 'twenty_eight_day', 'year_to_date') for s_ in ('current_year', 'prior_year')]
+for n, per, s_ in cw_ok:
+    parts = [(get(b, n) or {}).get(per, {}).get(s_) for b in BOROS]
+    check(all(isnum(x) for x in parts) and sum(parts) == get('citywide', n)[per][s_], f'boroughs add up to citywide: {n} {per} {s_}')
+# long views rebuilt from the boroughs match NYPD's citywide columns, where every borough has a base
+for g in ('seven_major_felonies', 'additional_stats'):
+    for n in d['citywide'][g]:
+        rb = sum_line([get(b, n) for b in BOROS])['historical']
+        for hk, v in rb.items():
+            cv = (get('citywide', n).get('historical') or {}).get(hk)
+            if isnum(cv): check(abs(v - cv) < 0.05, f'rebuilt long view matches citywide: {n} {hk} {v:.2f} vs {cv:.2f}')
 disp = {k: num[k] / den[k] for k in num if den[k] > 0}
 bundled = json.load(open('src/bold/dispersion.json'))['lines']
 for (l, n), v in disp.items():
@@ -119,7 +177,7 @@ for r in range(hdr + 1, sh.nrows):
         check(H.get(y, {}).get(k) == int(v), f'history {y} {k} = NYPD {int(v)}')
 
 # ---- per-page checks ----
-for fname, geo, per in [('cw.txt', 'citywide', 'year_to_date'), ('cw75.txt', '75th Precinct', 'year_to_date'), ('cwwk.txt', 'citywide', 'week_to_date')]:
+for fname, geo, per in [('cw.txt', 'citywide', 'year_to_date'), ('cw75.txt', '75th Precinct', 'year_to_date'), ('cwwk.txt', 'citywide', 'week_to_date'), ('bk.txt', 'Brooklyn', 'year_to_date'), ('bx.txt', 'Bronx', 'year_to_date')]:
     t = open(f'{SP}/{fname}').read().replace('−', '-')
     L = lvl(geo)
     c, p = row(geo, 'Murder', per)
@@ -296,6 +354,23 @@ for n in ['Murder', 'Robbery', 'Fel. Assault', 'Burglary', 'Gr. Larceny', 'G.L.A
 expect(t, f'{fmt(CITY25)} New Yorkers, {(1 - CITY25 / 8804190) * 100:.1f}% fewer than the 2020 Census counted', 'population note: city')
 expect(t, f'from {(1 - V25["Bronx"] / C20["Bronx"]) * 100:.1f}% fewer residents in the Bronx to {(V25["Staten Island"] / C20["Staten Island"] - 1) * 100:.1f}% more on Staten Island', 'population note: range')
 absent(t, '2020 Census population:', 'no stale population label')
+# which lines go unwidened depends on the level: murder and rape citywide; neither in a precinct
+expect(t, 'Murder and rape vary no more than chance citywide', 'unwidened lines, citywide')
+check(phi('Murder', 'precinct') > 1 and phi('Rape', 'precinct') > 1, 'murder and rape are widened in precincts')
+absent(open(f'{SP}/cw75.txt').read(), 'vary no more than chance', 'no unwidened claim on a precinct page')
+expect(open(f'{SP}/bk.txt').read(), 'Murder varies no more than chance at this level', 'unwidened lines, borough')
+# borough pages: wording, the sum note and per-resident rates on the borough's precincts' residents
+for fname, boro, phrase in (('bk.txt', 'Brooklyn', 'in Brooklyn'), ('bx.txt', 'Bronx', 'in the Bronx')):
+    tb = open(f'{SP}/{fname}').read()
+    expect(tb, f'the seven major felonies {phrase} are', f'{fname} place wording')
+    expect(tb, f"NYPD doesn't report borough totals; these add up its {' and '.join(BOROS[boro])} patrol-borough reports.", f'{fname} sum note')
+    bpop = sum(v for k, v in gp.items() if BORO[pnum(k)] == boro)
+    for n in ['Murder', 'Robbery', 'Fel. Assault']:
+        a_, b_ = row(boro, n)[0] / bpop * 1e5, row('citywide', n)[0] / CITY25 * 1e5
+        expect(tb, f'\t{a_:.1f}\t{b_:.1f}\t', f'{fname} per 100k {n}')
+    absent(tb, 'Patrol Borough Brooklyn', f'{fname} no patrol-borough wording')
+    absent(tb, '0.0% drop in', f'{fname} no 0.0% scale example')
+    absent(tb, ' 1 fewer ', f'{fname} small numbers spelled out')
 print(f'{oks} checks passed, {len(fails)} failed')
 print('\n'.join(fails[:40]))
 sys.exit(1 if fails else 0)

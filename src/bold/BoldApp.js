@@ -244,8 +244,13 @@ function periodText(periodId, geoData) {
   };
 }
 
+// "The Bronx" as a label; everything else as NYPD names it.
+const placeLabel = (geo) => (geo === 'Bronx' ? 'The Bronx' : geo);
+
 const geoPopulation = (geo) => {
   if (geo === 'citywide') return CITY_POPULATION;
+  // A borough's counts follow police lines, so its residents do too: the sum of its precincts'.
+  if (S.isBorough(geo)) return Object.keys(POPULATION).filter((k) => S.inBorough(geo, k)).reduce((n, k) => n + POPULATION[k], 0);
   if (!geo.includes('Precinct')) return null; // patrol-borough lines were redrawn (Bronx North/South); no reliable denominator
   if (S.isSplitPrecinct(geo)) return null;
   return POPULATION[geo] || null;
@@ -347,7 +352,8 @@ function GeoPicker({ raw, geo, onPick }) {
   const [open, setOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const [msg, setMsg] = useState('');
-  const boroughs = useMemo(() => Object.keys(raw || {}).filter((k) => k !== 'citywide' && !k.includes('Precinct')), [raw]);
+  const boroughs = useMemo(() => Object.keys(S.BOROUGHS).filter((k) => raw?.[k]), [raw]);
+  const patrol = useMemo(() => Object.keys(raw || {}).filter((k) => k !== 'citywide' && !k.includes('Precinct') && !S.isBorough(k)), [raw]);
   const precincts = useMemo(() => Object.keys(raw || {}).filter((k) => k.includes('Precinct'))
     .sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), [raw]);
   const needle = q.trim().toLowerCase();
@@ -366,13 +372,13 @@ function GeoPicker({ raw, geo, onPick }) {
       } catch { setMsg('Could not look up your precinct'); } finally { setLocating(false); }
     }, () => { setLocating(false); setMsg('Location permission denied'); });
   };
-  const current = geo === 'citywide' ? 'Citywide' : geo;
+  const current = geo === 'citywide' ? 'Citywide' : placeLabel(geo);
   return (
     <div className="relative flex items-center gap-2 w-full sm:w-auto">
       <div className="relative flex-1 sm:w-[300px]">
         <input
           type="text"
-          aria-label="Choose citywide, a patrol borough or a precinct"
+          aria-label="Choose citywide, a borough, a patrol borough or a precinct"
           value={open ? q : current}
           placeholder="Precinct, neighborhood or borough"
           onFocus={() => { setOpen(true); setQ(''); }}
@@ -384,8 +390,10 @@ function GeoPicker({ raw, geo, onPick }) {
         {open && (
           <div className="absolute z-50 mt-1.5 w-full max-h-80 overflow-y-auto rounded-lg bg-white text-[#050507] shadow-2xl border border-[#ddd]">
             {hit('citywide') && <button onMouseDown={() => pick('citywide')} className="block w-full text-left px-3 py-2 text-[13px] font-bold hover:bg-[#f7f8dd]">Citywide</button>}
-            {boroughs.filter(hit).length > 0 && <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[#707175]">Patrol boroughs</div>}
+            {boroughs.filter(hit).length > 0 && <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[#707175]">Boroughs</div>}
             {boroughs.filter(hit).map((b) => <button key={b} onMouseDown={() => pick(b)} className="block w-full text-left px-3 py-1.5 text-[13px] hover:bg-[#f7f8dd]">{b}</button>)}
+            {patrol.filter(hit).length > 0 && <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[#707175] border-t border-[#eee]">Patrol boroughs</div>}
+            {patrol.filter(hit).map((b) => <button key={b} onMouseDown={() => pick(b)} className="block w-full text-left px-3 py-1.5 text-[13px] hover:bg-[#f7f8dd]">{b}</button>)}
             {precincts.filter((p) => hit(p) || hit(hoodOf(p))).length > 0 && <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[#707175] border-t border-[#eee]">Precincts</div>}
             {precincts.filter((p) => hit(p) || hit(hoodOf(p))).map((p) => (
               <button key={p} onMouseDown={() => pick(p)} className="block w-full text-left px-3 py-1.5 hover:bg-[#f7f8dd]">
@@ -428,8 +436,8 @@ export default function BoldApp() {
     let alive = true;
     fetch(`${COMPSTAT_URL}?t=${Date.now()}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((json) => { if (!alive) return; if (json?.citywide) { setRaw(json); setSource('live'); } else throw new Error('empty'); })
-      .catch(() => { if (alive) { setRaw(snapshot); setSource('snapshot'); } });
+      .then((json) => { if (!alive) return; if (json?.citywide) { setRaw(S.withBoroughs(json)); setSource('live'); } else throw new Error('empty'); })
+      .catch(() => { if (alive) { setRaw(S.withBoroughs(snapshot)); setSource('snapshot'); } });
     fetch(RTCI_CSV_URL)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((t) => { if (alive) setRtci(S.parseRTCI(t) || RTCI_SNAPSHOT); })
@@ -452,7 +460,7 @@ export default function BoldApp() {
           .sort((a, b) => b.date.localeCompare(a.date)).slice(0, S.REVISION_WEEKS);
         return Promise.all(older.map((e) => fetch(DATA_BASE + e.path).then((r) => (r.ok ? r.json() : null)).catch(() => null)));
       })
-      .then((snaps) => S.revisionFlows([...snaps.filter(Boolean).reverse(), raw]));
+      .then((snaps) => S.revisionFlows([...snaps.filter(Boolean).reverse().map(S.withBoroughs), raw]));
     const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000));
     Promise.race([work, timeout])
       .then((f) => { if (alive) { setRevs(f); setRevStatus('done'); } })
@@ -527,7 +535,8 @@ export default function BoldApp() {
   const isTourist = TOURIST_PRECINCTS.includes(activeGeo);
   const isSplit = S.isSplitPrecinct(activeGeo);
   const rapeOK = S.rapeYoYComparable(period, weekEnd);
-  const here = isCity ? 'citywide' : activeGeo.includes('Precinct') ? `in the ${activeGeo}` : `in Patrol Borough ${activeGeo}`;
+  const isBoro = S.isBorough(activeGeo);
+  const here = isCity ? 'citywide' : activeGeo.includes('Precinct') ? `in the ${activeGeo}` : isBoro ? S.inBoroughPhrase(activeGeo) : `in Patrol Borough ${activeGeo}`;
 
   /* ---------------- precinct units for the map + concentration ---------------- */
   const measureDef = MEASURES[measure];
@@ -590,7 +599,7 @@ export default function BoldApp() {
   }) : null), [raw, allPlaces, period, rapeOK, revs, fragileWeeks]);
   const scoped = useMemo(() => {
     if (!notable) return null;
-    const keep = (x) => (isCity ? true : isPrecinct ? x.geo === activeGeo : S.inPatrolBorough(activeGeo, x.geo));
+    const keep = (x) => (isCity ? true : isPrecinct ? x.geo === activeGeo : S.isBorough(activeGeo) ? S.inBorough(activeGeo, x.geo) : S.inPatrolBorough(activeGeo, x.geo));
     return { rises: notable.rises.filter(keep), drops: notable.drops.filter(keep), all: notable.all.filter(keep) };
   }, [notable, isCity, isPrecinct, activeGeo]);
 
@@ -704,8 +713,8 @@ export default function BoldApp() {
 
   const zLine = (r) => (r.z == null ? null : (
     <p key={`z-${r.name}`}>
-      <strong>{r.label}:</strong> {S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} = {S.fmtSigned(r.diff)} ({S.fmtPct(r.pct)}). Chance test: (gap of {S.fmtInt(Math.abs(r.diff))}, minus 1) ÷ √({r.phi > 1 ? `${r.phi.toFixed(1)} × (` : ''}{S.fmtInt(r.cur)} + {S.fmtInt(r.prior)}{r.phi > 1 ? ')' : ''}) = <strong>z = {r.z < 0 ? '−' : ''}{Math.abs(r.z).toFixed(2)}</strong>.{' '}
-      {r.phi > 1 && `The ${r.phi.toFixed(1)} allows for how much this line varies from week to week beyond a plain random count, measured from NYPD's weekly reports. `}
+      <strong>{r.label}:</strong> {S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} = {S.fmtSigned(r.diff)} ({S.fmtPct(r.pct)}). Chance test: (gap of {S.fmtInt(Math.abs(r.diff))}, minus 1) ÷ √({r.phi > 1 ? `${r.phi.toFixed(2)} × (` : ''}{S.fmtInt(r.cur)} + {S.fmtInt(r.prior)}{r.phi > 1 ? ')' : ''}) = <strong>z = {r.z < 0 ? '−' : ''}{Math.abs(r.z).toFixed(2)}</strong>.{' '}
+      {r.phi > 1 && `The ${r.phi.toFixed(2)} allows for how much this line varies from week to week beyond a plain random count, measured from NYPD's weekly reports. `}
       {Math.abs(r.z) >= S.Z_CRIT ? "Beyond ±1.96: if the underlying rate hadn't changed, a gap this big would show up less than 5% of the time." : "Inside ±1.96: a gap this size shows up routinely even when the underlying rate hasn't changed, so the counts can't show whether it did."}
       {r.rev && <>{' '}{revisionSentence(r)}</>}
     </p>
@@ -754,9 +763,13 @@ export default function BoldApp() {
     if (r0 && d0 && r0.name === d0.name) return `${r0.label} is ${pctProse(r0.pct)} in the ${r0.geo} and ${pctProse(d0.pct)} in the ${shortName(d0.geo)}; citywide, it's ${pctProse(r0.cityPct)}.`;
     if (r0 && d0) return `${r0.label} is ${pctProse(r0.pct)} in the ${r0.geo}; ${lc(d0.label)} is ${pctProse(d0.pct)} in the ${shortName(d0.geo)}.`;
     if (r0 || d0) return moveSentence(r0 || d0);
-    return `No precinct's change in a major crime${isCity ? '' : ` in Patrol Borough ${activeGeo}`} stands out from both chance and the citywide trend ${P.since}.`;
+    return `No precinct's change in a major crime${isCity ? '' : ` ${here}`} stands out from both chance and the citywide trend ${P.since}.`;
   })();
 
+  // Borough and patrol-borough pages highlight their precincts on the locator map (the 116th has no
+  // shape of its own; the old 105th and 113th cover it).
+  const memberKeys = isCity || isPrecinct ? [] : allPlaces.filter((k) => (isBoro ? S.inBorough(activeGeo, k) : S.inPatrolBorough(activeGeo, k)));
+  const memberNums = memberKeys.filter((k) => k !== '116th Precinct').map((k) => String(parseInt(k, 10)));
   // Hover labels for the locator map: every precinct's name and neighborhood.
   const locatorTitles = Object.fromEntries(allPlaces.filter((k) => k !== '116th Precinct').map((k) => [String(parseInt(k, 10)), `${k}: ${hoodOf(k) || 'New York City'}${S.isSplitPrecinct(k) ? ' (shown combined with the 105th, 113th and 116th)' : ''}`]));
   const tiles = [
@@ -811,7 +824,7 @@ export default function BoldApp() {
           )}
           <div className={selectedNum ? 'lg:grid lg:grid-cols-[1fr_260px] lg:gap-10' : ''}>
           <div>
-          <Kicker dark>{isCity ? 'Citywide' : activeGeo}{!isCity && hoodOf(activeGeo) ? ` · ${hoodOf(activeGeo)}` : ''} · {P.kicker}</Kicker>
+          <Kicker dark>{isCity ? 'Citywide' : placeLabel(activeGeo)}{!isCity && hoodOf(activeGeo) ? ` · ${hoodOf(activeGeo)}` : ''} · {P.kicker}</Kicker>
           <h1 id="verdict-h" className="vc-enter vc-display vc-hero-headline font-black leading-[0.98] tracking-tight text-[40px] sm:text-[60px] md:text-[76px] lg:text-[88px] max-w-[15ch]">
             {headline.sentences.map((s, i) => (
               <span key={s} className={i === 1 && (headline.counterKind === 'stuck' || headline.counterKind === 'rise') ? 'vc-counter' : ''}>{s}{i < headline.sentences.length - 1 ? ' ' : ''}</span>
@@ -821,9 +834,10 @@ export default function BoldApp() {
           {ratio && (() => {
             // Percentages hide scale: the same percent means very different numbers of crimes.
             const fa = ratio.numer; const mu = ratio.denom;
-            const sized = (r) => (r.diff === 0 || r.pct == null ? null : `${Math.abs(r.pct) < 10 ? Math.abs(r.pct).toFixed(1) : Math.round(Math.abs(r.pct))}% ${r.diff > 0 ? 'rise' : 'drop'}`);
-            const parts = [[fa, 'felony assaults', 'assaults'], [mu, 'murders', 'murders']].filter(([r]) => sized(r))
-              .map(([r, pl, noun]) => `a ${sized(r)} in ${pl} is ${S.fmtInt(Math.abs(r.diff))} ${r.diff > 0 ? 'more' : 'fewer'} ${noun}`);
+            // (A change that rounds to 0.0% illustrates nothing, so it's left out.)
+            const sized = (r) => (r.diff === 0 || r.pct == null || Math.abs(r.pct) < 0.05 ? null : `${Math.abs(r.pct) < 10 ? Math.abs(r.pct).toFixed(1) : Math.round(Math.abs(r.pct))}% ${r.diff > 0 ? 'rise' : 'drop'}`);
+            const parts = [[fa, 'felony assaults', 'assault'], [mu, 'murders', 'murder']].filter(([r]) => sized(r))
+              .map(([r, pl, noun]) => `a ${sized(r)} in ${pl} is ${nw(Math.abs(r.diff))} ${r.diff > 0 ? 'more' : 'fewer'} ${noun}${Math.abs(r.diff) === 1 ? '' : 's'}`);
             return (
               <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">
                 Scale matters: NYPD recorded <strong className="text-white">{ratio.display} felony assaults</strong> for every murder {P.since}.{parts.length ? ` ${capFirst(parts.join('; '))}.` : ''}
@@ -833,6 +847,7 @@ export default function BoldApp() {
           {spotlight && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/85">{spotlight} <a href="#trends" className="underline decoration-[#dde44c] underline-offset-2 hover:text-[#dde44c] whitespace-nowrap">Notable trends ↓</a></p>}
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
+          {isBoro && <p className="mt-4 max-w-3xl text-[14px] text-white/70">{geoData?.summedFrom ? `NYPD doesn't report borough totals; these add up its ${geoData.summedFrom.join(' and ')} patrol-borough reports.` : `${placeLabel(activeGeo)} is a single NYPD patrol borough; these are its figures as reported.`}</p>}
           {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created in December 2024 from parts of the 105th and 113th. NYPD reports all three separately, restated for the new lines, but the population figures and precinct map use the old lines, so per-resident rates for any one of them would be wrong. Maps and rates combine the three.</p>}
           </div>
           {selectedNum && (
@@ -840,6 +855,12 @@ export default function BoldApp() {
               <MiniMap dark fills={{ [selectedNum]: '#dde44c' }} titles={locatorTitles} selectedNum={selectedNum} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the ${activeGeo} highlighted among New York City's precincts.`} minWidth={160} />
               <p className="mt-2 text-[11px] uppercase tracking-widest text-white/50">{isSplit ? 'The 105th, 113th and 116th are one shape on this map' : 'Click another precinct to switch'}</p>
               <a href="#day" className="mt-3 inline-block text-[11px] font-bold uppercase tracking-[0.14em] text-[#dde44c] hover:underline">A day in this precinct ↓</a>
+            </div>
+          )}
+          {!selectedNum && memberNums.length > 0 && (
+            <div className="mt-8 lg:mt-2 max-w-[260px]">
+              <MiniMap dark fills={Object.fromEntries(memberNums.map((n) => [n, '#dde44c']))} titles={locatorTitles} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the precincts ${here} highlighted among New York City's precincts.`} minWidth={160} />
+              <p className="mt-2 text-[11px] uppercase tracking-widest text-white/50">{memberKeys.length} precincts{memberKeys.includes('116th Precinct') ? ', the 116th drawn within the 105th and 113th' : ''} · click one to open it</p>
             </div>
           )}
           </div>
@@ -893,7 +914,7 @@ export default function BoldApp() {
             <a key={id} href={`#${id}`} className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#555] hover:text-[#050507] px-2.5 py-1.5 rounded-full hover:bg-[#f7f8dd]">{label}</a>
           ))}
           <span className="ml-auto pl-3 flex items-center gap-3">
-            <span className="hidden xl:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : activeGeo}</span>
+            <span className="hidden xl:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : placeLabel(activeGeo)}</span>
             {!isCity && <button onClick={() => selectGeo('citywide')} className="text-[11px] font-bold uppercase tracking-wider text-[#ff7c53] hover:text-[#050507]">← Citywide</button>}
           </span>
         </div>
@@ -1004,7 +1025,7 @@ export default function BoldApp() {
             )}
             <Receipt>
               <p>Three bars, all required. <strong>Chance:</strong> the precinct's own change clears the chance test (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes that recent NYPD revisions could erase are left out.</p>
-              <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them ${isPrecinct ? `are in the ${activeGeo}` : `are in Patrol Borough ${activeGeo}`}.` : ''}</p>
+              <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them are ${here}.` : ''}</p>
               {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the 2024 count shown. "Two years running" means the count also moved the same way from 2024 to 2025, beyond chance. "After a flat 2025" means the 2024-to-2025 change was within chance, so this year's move is the first clear one. "After a 2025 spike (or dip)" means the count swung the other way from 2024 to 2025, beyond chance; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
             </Receipt>
           </section>
@@ -1027,7 +1048,12 @@ export default function BoldApp() {
           <SignalBoard rows={boardRows} fragileWeeks={fragileWeeks} mode={boardMode} />
           <Receipt>
             <p>For each line, NYPD gives two counts from windows of equal length: {P.since} and {P.cmp}. If nothing had changed, and the counts were plain random counts, z = (the gap between them, minus 1) ÷ √(this year + last year) would fall within ±1.96 about 95% of the time. The minus 1 is a standard correction that keeps small counts from being over-called.</p>
-            <p>Crime counts vary more than plain random counts: one shooting can wound several people, and violence clusters. So each line's test is widened by how much that line has actually varied from week to week in NYPD's weekly reports ({S.DISPERSION_INFO.pairs} pairs of consecutive weeks, this year and last). {lumpy.length > 0 && `Here that matters most for ${joinAnd(lumpy.slice(0, 4).map((r) => `${r.label.charAt(0).toLowerCase() + r.label.slice(1)} (${r.phi.toFixed(1)} times as variable)`))}. `}Murder and rape vary no more than chance, so their tests aren't widened.</p>
+            <p>Crime counts vary more than plain random counts: one shooting can wound several people, and violence clusters. So each line's test is widened by how much that line has actually varied from week to week in NYPD's weekly reports ({S.DISPERSION_INFO.pairs} pairs of consecutive weeks, this year and last). {lumpy.length > 0 && `Here that matters most for ${joinAnd(lumpy.slice(0, 4).map((r) => `${r.label.charAt(0).toLowerCase() + r.label.slice(1)} (${r.phi.toFixed(1)} times as variable)`))}. `}{(() => {
+              // Only the lines whose measured variation doesn't exceed a plain random count go unwidened; that differs by level.
+              const plain = rows.filter((r) => (r.name === 'Murder' || r.name === 'Rape') && r.phi <= 1).map((r) => r.label);
+              return plain.length === 2 ? `${plain[0]} and ${plain[1].toLowerCase()} vary no more than chance ${isCity ? 'citywide' : 'at this level'}, so their tests aren't widened.`
+                : plain.length === 1 ? `${plain[0]} varies no more than chance ${isCity ? 'citywide' : 'at this level'}, so its test isn't widened.` : '';
+            })()}</p>
             {m && zLine(m)}
             {sv && zLine(sv)}
             {fa && zLine(fa)}
@@ -1386,7 +1412,7 @@ export default function BoldApp() {
             id="ledger"
             kicker="The ledger"
             title="Every CompStat line, with the chance test attached."
-            dek={`${isCity ? 'Citywide' : activeGeo}: ${P.compares}. Download it and check our work.`}
+            dek={`${isCity ? 'Citywide' : placeLabel(activeGeo)}: ${P.compares}. Download it and check our work.`}
             right={(
               <button
                 type="button"
@@ -1456,7 +1482,7 @@ export default function BoldApp() {
             </table>
           </div>
           <SourceLine>
-            Counts are from NYPD's CompStat report for the week ending {S.apDate(weekEnd)}. "Per 100k" divides this period's count by the estimated population as of {ESTIMATE_DATE}; it is not an annual rate. "vs." columns are NYPD's own year-to-date comparisons with the same stretch of each base year; rape's are marked n/c (not comparable) because its legal definition broadened in September 2024{S.redrawnSince(2010, activeGeo) || S.redrawnSince(1993, activeGeo) ? `, and the ${activeGeo}'s lines have been redrawn since some base years, so those comparisons are left out` : ''}. The transit and public-housing lines count major felonies on the subway system and in public housing; they are also included in the seven-major totals.
+            Counts are from NYPD's CompStat report for the week ending {S.apDate(weekEnd)}. "Per 100k" divides this period's count by the estimated population as of {ESTIMATE_DATE}; it is not an annual rate.{isBoro ? ` A borough's residents are its precincts' residents, since police lines don't follow county lines everywhere: Marble Hill is policed from the Bronx, and Roosevelt and Rikers islands from Queens.` : ''} "vs." columns are NYPD's own year-to-date comparisons with the same stretch of each base year; rape's are marked n/c (not comparable) because its legal definition broadened in September 2024{S.redrawnSince(2010, activeGeo) || S.redrawnSince(1993, activeGeo) ? `, and the ${activeGeo}'s lines have been redrawn since some base years, so those comparisons are left out` : ''}. The transit and public-housing lines count major felonies on the subway system and in public housing; they are also included in the seven-major totals.
           </SourceLine>
         </section>
 

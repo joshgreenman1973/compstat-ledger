@@ -90,7 +90,9 @@ export const Z_CRIT = 1.96;
 // one: 1.96 for each of eight tries would produce a headline by chance alone about a third of the
 // time. 2.734 is the two-sided 5% bar split eight ways (Bonferroni).
 export const Z_HEAD = 2.734;
-export const LEVEL = (geoKey) => (geoKey === 'citywide' ? 'city' : String(geoKey).includes('Precinct') ? 'precinct' : 'borough');
+// Dispersion is measured separately for the city, boroughs ('county', so as not to collide with the
+// patrol-borough level, which came first), patrol boroughs and precincts.
+export const LEVEL = (geoKey) => (geoKey === 'citywide' ? 'city' : String(geoKey).includes('Precinct') ? 'precinct' : isBorough(geoKey) ? 'county' : 'borough');
 export const DISPERSION_INFO = { weeks: DISPERSION._weeks, pairs: DISPERSION._pairs };
 export function dispersionFor(name, level = 'city') {
   const v = DISPERSION.lines?.[name]?.[level];
@@ -461,6 +463,79 @@ export const PATROL_BOROUGHS = {
   'Staten Island': [120, 121, 122, 123],
 };
 export const inPatrolBorough = (pb, precinctKey) => (PATROL_BOROUGHS[pb] || []).includes(parseInt(precinctKey, 10));
+
+/* ------------------------------ boroughs ---------------------------- */
+// NYPD reports patrol boroughs, not boroughs. Each patrol borough lies inside one borough, and on the
+// Sept. 20, 2026 report the nine add up to NYPD's citywide figure on every value, so a borough's
+// figures are the sum of its patrol boroughs' reports. (Summing its precincts instead would miss the
+// cases NYPD logs to a patrol borough without a precinct; see PATROL_BOROUGHS.) Staten Island is a
+// single patrol borough, and the Bronx was one until July 2026; those are used as reported.
+export const BOROUGHS = {
+  Manhattan: ['Manhattan South', 'Manhattan North'],
+  Bronx: ['Bronx North', 'Bronx South'],
+  Brooklyn: ['Brooklyn South', 'Brooklyn North'],
+  Queens: ['Queens South', 'Queens North'],
+  'Staten Island': ['Staten Island'],
+};
+export const isBorough = (geo) => Object.prototype.hasOwnProperty.call(BOROUGHS, geo);
+export const inBorough = (boro, precinctKey) => (BOROUGHS[boro] || []).some((pb) => inPatrolBorough(pb, precinctKey));
+// In a sentence: "in Brooklyn," "in the Bronx," "on Staten Island."
+export const inBoroughPhrase = (boro) => (boro === 'Bronx' ? 'in the Bronx' : boro === 'Staten Island' ? 'on Staten Island' : `in ${boro}`);
+
+const COUNT_KEYS = ['week_to_date', 'twenty_eight_day', 'year_to_date'];
+const HIST_KEYS = ['2_yr_pct', '14_yr_pct', '31_yr_pct'];
+const addAll = (xs) => (xs.every((x) => typeof x === 'number' && Number.isFinite(x)) ? xs.reduce((a, b) => a + b, 0) : null);
+
+// One CompStat line summed over patrol boroughs. A count is left out unless every part reports it.
+// NYPD's long-view columns compare this year to date with the same stretch of a base year, as a
+// percent; each part's base-year count is its count ÷ (1 + its percent), and the sum's percent is the
+// summed counts over the summed bases. (Rebuilding the citywide columns this way from the nine patrol
+// boroughs reproduces NYPD's own.) Left out when a part's base can't be recovered: a count of zero
+// says only that the change was −100%, not from what.
+export function sumLine(parts) {
+  const out = {};
+  COUNT_KEYS.forEach((k) => {
+    const cur = addAll(parts.map((s) => s?.[k]?.current_year));
+    const prior = addAll(parts.map((s) => s?.[k]?.prior_year));
+    if (cur == null && prior == null) return;
+    out[k] = { current_year: cur, prior_year: prior, pct_change: cur != null && prior > 0 ? ((cur - prior) / prior) * 100 : null };
+  });
+  const historical = {};
+  HIST_KEYS.forEach((h) => {
+    const bases = parts.map((s) => {
+      const c = s?.year_to_date?.current_year; const pct = s?.historical?.[h];
+      return Number.isFinite(c) && c > 0 && Number.isFinite(pct) && pct > -100 ? c / (1 + pct / 100) : null;
+    });
+    const base = addAll(bases);
+    const c = addAll(parts.map((s) => s?.year_to_date?.current_year));
+    if (base > 0 && c != null) historical[h] = (c / base - 1) * 100;
+  });
+  if (Object.keys(historical).length) out.historical = historical;
+  return out;
+}
+
+// A report with a synthesized entry for each borough whose patrol boroughs are all present. Entries
+// already in the report (Staten Island; the Bronx before its split) are left as NYPD reported them.
+export function withBoroughs(report) {
+  if (!report?.citywide) return report;
+  const out = { ...report };
+  Object.entries(BOROUGHS).forEach(([boro, pbs]) => {
+    if (report[boro] || !pbs.every((k) => report[k])) return;
+    const parts = pbs.map((k) => report[k]);
+    const g = { source: boro, report_period: parts[0].report_period, summedFrom: pbs };
+    ['seven_major_felonies', 'additional_stats'].forEach((grp) => {
+      const names = [...new Set(parts.flatMap((p) => Object.keys(p[grp] || {})))];
+      g[grp] = {};
+      names.forEach((n) => {
+        const line = sumLine(parts.map((p) => p[grp]?.[n]));
+        if (Object.keys(line).length) g[grp][n] = line;
+      });
+    });
+    if (parts.every((p) => p.total_seven_major)) g.total_seven_major = sumLine(parts.map((p) => p.total_seven_major));
+    out[boro] = g;
+  });
+  return out;
+}
 
 // raw: the CompStat feed; places: precinct keys to test; flows/weeksByGeo: revision flows (optional).
 // Returns every tested pair with its tests, and `notable` (the ones that pass all three bars), each
