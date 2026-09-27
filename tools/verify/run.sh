@@ -17,6 +17,8 @@ cp "$WORK/scraper/data/archive/2026-09-20.json" "$WORK/latest.json"
 [ -f "$WORK/rtci.csv" ] || curl -sSfL https://raw.githubusercontent.com/AH-Datalytics/rtci/main/docs/app_data/scorecard.csv -o "$WORK/rtci.csv"
 # NYPD's own annual table, to check the page's history file against (nyc.gov refuses curl's default agent).
 [ -f "$WORK/nypd7.xls" ] || curl -sSfL -A "Mozilla/5.0" https://www.nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/seven-major-felony-offenses-2000-2025.xls -o "$WORK/nypd7.xls"
+# 2020 Census counts by precinct (John Keefe's crosswalk), to check the page's population table against.
+[ -f "$WORK/keefe2020.csv" ] || curl -sSfL https://raw.githubusercontent.com/jkeefe/census-by-precincts/master/data/nyc/nyc_precinct_2020pop.csv -o "$WORK/keefe2020.csv"
 (cd "$ROOT" && CI=true npx react-scripts build > "$WORK/build.log" 2>&1) || { cat "$WORK/build.log"; exit 1; }
 python3 -m http.server "$PORT" --directory "$ROOT/build" > "$WORK/http.log" 2>&1 &
 SERVER=$!

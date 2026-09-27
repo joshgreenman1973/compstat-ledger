@@ -356,14 +356,21 @@ export function MapLegend({ mode, cuts, periodNote }) {
 /* carry the same values for keyboard and screen-reader users.         */
 /* ------------------------------------------------------------------ */
 let miniId = 0;
-export function MiniMap({ fills = {}, titles = {}, hatch = {}, selectedNum = null, onSelect, dark = false, label, minWidth = 120 }) {
+// Every map gets a hover card: a precinct's title text, heading before the first colon.
+export function MiniMap({ fills = {}, titles = {}, hatch = {}, selectedNum = null, onSelect, dark = false, label, minWidth = 120, outline = {} }) {
   const [ref, w] = useWidth(300, minWidth);
   const h = Math.round(w * 0.98);
   const pathFn = useMemo(() => geoPath().projection(geoMercator().fitSize([w, h], precinctGeoJSON)), [w, h]);
   const [hatchId] = useState(() => `mm-hatch-${++miniId}`);
-  const ordered = [...precinctGeoJSON.features].sort((a, b) => (a.properties.precinct === selectedNum) - (b.properties.precinct === selectedNum));
+  const [hover, setHover] = useState(null);
+  const [mouse, setMouse] = useState({ x: 0, y: 0 });
+  const rank = (num) => (num === selectedNum ? 3 : outline[num] ? 2 : num === hover ? 1 : 0);
+  const ordered = [...precinctGeoJSON.features].sort((a, b) => rank(a.properties.precinct) - rank(b.properties.precinct));
+  const tip = hover != null ? (titles[hover] || `${hover}${['th', 'st', 'nd', 'rd'][(hover % 100 - 20) % 10] || ['th', 'st', 'nd', 'rd'][hover % 100] || 'th'} Precinct`) : null;
+  const [head, ...rest] = tip ? String(tip).split(/:\s(.+)/s) : [];
+  const tipW = 220;
   return (
-    <div ref={ref} className="w-full">
+    <div ref={ref} className="relative w-full" onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMouse({ x: e.clientX - r.left, y: e.clientY - r.top }); }}>
       <svg width={w} height={h} role="img" aria-label={label}>
         <defs>
           <pattern id={hatchId} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -371,25 +378,33 @@ export function MiniMap({ fills = {}, titles = {}, hatch = {}, selectedNum = nul
           </pattern>
         </defs>
         {ordered.map((f) => {
-          const num = f.properties.precinct; const sel = num === selectedNum; const d = pathFn(f);
+          const num = f.properties.precinct; const sel = num === selectedNum; const hov = num === hover; const out = outline[num]; const d = pathFn(f);
           return (
             <g key={num}>
               <path
                 d={d}
                 className="vc-ease-fill"
                 fill={fills[num] || (dark ? '#232328' : '#f1f1f1')}
-                stroke={sel ? (dark ? C.chartreuse : C.ink) : (dark ? '#050507' : C.white)}
-                strokeWidth={sel ? 2 : 0.4}
+                stroke={sel ? (dark ? C.chartreuse : C.ink) : hov ? (dark ? '#ffffff' : '#555') : out ? (dark ? C.chartreuse : C.ink) : (dark ? '#050507' : C.white)}
+                strokeWidth={sel ? 2 : hov ? 1.5 : out ? 1 : 0.4}
                 style={{ cursor: onSelect ? 'pointer' : 'default' }}
+                onMouseEnter={() => setHover(num)}
+                onMouseLeave={() => setHover((v) => (v === num ? null : v))}
                 onClick={() => onSelect && onSelect(num)}
-              >
-                {titles[num] && <title>{titles[num]}</title>}
-              </path>
+                aria-label={titles[num] || undefined}
+              />
               {hatch[num] && <path d={d} fill={`url(#${hatchId})`} pointerEvents="none" />}
             </g>
           );
         })}
       </svg>
+      {tip && (
+        <div className="absolute pointer-events-none z-30 bg-white border border-[#ddd] shadow-xl rounded px-3 py-2 text-[12px] leading-snug text-[#050507]" style={{ width: tipW, left: clamp(mouse.x + 14, 0, Math.max(0, w - tipW)), top: clamp(mouse.y + 12, 0, Math.max(0, h - 60)) }}>
+          <div className="font-black text-[13px]">{head}</div>
+          {rest[0] && <div className="mt-0.5 text-[#444]" style={{ fontVariantNumeric: 'tabular-nums' }}>{rest[0]}</div>}
+          {onSelect && <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-[#ff7c53]">Click to open</div>}
+        </div>
+      )}
     </div>
   );
 }

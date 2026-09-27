@@ -9,7 +9,7 @@ SP = sys.argv[1]
 d = json.load(open(f'{SP}/latest.json'))
 hist = json.load(open('src/bold/annual-history.json'))['citywide']
 src = open('src/App.js').read()
-gp = {k: int(v) for k, v in re.findall(r'"([^"]+ Precinct)": (\d+)', src[src.index('export const GEO_POPULATIONS'):src.index('const GEO_POPULATIONS_2010')])}
+gp2020 = {k: int(v) for k, v in re.findall(r'"([^"]+ Precinct)": (\d+)', src[src.index('export const GEO_POPULATIONS'):src.index('const GEO_POPULATIONS_2010')])}
 fails = []; oks = 0
 def expect(text, needle, why):
     global oks
@@ -24,6 +24,23 @@ def check(cond, why):
     if cond: oks += 1
     else: fails.append(f'FAILED [{why}]')
 def fmt(n): return f'{round(n):,}'
+# Population. The page's 2020 counts by precinct must match John Keefe's crosswalk; rates move each by its
+# borough's change from the 2020 Census count to the Census Bureau's July 1, 2025 estimate (Vintage 2025,
+# as tabulated in City Planning's July 2026 report, Appendix A), transcribed here from that table.
+C20 = {'Manhattan': 1694251, 'Bronx': 1472654, 'Brooklyn': 2736074, 'Queens': 2405464, 'Staten Island': 495747}
+V25 = {'Manhattan': 1664862, 'Bronx': 1406332, 'Brooklyn': 2653963, 'Queens': 2358182, 'Staten Island': 501290}
+CITY25 = 8584629
+check(sum(C20.values()) == 8804190 and sum(V25.values()) == CITY25, 'borough populations add up to the city')
+keefe = {int(r['precinct']): int(r['P1_001N']) for r in csv.DictReader(open(f'{SP}/keefe2020.csv'))}
+pnum = lambda k: int(re.match(r'\d+', k).group())
+check(len(gp2020) == len(keefe) == 77 and all(keefe.get(pnum(k)) == v for k, v in gp2020.items()), 'precinct 2020 counts match Keefe')
+BORO = {**{n: 'Manhattan' for n in [1, 5, 6, 7, 9, 10, 13, 14, 17, 18, 19, 20, 22, 23, 24, 25, 26, 28, 30, 32, 33, 34]},
+        **{n: 'Bronx' for n in [40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 52]},
+        **{n: 'Brooklyn' for n in [60, 61, 62, 63, 66, 67, 68, 69, 70, 71, 72, 73, 75, 76, 77, 78, 79, 81, 83, 84, 88, 90, 94]},
+        **{n: 'Queens' for n in [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115]},
+        **{n: 'Staten Island' for n in [120, 121, 122, 123]}}
+check(set(BORO) == set(keefe), 'every precinct has a borough')
+gp = {k: math.floor(v * V25[BORO[pnum(k)]] / C20[BORO[pnum(k)]] + 0.5) for k, v in gp2020.items()}
 WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 def nw(n): return WORDS[n] if 0 <= n < 10 else fmt(n)
 def get(geo, name, src_=None):
@@ -271,6 +288,14 @@ mur = [(r['y'], r['Murder']) for r in hist]
 yrs_down = 0
 while yrs_down + 1 < len(mur) and mur[-1 - yrs_down][1] < mur[-2 - yrs_down][1]: yrs_down += 1
 expect(t, f'↓ {yrs_down} yrs through 2025', 'murder annual run')
+# per-resident rates on the 75th Precinct's ledger: this area and citywide, both on July 2025 populations
+t75 = open(f'{SP}/cw75.txt').read()
+for n in ['Murder', 'Robbery', 'Fel. Assault', 'Burglary', 'Gr. Larceny', 'G.L.A.']:
+    a, b = row('75th Precinct', n)[0] / gp['75th Precinct'] * 1e5, row('citywide', n)[0] / CITY25 * 1e5
+    expect(t75, f'\t{a:.1f}\t{b:.1f}\t', f'75th per 100k {n}')
+expect(t, f'{fmt(CITY25)} New Yorkers, {(1 - CITY25 / 8804190) * 100:.1f}% fewer than the 2020 Census counted', 'population note: city')
+expect(t, f'from {(1 - V25["Bronx"] / C20["Bronx"]) * 100:.1f}% fewer residents in the Bronx to {(V25["Staten Island"] / C20["Staten Island"] - 1) * 100:.1f}% more on Staten Island', 'population note: range')
+absent(t, '2020 Census population:', 'no stale population label')
 print(f'{oks} checks passed, {len(fails)} failed')
 print('\n'.join(fails[:40]))
 sys.exit(1 if fails else 0)

@@ -2,13 +2,18 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import annualHistory from './annual-history.json';
 import snapshot from './snapshot-2026-09-20.json';
 import {
-  GEO_POPULATIONS, PRECINCT_NEIGHBORHOODS, CITYWIDE_POPULATION, TOURIST_PRECINCTS,
+  GEO_POPULATIONS, PRECINCT_NEIGHBORHOODS, TOURIST_PRECINCTS,
   GITHUB_USER, REPO_NAME, RTCI_CSV_URL, toOrdinalPrecinct,
 } from '../App';
 import * as S from './stats';
+import { currentPopulations, CITY_POPULATION, CITY_CENSUS_2020, ESTIMATE_DATE, boroughChange } from './population';
 import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag, Reveal, CountUp, Pct } from './ui';
 import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP, PairBars, ShareBar, Spark } from './charts';
 import './bold.css';
+
+// Residents by precinct, 2020 Census counts moved to the Census Bureau's July 2025 borough estimates.
+const POPULATION = currentPopulations(GEO_POPULATIONS);
+const popPct = (ratio) => `${Math.abs((ratio - 1) * 100).toFixed(1)}%`;
 
 const DATA_BASE = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/`;
 const COMPSTAT_URL = `${DATA_BASE}latest_compstat.json`;
@@ -240,10 +245,10 @@ function periodText(periodId, geoData) {
 }
 
 const geoPopulation = (geo) => {
-  if (geo === 'citywide') return CITYWIDE_POPULATION;
+  if (geo === 'citywide') return CITY_POPULATION;
   if (!geo.includes('Precinct')) return null; // patrol-borough lines were redrawn (Bronx North/South); no reliable denominator
   if (S.isSplitPrecinct(geo)) return null;
-  return GEO_POPULATIONS[geo] || null;
+  return POPULATION[geo] || null;
 };
 
 function measureCounts(geoData, parts, pkey) {
@@ -308,7 +313,7 @@ function buildUnits(raw, parts, pkey, revs, fragileWeeks) {
     const c = measureCounts(raw[k], parts, pkey);
     if (!c) return;
     const split = S.isSplitPrecinct(k);
-    each.push({ num: String(parseInt(k, 10)), geoKey: k, label: k, hood: hoodOf(k), count: c.cur, prior: c.prior, pop: split ? null : (GEO_POPULATIONS[k] || null), tourist: TOURIST_PRECINCTS.includes(k), size: 1 });
+    each.push({ num: String(parseInt(k, 10)), geoKey: k, label: k, hood: hoodOf(k), count: c.cur, prior: c.prior, pop: split ? null : (POPULATION[k] || null), tourist: TOURIST_PRECINCTS.includes(k), size: 1 });
   });
   const units = {};
   const keysFor = {};
@@ -319,7 +324,7 @@ function buildUnits(raw, parts, pkey, revs, fragileWeeks) {
     const combined = {
       num: a, geoKey: S.SPLIT_PRECINCTS.members[0], label: `${S.SPLIT_PRECINCTS.label} Precincts`, hood: 'Southeast Queens',
       count: members.reduce((n, u) => n + u.count, 0), prior: members.reduce((n, u) => n + u.prior, 0),
-      pop: S.SPLIT_PRECINCTS.members.filter((k) => k !== '116th Precinct').reduce((n, k) => n + (GEO_POPULATIONS[k] || 0), 0) || null,
+      pop: S.SPLIT_PRECINCTS.members.filter((k) => k !== '116th Precinct').reduce((n, k) => n + (POPULATION[k] || 0), 0) || null,
       merged: true, size: members.length,
     };
     keysFor[a] = members.map((u) => u.geoKey);
@@ -542,7 +547,7 @@ export default function BoldApp() {
     return c && { ...c, kPrecincts: c.top.reduce((n, u) => n + (u.size || 1), 0), nPrecincts: precinctList.length };
   }, [unitList, precinctList]);
   const cityMeasure = cityData ? measureCounts(cityData, measureParts, pkey) : null;
-  const cityRate = cityMeasure ? (cityMeasure.cur / CITYWIDE_POPULATION) * 100000 : null;
+  const cityRate = cityMeasure ? (cityMeasure.cur / CITY_POPULATION) * 100000 : null;
   const selectedNum = activeGeo.includes('Precinct') ? (activeGeo === '116th Precinct' ? S.SPLIT_PRECINCTS.shapes[0] : String(parseInt(activeGeo, 10))) : null;
 
   /* ---------------- long arc ---------------- */
@@ -752,6 +757,8 @@ export default function BoldApp() {
     return `No precinct's change in a major crime${isCity ? '' : ` in Patrol Borough ${activeGeo}`} stands out from both chance and the citywide trend ${P.since}.`;
   })();
 
+  // Hover labels for the locator map: every precinct's name and neighborhood.
+  const locatorTitles = Object.fromEntries(allPlaces.filter((k) => k !== '116th Precinct').map((k) => [String(parseInt(k, 10)), `${k}: ${hoodOf(k) || 'New York City'}${S.isSplitPrecinct(k) ? ' (shown combined with the 105th, 113th and 116th)' : ''}`]));
   const tiles = [
     m && { key: 'm', label: 'Murders', r: m },
     sv && { key: 'sv', label: 'Shooting victims', r: sv },
@@ -826,11 +833,11 @@ export default function BoldApp() {
           {spotlight && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/85">{spotlight} <a href="#trends" className="underline decoration-[#dde44c] underline-offset-2 hover:text-[#dde44c] whitespace-nowrap">Notable trends ↓</a></p>}
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
-          {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created in December 2024 from parts of the 105th and 113th. NYPD reports all three separately, restated for the new lines, but the 2020 Census populations and precinct map use the old lines, so per-resident rates for any one of them would be wrong. Maps and rates combine the three.</p>}
+          {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created in December 2024 from parts of the 105th and 113th. NYPD reports all three separately, restated for the new lines, but the population figures and precinct map use the old lines, so per-resident rates for any one of them would be wrong. Maps and rates combine the three.</p>}
           </div>
           {selectedNum && (
             <div className="mt-8 lg:mt-2 max-w-[260px]">
-              <MiniMap dark fills={{ [selectedNum]: '#dde44c' }} selectedNum={selectedNum} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the ${activeGeo} highlighted among New York City's precincts.`} minWidth={160} />
+              <MiniMap dark fills={{ [selectedNum]: '#dde44c' }} titles={locatorTitles} selectedNum={selectedNum} onSelect={(num) => { const k = Object.keys(raw).find((x) => x.includes('Precinct') && String(parseInt(x, 10)) === num); if (k) selectGeo(k); }} label={`Locator map: the ${activeGeo} highlighted among New York City's precincts.`} minWidth={160} />
               <p className="mt-2 text-[11px] uppercase tracking-widest text-white/50">{isSplit ? 'The 105th, 113th and 116th are one shape on this map' : 'Click another precinct to switch'}</p>
               <a href="#day" className="mt-3 inline-block text-[11px] font-bold uppercase tracking-[0.14em] text-[#dde44c] hover:underline">A day in this precinct ↓</a>
             </div>
@@ -1219,11 +1226,11 @@ export default function BoldApp() {
             <Receipt>
               <p>{S.fmtInt(conc.total)} {measureNoun} across {conc.nPrecincts} precincts {P.since} (citywide line: {cityMeasure ? S.fmtInt(cityMeasure.cur) : '—'}). Sorted from most to fewest (the 105th, 113th and 116th combined, as on the map; ties go to the more populous precinct), the first {conc.k} add up to {S.fmtInt(conc.cum)} ({(conc.countShare * 100).toFixed(1)}%):</p>
               <p>{conc.top.map((u) => `${shortName(u.label)} (${S.fmtInt(u.count)})`).join(', ')}.</p>
-              <p>Their 2020 Census population: {S.fmtInt(conc.pop)} of {S.fmtInt(conc.popTotal)} ({(conc.popShare * 100).toFixed(1)}%). Incidents are counted where they occurred, not where victims live.</p>
+              <p>Their estimated population: {S.fmtInt(conc.pop)} of {S.fmtInt(conc.popTotal)} ({(conc.popShare * 100).toFixed(1)}%). Incidents are counted where they occurred, not where victims live.</p>
             </Receipt>
           )}
           <SourceLine>
-            Rates use 2020 Census population by precinct (John Keefe's census-by-precincts crosswalk). The 14th, 18th and 22nd precincts (Midtown and Central Park) draw far more workers and visitors than they have residents, so they're left out of rate shading and rankings; rates also run high in other business and nightlife districts, such as the 1st, 5th, 6th, 13th and 84th, for the same reason. The 116th Precinct was created in December 2024 from parts of the 105th and 113th; the map and population figures use the old lines, so the three are combined here.
+            Rates use each precinct's 2020 Census count (John Keefe's census-by-precincts crosswalk), the latest count by precinct, moved by its borough's change to the Census Bureau's estimate for {ESTIMATE_DATE}. That assumes every precinct changed at its borough's pace; no more local estimate is published. The 14th, 18th and 22nd precincts (Midtown and Central Park) draw far more workers and visitors than they have residents, so they're left out of rate shading and rankings; rates also run high in other business and nightlife districts, such as the 1st, 5th, 6th, 13th and 84th, for the same reason. The 116th Precinct was created in December 2024 from parts of the 105th and 113th; the map and population figures use the old lines, so the three are combined here.
           </SourceLine>
         </section>
         )}
@@ -1352,6 +1359,7 @@ export default function BoldApp() {
             <Receipt>
               {peers.list.map((c) => <p key={c.agency}>{c.isNYC ? 'New York' : `${c.agency}, ${c.state}`}: {S.fmtInt(c.murderFull)} murders ÷ {S.fmtInt(c.pop)} residents × 100,000 = {c.rate.toFixed(2)}</p>)}
               <p>"Lower" and "about the same" use the same chance test as the rest of the page, applied to rates: a city counts as higher or lower only if the gap from New York is beyond chance, given how few murders a smaller city has.{peers.others.filter((c) => c.vsNYC === 'same').map((c) => ` ${c.agency}: z = ${c.zVsNYC.toFixed(2)}.`).join('')}</p>
+              <p>Populations are the index's own, the same source for every city; its figure for New York differs slightly from the Census Bureau estimate used elsewhere on this page.</p>
               <p>We use the full calendar year because the index's year-to-date windows differ by city (some agencies report through January, others through April), which makes year-to-date counts incomparable.</p>
             </Receipt>
             <SourceLine>
@@ -1389,7 +1397,7 @@ export default function BoldApp() {
                     const cw = cityRows.find((x) => x.name === r.name);
                     return [r.name, r.label, r.cur, r.prior, r.diff, r.pct == null ? '' : r.pct.toFixed(2), r.z == null ? '' : r.z.toFixed(3), r.phi?.toFixed(2) ?? '', r.verdict === 'drop' || r.verdict === 'rise' ? `${r.verdict} beyond chance` : r.verdict === 'noise' ? 'within chance' : r.verdict,
                       r.fragile ? 'yes' : '', r.rev ? r.rev.cur : '', r.risk ? r.risk.breakEven : '', r.risk ? (Number.isFinite(r.risk.weeksToErase) ? r.risk.weeksToErase.toFixed(1) : r.risk.direction === 'none' ? 'no recent revisions' : 'never at recent pace') : '',
-                      pop && !isTourist ? ((r.cur / pop) * 100000).toFixed(2) : '', cw ? ((cw.cur / CITYWIDE_POPULATION) * 100000).toFixed(2) : '',
+                      pop && !isTourist ? ((r.cur / pop) * 100000).toFixed(2) : '', cw ? ((cw.cur / CITY_POPULATION) * 100000).toFixed(2) : '',
                       ...hc.map((c) => (longViewBlocked(r, c.year) ? 'not comparable' : Number.isFinite(r.hist?.[c.key]) ? r.hist[c.key].toFixed(2) : ''))];
                   });
                   const slug = activeGeo.replace(/[^a-z0-9]+/gi, '_').toLowerCase();
@@ -1436,7 +1444,7 @@ export default function BoldApp() {
                       {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{r.rev ? S.fmtSigned(r.rev.cur) : '—'}</td>}
                       {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555] whitespace-nowrap">{r.risk ? `${S.fmtInt(r.risk.breakEven)} · ${Number.isFinite(r.risk.weeksToErase) ? `${r.risk.weeksToErase < 10 ? r.risk.weeksToErase.toFixed(1) : Math.round(r.risk.weeksToErase)} wks` : r.risk.direction === 'none' ? 'none' : 'opposite'}` : '—'}</td>}
                       {pop && !isTourist && <td className="py-2 px-2 text-right text-[13px]">{((r.cur / pop) * 100000).toFixed(1)}</td>}
-                      {!isCity && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{cw ? ((cw.cur / CITYWIDE_POPULATION) * 100000).toFixed(1) : '—'}</td>}
+                      {!isCity && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{cw ? ((cw.cur / CITY_POPULATION) * 100000).toFixed(1) : '—'}</td>}
                       {period === 'ytd' && histCols.map((c) => {
                         const blocked = longViewBlocked(r, c.year);
                         return <td key={c.key} className="py-2 px-2 text-right text-[13px] text-[#555]" title={blocked || undefined}>{blocked ? (r.name === 'Rape' ? 'n/c' : '—') : S.fmtPct(r.hist?.[c.key], 0)}</td>;
@@ -1448,7 +1456,7 @@ export default function BoldApp() {
             </table>
           </div>
           <SourceLine>
-            Counts are from NYPD's CompStat report for the week ending {S.apDate(weekEnd)}. "Per 100k" divides this period's count by 2020 Census population; it is not an annual rate. "vs." columns are NYPD's own year-to-date comparisons with the same stretch of each base year; rape's are marked n/c (not comparable) because its legal definition broadened in September 2024{S.redrawnSince(2010, activeGeo) || S.redrawnSince(1993, activeGeo) ? `, and the ${activeGeo}'s lines have been redrawn since some base years, so those comparisons are left out` : ''}. The transit and public-housing lines count major felonies on the subway system and in public housing; they are also included in the seven-major totals.
+            Counts are from NYPD's CompStat report for the week ending {S.apDate(weekEnd)}. "Per 100k" divides this period's count by the estimated population as of {ESTIMATE_DATE}; it is not an annual rate. "vs." columns are NYPD's own year-to-date comparisons with the same stretch of each base year; rape's are marked n/c (not comparable) because its legal definition broadened in September 2024{S.redrawnSince(2010, activeGeo) || S.redrawnSince(1993, activeGeo) ? `, and the ${activeGeo}'s lines have been redrawn since some base years, so those comparisons are left out` : ''}. The transit and public-housing lines count major felonies on the subway system and in public housing; they are also included in the seven-major totals.
           </SourceLine>
         </section>
 
@@ -1477,6 +1485,10 @@ export default function BoldApp() {
               <p>When last year's count was under {S.SMALL_BASE}, a percent change swings on a handful of crimes: two to six is "+200%." As in the original CompStat Ledger, those percentages are grayed out and starred wherever they appear, and headlines and sentences give the counts instead. The chance test handles small counts on its own, so a big percentage on a tiny base rarely clears it anyway.</p>
             </div>
             <div>
+              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Population</h3>
+              <p>Rates per 100,000 residents use the Census Bureau's latest estimates, for {ESTIMATE_DATE}: {S.fmtInt(CITY_POPULATION)} New Yorkers, {popPct(CITY_POPULATION / CITY_CENSUS_2020)} fewer than the 2020 Census counted. The Bureau estimates only down to boroughs, so each precinct starts from its 2020 Census count (the latest by precinct, from <a className="underline" href="https://github.com/jkeefe/census-by-precincts" target="_blank" rel="noopener noreferrer">John Keefe's crosswalk</a>) and moves by its borough's change, from {popPct(boroughChange('Bronx'))} fewer residents in the Bronx to {popPct(boroughChange('Staten Island'))} more on Staten Island. Source: <a className="underline" href="https://s-media.nyc.gov/agencies/dcp/assets/files/pdf/data-tools/population/population-estimates/new-york-city-population-estimates-and-trends-july-2026.pdf" target="_blank" rel="noopener noreferrer">City Planning's July 2026 population report</a>, Appendix A.</p>
+            </div>
+            <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Pace is a range, not a forecast</h3>
               <p>Full-year pace is shown two ways: the share of the calendar that has passed, and the share of last year's total NYPD had logged by the same date. The range is then widened for NYPD's recent revisions and for ordinary chance in the count still to come. A superlative ("fewest since…") appears only if it holds at the less flattering end of that range. Before a quarter of the year has passed, we don't project.</p>
             </div>
@@ -1494,7 +1506,7 @@ export default function BoldApp() {
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">What CompStat can't see</h3>
-              <p>These are crimes reported to and recorded by police. They miss what never gets reported, and they move when reporting, classification or enforcement changes. CompStat figures are preliminary and NYPD revises them. Per-resident rates use 2020 Census counts, which ignore commuters and visitors, and are withheld where that distortion is severe.</p>
+              <p>These are crimes reported to and recorded by police. They miss what never gets reported, and they move when reporting, classification or enforcement changes. CompStat figures are preliminary and NYPD revises them. Per-resident rates count residents only (Census Bureau estimates for {ESTIMATE_DATE}), not commuters or visitors, and are withheld where that distortion is severe.</p>
             </div>
           </div>
           <p className="mt-10 text-[14px] text-[#555]">

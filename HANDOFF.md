@@ -112,6 +112,7 @@ Every change on the page compares a stretch of this year with the same dates a y
 | `src/index.js` | Renders `BoldApp` by default and the original `App` at `?classic`. |
 | `src/App.js` | The original dashboard. The only changes are `export`s on constants the new view reuses: `GITHUB_USER`, `REPO_NAME`, `CITYWIDE_POPULATION`, `TOURIST_PRECINCTS`, `GEO_POPULATIONS`, `PRECINCT_NEIGHBORHOODS`, `RTCI_CSV_URL` and `toOrdinalPrecinct`. |
 | `src/bold/stats.js` | All the statistics as pure functions, unit-tested. The page's claims come from here. |
+| `src/bold/population.js` | Residents for per-resident rates: each precinct's 2020 Census count (Keefe crosswalk, `GEO_POPULATIONS` in App.js) moved by its borough's change to the Census Bureau's July 1, 2025 estimate (Vintage 2025, City Planning's July 2026 report, Appendix A). Citywide: 8,584,629. Update the two borough tables when the Bureau's next vintage comes out (usually spring, with City Planning's report in the summer). |
 | `src/bold/BoldApp.js` | The page: data loading, URL state and every section. |
 | `src/bold/charts.js` | The signal board, unit chart, long-arc chart, precinct choropleth, small-multiple maps, legends and peer bars (d3-geo). |
 | `src/bold/ui.js` | Palette and verdict colors plus shared bits: chips, the "Fragile" tag, "Show the math," section heads and segmented toggles. |
@@ -192,6 +193,7 @@ Don't loosen these without a reason you can defend in print.
 - **Rape.** NYPD broadened the definition Sept. 1, 2024. Comparisons across that date are flagged "Not comparable" (`rapeYoYComparable`).
 - **Precinct quirks.**
   - The 116th Precinct was carved out of the 105th and 113th in December 2024, so the three are combined for per-resident rates and maps (the old 105th and 113th shapes and populations cover exactly the three).
+  - Populations are current estimates, not the 2020 count: the Census Bureau estimates only down to boroughs, so each precinct moves at its borough's pace (Bronx −4.5%, Brooklyn −3.0%, Queens −2.0%, Manhattan −1.7%, Staten Island +1.1% since the 2020 count). The peer-city comparison keeps RTCI's own populations, one source for every city.
   - The tourist precincts (the 14th, 18th and 22nd) are left out of per-resident rates. Other business districts (the 1st, 5th, 6th, 13th and 84th) are noted but kept.
   - Long-view comparisons (deck, ledger, Then and now) are left out for precincts redrawn since the base year: the 105th, 113th, 116th, 120th, 121st and 122nd since 2010, plus the 33rd and 34th since 1993.
   - Rankings skip precincts with none and say "too few to rank" under 10 incidents; ties are labeled.
@@ -202,7 +204,7 @@ Don't loosen these without a reason you can defend in print.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 464 of 464 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 476 of 476 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also checks the precinct 2020 counts against Keefe's file and the per-resident rates against July 2025 populations, re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.
