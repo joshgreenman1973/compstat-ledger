@@ -404,6 +404,143 @@ export function frequencyRatio(rows, numerName = 'Fel. Assault', denomName = 'Mu
   return { ratio, display: ratio >= 10 ? Math.round(ratio).toLocaleString('en-US') : ratio.toFixed(1), numer: a, denom: b };
 }
 
+/* -------------------------- notable trends --------------------------- */
+// Which local moves are worth a reader's attention? A precinct's change has to (1) clear the chance
+// test on its own, (2) stand out from the citywide trend for that crime, and (3) survive a
+// false-discovery correction across every precinct-and-crime pair tested at once, and it must not be
+// fragile. A precinct whose robbery fell 12% while robbery fell 12% citywide is moving with the city,
+// not a local story.
+
+// Did this place change more than the citywide trend predicts? Given n = this year + last year here,
+// if the place had moved with the city (ratio r = city this year ÷ city last year), this year's share
+// of n would be π = r ÷ (1 + r). Same continuity correction and dispersion as poissonZ: at r = 1 this is
+// exactly poissonZ. (The city's own ratio is treated as known; its counts are far larger.)
+export function relativeZ(cur, prior, cityCur, cityPrior, phi = 1) {
+  const n = cur + prior;
+  if (!(n > 0) || !(cityCur > 0) || !(cityPrior > 0)) return null;
+  const r = cityCur / cityPrior; const pi = r / (1 + r);
+  const gap = Math.max(0, Math.abs(cur - n * pi) - 0.5);
+  return (Math.sign(cur - n * pi) * gap) / Math.sqrt(Math.max(1, phi) * n * pi * (1 - pi));
+}
+
+// The same stretch two years back, from NYPD's "vs. two years ago" percentage (year to date only).
+export function twoYearsBack(cur, pct2) {
+  if (!Number.isFinite(cur) || !Number.isFinite(pct2) || pct2 <= -100) return null;
+  return Math.round(cur / (1 + pct2 / 100));
+}
+
+// The shape of a move over three years. 'again': last year moved the same way, beyond chance (a second
+// straight year). 'rebound': last year moved the other way, beyond chance, so part of this year's move
+// may be a return toward normal (regression to the mean; see John Hall, Vital City, May 2026).
+// 'new': last year's change was within chance.
+export function trendShape(cur, prior, twoBack, phi, dir) {
+  if (twoBack == null || !Number.isFinite(prior)) return null;
+  const v = verdictFor(poissonZ(prior, twoBack, phi));
+  if (v !== 'drop' && v !== 'rise') return { kind: 'new', twoBack };
+  return { kind: (v === 'rise') === (dir > 0) ? 'again' : 'rebound', twoBack, last: v };
+}
+
+export const NOTABLE_CRIMES = ['Murder', 'Shooting Vic.', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'G.L.A.', 'Gr. Larceny'];
+
+// Precincts in each patrol borough. Checked against the Sept. 20, 2026 report: each borough's reported
+// counts equal the sum of these precincts on all 108 values (every line, period and year), except
+// Bronx South, whose reported totals run slightly higher than its six precincts in a few person-crime
+// lines (e.g., 108 more felony assaults year to date), apparently cases NYPD logs without a precinct.
+export const PATROL_BOROUGHS = {
+  'Manhattan South': [1, 5, 6, 7, 9, 10, 13, 14, 17, 18],
+  'Manhattan North': [19, 20, 22, 23, 24, 25, 26, 28, 30, 32, 33, 34],
+  'Bronx North': [46, 47, 48, 49, 50, 52],
+  'Bronx South': [40, 41, 42, 43, 44, 45],
+  'Brooklyn South': [60, 61, 62, 63, 66, 67, 68, 69, 70, 71, 72, 76, 78],
+  'Brooklyn North': [73, 75, 77, 79, 81, 83, 84, 88, 90, 94],
+  'Queens South': [100, 101, 102, 103, 105, 106, 107, 113, 116],
+  'Queens North': [104, 108, 109, 110, 111, 112, 114, 115],
+  'Staten Island': [120, 121, 122, 123],
+};
+export const inPatrolBorough = (pb, precinctKey) => (PATROL_BOROUGHS[pb] || []).includes(parseInt(precinctKey, 10));
+
+// raw: the CompStat feed; places: precinct keys to test; flows/weeksByGeo: revision flows (optional).
+// Returns every tested pair with its tests, and `notable` (the ones that pass all three bars), each
+// sorted by how strongly it stands out from the city.
+export function notableMoves({ raw, places, periodId = 'ytd', crimes = NOTABLE_CRIMES, flows = null, weeksByGeo = null, weeks = 0, fragileWeeks = REVISION_WEEKS, q = 0.05 }) {
+  const pkey = PERIODS[periodId]?.key || PERIODS.ytd.key;
+  const line = (g, n) => g?.seven_major_felonies?.[n] || g?.additional_stats?.[n];
+  const city = raw?.citywide;
+  const all = [];
+  crimes.forEach((name) => {
+    const cw = line(city, name)?.[pkey];
+    if (!cw || !(cw.prior_year > 0)) return;
+    const cityPct = ((cw.current_year - cw.prior_year) / cw.prior_year) * 100;
+    places.forEach((geo) => {
+      const s = line(raw[geo], name); const w = s?.[pkey];
+      if (!w || !Number.isFinite(w.current_year) || !Number.isFinite(w.prior_year)) return;
+      const cur = w.current_year; const prior = w.prior_year;
+      if (cur + prior === 0) return;
+      const phi = dispersionFor(name, LEVEL(geo));
+      const z = poissonZ(cur, prior, phi);
+      const verdict = verdictFor(z);
+      const zRel = relativeZ(cur, prior, cw.current_year, cw.prior_year, phi);
+      const f = flows?.[geo]?.[name];
+      const wk = weeksByGeo?.[geo] ?? weeks;
+      const risk = f && wk > 0 ? revisionRisk({ verdict, cur, prior, phi }, { cur: f.cur, prior: f.prior, weeks: wk }, fragileWeeks) : null;
+      const twoBack = periodId === 'ytd' ? twoYearsBack(cur, s?.historical?.['2_yr_pct']) : null;
+      all.push({
+        geo, name, label: labelFor(name), cur, prior, phi, z, verdict, zRel, pRel: zRel == null ? NaN : pTwoSided(zRel),
+        pct: prior > 0 ? ((cur - prior) / prior) * 100 : null, diff: cur - prior, cityCur: cw.current_year, cityPrior: cw.prior_year, cityPct,
+        fragile: !!risk?.fragile, shape: trendShape(cur, prior, twoBack, phi, Math.sign(cur - prior)),
+      });
+    });
+  });
+  const keep = benjaminiHochberg(all.map((x) => x.pRel), q);
+  all.forEach((x, i) => {
+    x.standsOut = keep.has(i);
+    x.notable = x.standsOut && !x.fragile && ((x.verdict === 'rise' && x.zRel > 0) || (x.verdict === 'drop' && x.zRel < 0));
+  });
+  const byStrength = (a, b) => Math.abs(b.zRel ?? 0) - Math.abs(a.zRel ?? 0);
+  // Rank each move among every precinct tested for the same crime: 1 = the furthest above the city's
+  // trend (for a rise) or below it (for a drop).
+  all.forEach((x) => {
+    const dir = Math.sign(x.zRel || 0);
+    if (!dir) return;
+    x.rank = 1 + all.filter((y) => y.name === x.name && (y.zRel || 0) * dir > (x.zRel || 0) * dir).length;
+  });
+  return {
+    all: [...all].sort(byStrength),
+    rises: all.filter((x) => x.notable && x.zRel > 0).sort(byStrength),
+    drops: all.filter((x) => x.notable && x.zRel < 0).sort(byStrength),
+    tested: all.length,
+  };
+}
+
+// Where a citywide change came from: the precincts with the biggest moves in the same direction, and
+// how much of the net change they add up to. Descriptive, not a test.
+export function contributions(raw, places, name, periodId = 'ytd', top = 5) {
+  const pkey = PERIODS[periodId]?.key || PERIODS.ytd.key;
+  const line = (g) => g?.seven_major_felonies?.[name] || g?.additional_stats?.[name];
+  const cw = line(raw?.citywide)?.[pkey];
+  if (!cw) return null;
+  const net = cw.current_year - cw.prior_year;
+  if (net === 0) return null;
+  const moves = places.map((geo) => {
+    const w = line(raw[geo])?.[pkey];
+    return w && Number.isFinite(w.current_year) && Number.isFinite(w.prior_year) ? { geo, diff: w.current_year - w.prior_year } : null;
+  }).filter((m) => m && Math.sign(m.diff) === Math.sign(net)).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const lead = moves.slice(0, top);
+  const sum = lead.reduce((t, m) => t + m.diff, 0);
+  return { name, net, lead, share: sum / net, movers: moves.length };
+}
+
+// Consecutive full years moving the same way, ending with the latest ({y, val} ascending).
+export function annualRun(series) {
+  if (!series || series.length < 2) return null;
+  const last = series[series.length - 1];
+  const dir = Math.sign(last.val - series[series.length - 2].val);
+  if (!dir) return { dir: 0, years: 0, from: series[series.length - 2], to: last };
+  let i = series.length - 1;
+  while (i > 0 && Math.sign(series[i].val - series[i - 1].val) === dir) i--;
+  return { dir, years: series.length - 1 - i, from: series[i], to: last };
+}
+
 /* ---------------------------- the long arc -------------------------- */
 // Full-year pace for the current year, as a RANGE from two methods:
 //   seasonal: this YTD ÷ (last year's same-date YTD ÷ last year's full-year total) — assumes this

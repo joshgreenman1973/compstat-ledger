@@ -7,6 +7,7 @@ import {
   revisionFlows, breakEven, revisionRisk, withRevisions,
   dispersionFor, dispersionForSum, Z_HEAD, clause, pTwoSided, benjaminiHochberg, withChance, fmtPct,
   redrawnSince, isSplitPrecinct, spell,
+  relativeZ, twoYearsBack, trendShape, notableMoves, contributions, annualRun, PATROL_BOROUGHS,
 } from './stats';
 
 const cw = snapshot.citywide;
@@ -338,5 +339,52 @@ describe('formatting and geography', () => {
     expect(redrawnSince(2010, '34th Precinct')).toBe(false);
     expect(redrawnSince(1993, '34th Precinct')).toBe(true);
     expect(isSplitPrecinct('113th Precinct')).toBe(true);
+  });
+});
+
+describe('notable trends', () => {
+  test('the relative test reduces to the plain test when the city is flat', () => {
+    expect(relativeZ(150, 100, 1000, 1000)).toBeCloseTo(poissonZ(150, 100), 10);
+    // a precinct falling exactly as fast as the city doesn't stand out
+    expect(Math.abs(relativeZ(88, 100, 8800, 10000))).toBeLessThan(0.1);
+    // flat while the city falls 30%: stands out upward
+    expect(relativeZ(100, 100, 7000, 10000)).toBeGreaterThan(1.96);
+  });
+  test('two years back and the shape of a move', () => {
+    expect(twoYearsBack(150, 50)).toBe(100);
+    expect(twoYearsBack(0, -100)).toBeNull();
+    expect(trendShape(200, 150, 100, 1, 1).kind).toBe('again'); // up last year too
+    expect(trendShape(100, 150, 100, 1, -1).kind).toBe('rebound'); // down after last year's jump
+    expect(trendShape(200, 150, 148, 1, 1).kind).toBe('new');
+  });
+  const raw = {
+    citywide: { seven_major_felonies: { Robbery: { year_to_date: { current_year: 8800, prior_year: 10000 } } }, additional_stats: {} },
+    'A Precinct': { seven_major_felonies: { Robbery: { year_to_date: { current_year: 300, prior_year: 150 }, historical: { '2_yr_pct': 100 } } }, additional_stats: {} },
+    'B Precinct': { seven_major_felonies: { Robbery: { year_to_date: { current_year: 88, prior_year: 100 } } }, additional_stats: {} },
+    'C Precinct': { seven_major_felonies: { Robbery: { year_to_date: { current_year: 40, prior_year: 120 } } }, additional_stats: {} },
+  };
+  test('a move is notable only if it clears chance, stands out from the city and survives the correction', () => {
+    const r = notableMoves({ raw, places: ['A Precinct', 'B Precinct', 'C Precinct'], crimes: ['Robbery'] });
+    expect(r.rises.map((x) => x.geo)).toEqual(['A Precinct']);
+    expect(r.drops.map((x) => x.geo)).toEqual(['C Precinct']);
+    expect(r.all.find((x) => x.geo === 'B Precinct').notable).toBe(false); // moving with the city
+    expect(r.rises[0].shape.kind).toBe('new'); // 2024 was 150 as well
+    expect(r.rises[0].rank).toBe(1);
+  });
+  test('where the citywide change came from', () => {
+    const c = contributions(raw, ['A Precinct', 'B Precinct', 'C Precinct'], 'Robbery', 'ytd', 2);
+    expect(c.net).toBe(-1200);
+    expect(c.lead.map((m) => m.geo)).toEqual(['C Precinct', 'B Precinct']);
+    expect(c.share).toBeCloseTo(92 / 1200, 10);
+  });
+  test('annual runs', () => {
+    const r = annualRun([{ y: 2021, val: 488 }, { y: 2022, val: 438 }, { y: 2023, val: 391 }, { y: 2024, val: 382 }, { y: 2025, val: 309 }]);
+    expect(r).toMatchObject({ dir: -1, years: 4, from: { y: 2021 } });
+    expect(annualRun([{ y: 2024, val: 1 }, { y: 2025, val: 2 }]).years).toBe(1);
+  });
+  test('patrol boroughs cover every precinct once', () => {
+    const all = Object.values(PATROL_BOROUGHS).flat();
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(78);
   });
 });

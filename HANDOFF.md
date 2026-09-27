@@ -23,6 +23,7 @@ It is **not** an official Vital City product and carries no Vital City branding.
   8. `77f7ab3` Removes the press layer entirely, at Josh's call.
   9. Adds `tools/deploy-pages.sh`, which publishes the noindexed GitHub Pages copy.
   10. Sept. 27: the fixes from the blind review (see "Blind review, Sept. 27").
+  11. Sept. 27: the notable-trends section.
 - **No pull request exists.** Don't open one unless Josh asks. Merging would replace the live site's default view.
 
 ## Standing rules from Josh
@@ -47,7 +48,7 @@ git checkout package-lock.json   # npm install rewrites it; don't commit that ch
 npm start            # http://localhost:3000 ; classic view at ?classic=1
 ```
 
-- **Unit tests** (36, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
+- **Unit tests** (42, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
 - **Publish the test copy:** `bash tools/deploy-pages.sh` builds with the right base path, adds noindex and pushes to `joshgreenman1973/compstat-read-closely`.
@@ -84,6 +85,15 @@ Three independent reviewers read the page cold: one on the statistics, one on th
   - AP numerals, dates and dashes.
 - **Facts.** John Hall is "a retired police professional," per Vital City, and his figures cover 95 monthly totals from 2018 through November 2025. The page now explains why his 13.5% for murder doesn't apply to a year-to-date total. Peer-city "lower" now needs a gap beyond chance; Boston is "about the same" as New York.
 
+## Notable trends (Sept. 27)
+
+Josh asked for the page to spotlight big local moves, rising and falling, which the rigor pass had buried. The `#trends` section (first after the hero, with a pointer line in the hero) does it without loosening the rules:
+
+- **A move is notable only if it clears three bars:** the chance test on its own; a test against the citywide trend for that crime (`S.relativeZ`: had the precinct moved exactly with the city, this year's share of the two years' total would be r ÷ (1 + r), where r is the city's ratio); and Benjamini-Hochberg across every precinct-and-crime pair (612 year to date). Fragile moves are left out. On Sept. 20 that leaves 10 rises and 6 drops year to date and none over 28 days or a week. When nothing qualifies, the section shows the biggest swings next to the city, labeled with why they fall short.
+- **Two-year shape** (year to date only), from NYPD's same-stretch-of-2024 column: "second straight" rise or drop; "after a jump (or drop) last year," flagged as possibly a return toward normal (regression to the mean, per John Hall's May 2026 Vital City piece on the zone strategy); or "new this year."
+- **Views:** citywide lists the top moves with a map; a patrol borough filters to its own precincts (membership in `S.PATROL_BOROUGHS`, verified against the report: every borough's totals equal its precincts' on all 108 values, except Bronx South, whose reported totals run slightly higher in a few person-crime lines); a precinct lists all its crimes, ranked against the city, with a verdict on each.
+- **Citywide extras:** where each citywide change beyond chance came from (the five biggest precinct moves and their share of the net change), and year-after-year runs from NYPD's annual totals with the pace verdict from the long arc.
+
 ## How it's built
 
 | Path | What it does |
@@ -118,6 +128,7 @@ Each section has an anchor you can link to.
 
 - **Verdict hero.** A headline generated from the data. Precinct pages add a locator map and an "A day in this precinct" link.
 - **Sticky nav.** Section links and a way back to citywide.
+- **`#trends`** Notable trends: local moves that stand out from chance and from the city, with two-year shape; citywide, where each citywide change came from and year-after-year runs.
 - **`#signal`** Every change on the chance-test board.
 - **`#every-one`** Murders as individual units, this year against last.
 - **`#arc`** Each major felony's annual history since 1993, citywide only, with this year's pace drawn as a range.
@@ -174,12 +185,13 @@ Don't loosen these without a reason you can defend in print.
   - Long-view comparisons (deck, ledger, Then and now) are left out for precincts redrawn since the base year: the 105th, 113th, 116th, 120th, 121st and 122nd since 2010, plus the 33rd and 34th since 1993.
   - Rankings skip precincts with none and say "too few to rank" under 10 incidents; ties are labeled.
 - **Peer cities.** RTCI rows are matched by both agency and state. Comparisons use the previous full year, because each city's year-to-date window ends on a different date. A city counts as higher or lower than New York only if the rate gap is beyond chance (z from Poisson standard errors of both rates); otherwise "about the same."
+- **Notable trends.** A precinct-and-crime move must clear the chance test, differ from the citywide trend (relativeZ, same continuity correction and precinct-level dispersion) and survive Benjamini-Hochberg across every pair tested; fragile moves are out. Ranks ("the biggest … against the citywide trend of any precinct") compare every precinct tested for that crime.
 - **Rape** long-view columns in the ledger are marked n/c. The Then and now source line gives the count with rape backed out.
 - **Concentration ties** go to the more populous precinct, which makes the claim more conservative.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 447 of 447 checks pass. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 452 of 452 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.
@@ -188,6 +200,7 @@ Don't loosen these without a reason you can defend in print.
 - **Other cities:** NYC's 2025 murder rate was lower than in seven of the eight other largest U.S. cities; in the Northeast group, lower than six of seven and about the same as Boston.
 - **Then and now:** 43 of 72 precincts are above 2010 levels; all 70 compared are below 1993, by 46% to 89%.
 - **Crime by crime:** 41 drops and 9 rises stand out after the false-discovery correction and fragility.
+- **Notable trends:** 10 rises and 6 drops year to date. The biggest: grand larceny up 54% in the 112th (down 6% citywide) and down 33% in the 43rd.
 
 ## Verification harness (`tools/verify/`)
 

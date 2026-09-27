@@ -211,6 +211,43 @@ for a, s_ in big:
 se2 = {a: cnt[a] / (popn[a] / 1e5) ** 2 for a in rate}
 higher = sum((rate[a] - rate['New York City']) / math.sqrt(se2[a] + se2['New York City']) >= 1.96 for a in rate if a != 'New York City')
 expect(t, f'lower than in {nw(higher)} of the eight other largest U.S. cities', 'peer headline')
+# notable trends: chance, the citywide trend and Benjamini-Hochberg across every precinct-and-crime pair
+NOTABLE = ['Murder', 'Shooting Vic.', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'G.L.A.', 'Gr. Larceny']
+pairs = []
+for n in NOTABLE:
+    C, P = row('citywide', n)
+    pi = (C / P) / (1 + C / P)
+    for k in d:
+        if 'Precinct' not in k or not get(k, n): continue
+        cc, pp = row(k, n)
+        if cc + pp == 0: continue
+        f = phi(n, 'precinct'); nn = cc + pp
+        zr = math.copysign(max(0, abs(cc - nn * pi) - 0.5), cc - nn * pi) / math.sqrt(f * nn * pi * (1 - pi))
+        za = z(cc, pp, f)
+        pairs.append(dict(geo=k, n=n, cc=cc, pp=pp, za=za, zr=zr, p=math.erfc(abs(zr) / math.sqrt(2)), fr=fragile(k, n, cc, pp, f), cityPct=(C - P) / P * 100))
+order = sorted(range(len(pairs)), key=lambda i: pairs[i]['p']); kmax = 0
+for r_, i in enumerate(order):
+    if pairs[i]['p'] <= (r_ + 1) / len(pairs) * 0.05: kmax = r_ + 1
+kept = set(order[:kmax])
+notable = [x for i, x in enumerate(pairs) if i in kept and not x['fr'] and ((x['za'] >= 1.96 and x['zr'] > 0) or (x['za'] <= -1.96 and x['zr'] < 0))]
+ups = sorted([x for x in notable if x['zr'] > 0], key=lambda x: -abs(x['zr'])); downs = sorted([x for x in notable if x['zr'] < 0], key=lambda x: -abs(x['zr']))
+print(f'notable: {len(ups)} rises, {len(downs)} drops of {len(pairs)} pairs')
+LBL = {'Murder': 'Murder', 'Shooting Vic.': 'Shooting victims', 'Rape': 'Rape', 'Robbery': 'Robbery', 'Fel. Assault': 'Felony assault', 'Burglary': 'Burglary', 'G.L.A.': 'Vehicle theft', 'Gr. Larceny': 'Grand larceny'}
+def prose(v): return 'unchanged' if round(abs(v)) == 0 else f'{"down" if v < 0 else "up"} {round(abs(v))}%'
+for x in (ups[:1] + downs[:1]):
+    expect(t, f"{LBL[x['n']]} is {prose((x['cc'] - x['pp']) / x['pp'] * 100)} in the {x['geo']} ({prose(x['cityPct'])} citywide).", f"trends title {x['geo']} {x['n']}")
+expect(t, f'{len(ups)} rises and {len(downs)} drops clear all three citywide so far this year', 'trends receipt counts')
+# where robbery's citywide drop came from
+C, P = row('citywide', 'Robbery'); net = C - P
+moves = sorted([(k, row(k, 'Robbery')[0] - row(k, 'Robbery')[1]) for k in d if 'Precinct' in k and get(k, 'Robbery')], key=lambda m: m[1])[:5]
+listed = '; '.join(k.replace(' Precinct', '') + ', -' + str(abs(v)) for k, v in moves)
+share = round(sum(v for _, v in moves) / net * 100)
+expect(t, f'Robbery fell by {fmt(abs(net))} citywide. The five biggest precinct drops ({listed}) add up to {share}% of that.', 'robbery contributions')
+# murder's run of annual declines
+mur = [(r['y'], r['Murder']) for r in hist]
+yrs_down = 0
+while yrs_down + 1 < len(mur) and mur[-1 - yrs_down][1] < mur[-2 - yrs_down][1]: yrs_down += 1
+expect(t, f'Murder: down {nw(yrs_down)} years in a row through 2025, from {fmt(mur[-1 - yrs_down][1])} in {mur[-1 - yrs_down][0]} to {fmt(mur[-1][1])}', 'murder annual run')
 print(f'{oks} checks passed, {len(fails)} failed')
 print('\n'.join(fails[:40]))
 sys.exit(1 if fails else 0)

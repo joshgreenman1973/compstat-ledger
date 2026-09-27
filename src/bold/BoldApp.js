@@ -48,6 +48,8 @@ const hoodOf = (k) => {
   return Object.entries(HOOD_FIX).reduce((t, [a, b]) => t.replace(a, b), h);
 };
 const shortName = (label) => label.replace(' Precincts', '').replace(' Precinct', '');
+const lc = (l) => l.charAt(0).toLowerCase() + l.slice(1);
+const seriesFor = (key) => annualHistory.citywide.filter((d) => typeof d[key] === 'number').map((d) => ({ y: d.y, val: d[key] }));
 const THEN_2010 = { cuts: [-25, -5, 5, 25], colors: ['#217ebe', '#90bfdf', '#e8e8ea', '#fabcaa', '#e03a30'], labels: ['25%+ below', '5-25% below', 'Within 5%', '5-25% above', '25%+ above'] };
 const THEN_1993 = { cuts: [-85, -75, -65, -50], colors: ['#1a5f8f', '#217ebe', '#4e98cb', '#90bfdf', '#d2e4f0'], labels: ['85%+ below', '75-85% below', '65-75% below', '50-65% below', 'Less than 50% below'] };
 const thenFill = (v, base) => {
@@ -111,6 +113,41 @@ function PrecinctDay({ precincts, initialKey }) {
         </div>
       )}
     </section>
+  );
+}
+
+// One precinct-and-crime move in the notable-trends section.
+function MoveItem({ x, onPick, showPlace = true, status = false }) {
+  const dirWord = x.diff > 0 ? 'rise' : 'drop';
+  const tag = !x.shape ? null
+    : x.shape.kind === 'again' ? `Second straight ${dirWord} (${S.fmtInt(x.shape.twoBack)} in the same stretch of 2024)`
+      : x.shape.kind === 'rebound' ? `After a ${x.shape.last === 'rise' ? 'jump' : 'drop'} last year (${S.fmtInt(x.shape.twoBack)} in 2024): part of this may be a return toward normal`
+        : 'New this year: last year\'s change was within chance';
+  const beyond = x.verdict === 'drop' || x.verdict === 'rise';
+  const verdictText = x.notable ? 'Stands out from chance and from the city'
+    : !beyond ? 'Within chance'
+      : x.fragile ? 'Beyond chance, but recent revisions could erase it'
+        : Math.abs(x.zRel || 0) >= S.Z_CRIT ? "Beyond chance and unusual next to the city, but not once you allow for how many precincts and crimes were tested"
+          : 'Beyond chance, but in step with the citywide trend';
+  const body = (
+    <>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[14px] font-bold">{x.label}{showPlace && <span className="font-normal text-[#555]"> · {shortName(x.geo)}{hoodOf(x.geo) ? `, ${hoodOf(x.geo).split(',')[0]}` : ''}</span>}</span>
+        <strong className="text-[14px] whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>{x.pct == null ? 'new' : S.fmtPct(x.pct, 0)}</strong>
+      </div>
+      <div className="text-[12px] text-[#555]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {S.fmtInt(x.cur)} vs. {S.fmtInt(x.prior)}; citywide {S.fmtPct(x.cityPct, 0)}{x.notable && x.rank === 1 ? ` · the biggest ${lc(x.label)} ${dirWord} against the citywide trend of any precinct` : ''}
+      </div>
+      {status && <div className={`text-[12px] ${x.notable ? 'font-bold text-[#050507]' : 'text-[#707175]'}`}>{verdictText}</div>}
+      {tag && (x.verdict === 'drop' || x.verdict === 'rise') && <div className="text-[12px] text-[#707175]">{tag}</div>}
+    </>
+  );
+  return (
+    <li className="border-b border-[#f0f0f0]">
+      {onPick
+        ? <button type="button" onClick={() => onPick(x.geo)} className="w-full text-left py-2 px-1 -mx-1 hover:bg-[#f7f8dd]">{body}</button>
+        : <div className="py-2">{body}</div>}
+    </li>
   );
 }
 
@@ -469,29 +506,47 @@ export default function BoldApp() {
 
   /* ---------------- long arc ---------------- */
   const arcOpt = ARC_OPTIONS.find((a) => a[0] === arcKey) || ARC_OPTIONS[0];
-  const arcSeries = useMemo(() => annualHistory.citywide.filter((d) => typeof d[arcKey] === 'number').map((d) => ({ y: d.y, val: d[arcKey] })), [arcKey]);
+  const arcSeries = useMemo(() => seriesFor(arcKey), [arcKey]);
   const arcRow = ytdCityRows.find((r) => r.name === arcKey);
   const lastHist = arcSeries[arcSeries.length - 1];
   const cityWeekEnd = cityData?.report_period?.week_end;
   const arcFlagged = arcKey === 'Rape';
   const arcFlow = revs?.byGeo?.citywide?.[arcKey];
   const arcPhi = S.dispersionFor(arcKey, 'city');
-  const pace = useMemo(() => {
-    if (!arcRow || arcFlagged || !lastHist || lastHist.y !== reportYear - 1) return null;
-    const base = S.paceRange({ cur: arcRow.cur, priorYtd: arcRow.prior, priorFull: lastHist.val, weekEnd: cityWeekEnd });
+  // Full-year pace for any citywide line: two methods, widened by REVISION_WEEKS more weeks of revisions
+  // at the recent pace (so a claim has to survive the counts rising or falling as NYPD revises them)
+  // and by ordinary chance in the count still to come.
+  const paceFor = useCallback((key) => {
+    const series = seriesFor(key);
+    const row = ytdCityRows.find((r) => r.name === key);
+    const last = series[series.length - 1];
+    if (!row || key === 'Rape' || !last || last.y !== reportYear - 1) return null;
+    const base = S.paceRange({ cur: row.cur, priorYtd: row.prior, priorFull: last.val, weekEnd: cityWeekEnd });
     if (!base || base.tooEarly) return base;
     let range = base;
-    if (arcFlow && revs?.weeks > 0) {
-      // Widen the range by REVISION_WEEKS more weeks of revisions at the recent pace, so a claim about
-      // where the year will land has to survive the counts rising (or falling) as NYPD revises them.
-      const allowance = Math.round((arcFlow.cur / revs.weeks) * S.REVISION_WEEKS);
-      const adj = S.paceRange({ cur: arcRow.cur + allowance, priorYtd: arcRow.prior, priorFull: lastHist.val, weekEnd: cityWeekEnd });
+    const flow = revs?.byGeo?.citywide?.[key];
+    if (flow && revs?.weeks > 0) {
+      const allowance = Math.round((flow.cur / revs.weeks) * S.REVISION_WEEKS);
+      const adj = S.paceRange({ cur: row.cur + allowance, priorYtd: row.prior, priorFull: last.val, weekEnd: cityWeekEnd });
       range = { ...base, low: Math.min(base.low, adj.low), high: Math.max(base.high, adj.high), allowance, adj };
     }
-    // ...and by ordinary chance in the count still to come.
-    return S.withChance(range, arcRow.cur, arcPhi);
-  }, [arcRow, arcFlagged, lastHist, reportYear, cityWeekEnd, arcFlow, revs, arcPhi]);
+    return S.withChance(range, row.cur, S.dispersionFor(key, 'city'));
+  }, [ytdCityRows, reportYear, cityWeekEnd, revs]);
+  const pace = useMemo(() => (arcFlagged ? null : paceFor(arcKey)), [arcFlagged, paceFor, arcKey]);
   const claim = S.arcClaim(arcSeries, pace);
+
+  /* ---------------- notable trends ---------------- */
+  const isPrecinct = activeGeo.includes('Precinct');
+  const allPlaces = useMemo(() => (raw ? Object.keys(raw).filter((k) => k.includes('Precinct')) : []), [raw]);
+  const notable = useMemo(() => (raw ? S.notableMoves({
+    raw, places: allPlaces, periodId: period, crimes: rapeOK ? S.NOTABLE_CRIMES : S.NOTABLE_CRIMES.filter((n) => n !== 'Rape'),
+    flows: revs?.byGeo, weeksByGeo: revs?.weeksByGeo, weeks: revs?.weeks || 0, fragileWeeks,
+  }) : null), [raw, allPlaces, period, rapeOK, revs, fragileWeeks]);
+  const scoped = useMemo(() => {
+    if (!notable) return null;
+    const keep = (x) => (isCity ? true : isPrecinct ? x.geo === activeGeo : S.inPatrolBorough(activeGeo, x.geo));
+    return { rises: notable.rises.filter(keep), drops: notable.drops.filter(keep), all: notable.all.filter(keep) };
+  }, [notable, isCity, isPrecinct, activeGeo]);
 
   /* ---------------- peers ---------------- */
   const peerGroup = S.PEER_GROUPS.find((g) => g.key === peerKey) || S.PEER_GROUPS[0];
@@ -627,6 +682,32 @@ export default function BoldApp() {
     return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against ${priorMoved}. ${tilt} A real change that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile and kept out of the headline.`.replace(/ {2,}/g, ' ');
   })();
 
+  // One line in the hero pointing to what stands out locally.
+  const spotlight = (() => {
+    if (!scoped) return null;
+    const r0 = scoped.rises[0]; const d0 = scoped.drops[0];
+    const bit = (x) => `${lc(x.label)} ${pctProse(x.pct)} in the ${shortName(x.geo)}`;
+    if (isPrecinct) {
+      const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
+      return x ? `Stands out here: ${lc(x.label)}, ${pctProse(x.pct)} (${pctProse(x.cityPct)} citywide).` : null;
+    }
+    if (!r0 && !d0) return null;
+    return `Standing out from the citywide trend: ${[r0, d0].filter(Boolean).map(bit).join('; ')}.`;
+  })();
+  const moveSentence = (x) => `${x.label} is ${pctProse(x.pct)} in the ${x.geo} (${pctProse(x.cityPct)} citywide).`;
+  const trendsTitle = (() => {
+    if (!scoped) return '';
+    if (isPrecinct) {
+      const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
+      return x
+        ? `In the ${activeGeo}, ${lc(x.label)} stands out: ${pctProse(x.pct)}, while citywide it's ${pctProse(x.cityPct)}.`
+        : `Nothing in the ${activeGeo} stands out from both chance and the citywide trend ${P.since}.`;
+    }
+    const r0 = scoped.rises[0]; const d0 = scoped.drops[0];
+    if (r0 || d0) return [r0, d0].filter(Boolean).map(moveSentence).join(' ');
+    return `No precinct's change in a major crime${isCity ? '' : ` in Patrol Borough ${activeGeo}`} stands out from both chance and the citywide trend ${P.since}.`;
+  })();
+
   const tiles = [
     m && { key: 'm', label: 'Murders', r: m },
     sv && { key: 'sv', label: 'Shooting victims', r: sv },
@@ -651,7 +732,7 @@ export default function BoldApp() {
     : '';
 
   const navItems = [
-    ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
+    ['trends', 'Notable trends'], ['signal', 'Signal'], ['every-one', 'Every one'], ...(isCity ? [['arc', 'Long arc']] : []),
     ...(unitList.length > 0 ? [['where', 'Where'], ['by-crime', 'Crime by crime']] : []), ...(period === 'ytd' && unitList.length > 0 ? [['then-now', 'Then and now']] : []), ...(isCity ? [['cities', 'Other cities']] : []), ['day', 'A day in the precinct'], ['ledger', 'Ledger'], ['method', 'Method'],
   ];
 
@@ -681,6 +762,7 @@ export default function BoldApp() {
               For every murder {P.since}, NYPD recorded <strong className="text-white">{ratio.display} felony assaults</strong>.
             </p>
           )}
+          {spotlight && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/85">{spotlight} <a href="#trends" className="underline decoration-[#dde44c] underline-offset-2 hover:text-[#dde44c] whitespace-nowrap">Notable trends ↓</a></p>}
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
           {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created in December 2024 from parts of the 105th and 113th. NYPD reports all three separately, restated for the new lines, but the 2020 Census populations and precinct map use the old lines, so per-resident rates for any one of them would be wrong. Maps and rates combine the three.</p>}
@@ -749,6 +831,100 @@ export default function BoldApp() {
       </nav>
 
       <main className="max-w-[1180px] mx-auto px-4 sm:px-8">
+
+        {/* ============================ NOTABLE TRENDS ============================ */}
+        {scoped && notable && (
+          <section id="trends" className="pt-14 pb-12 border-b border-[#e6e6e6] scroll-mt-14">
+            <SectionHead
+              id="trends"
+              kicker="Notable trends"
+              title={trendsTitle}
+              dek={`A move makes this list only if it clears the chance test, stands out from the citywide trend for that crime and holds up after correcting for the ${S.fmtInt(notable.tested)} precinct-and-crime pairs tested at once. A precinct whose robbery fell as fast as the city's isn't a local story.${period !== 'ytd' ? ' Over 28 days or a week, counts are usually too small for any precinct to clear all three; the year-to-date view has more to show.' : ''}`}
+            />
+            {isPrecinct ? (
+              <ul className="max-w-4xl">
+                {scoped.all.map((x) => <MoveItem key={x.name} x={x} status showPlace={false} />)}
+              </ul>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+                <div className="lg:col-span-2">
+                  {(() => {
+                    const fills = {}; const titles = {};
+                    [...scoped.rises, ...scoped.drops].forEach((x) => {
+                      const num = x.geo === '116th Precinct' ? S.SPLIT_PRECINCTS.shapes[0] : String(parseInt(x.geo, 10));
+                      const was = fills[num];
+                      const col = x.zRel > 0 ? SIGNAL_RAMP['2'] : SIGNAL_RAMP['-2'];
+                      fills[num] = was && was !== col ? '#8e6bb0' : col;
+                      titles[num] = `${titles[num] ? `${titles[num]}; ` : `${x.geo}: `}${lc(x.label)} ${S.fmtPct(x.pct, 0)} (city ${S.fmtPct(x.cityPct, 0)})`;
+                    });
+                    return <MiniMap fills={fills} titles={titles} selectedNum={selectedNum} onSelect={(num) => { const x = [...scoped.rises, ...scoped.drops].find((y) => String(parseInt(y.geo, 10)) === num); if (x) selectGeo(x.geo); }} label="Map: precincts with a notable rise (red) or drop (blue) in a major crime." minWidth={220} />;
+                  })()}
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-[#444]">
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: SIGNAL_RAMP['2'] }} />Notable rise</span>
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: SIGNAL_RAMP['-2'] }} />Notable drop</span>
+                    <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: '#8e6bb0' }} />Both</span>
+                  </div>
+                </div>
+                <div className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {[['Rising faster than the city', scoped.rises, 1], ['Falling faster than the city', scoped.drops, -1]].map(([title, list, dir]) => (
+                    <div key={title}>
+                      <h3 className="text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-1">{title}{list.length > 8 ? ` (${list.length}; top 8)` : ''}</h3>
+                      {list.length > 0
+                        ? <ul>{list.slice(0, 8).map((x) => <MoveItem key={`${x.geo}-${x.name}`} x={x} onPick={selectGeo} />)}</ul>
+                        : (
+                          <>
+                            <p className="text-[13px] text-[#707175] py-2">None clears all three bars. The biggest {dir > 0 ? 'rises' : 'drops'} next to the city, for what they're worth:</p>
+                            <ul>{scoped.all.filter((x) => Math.sign(x.zRel) === dir && Math.sign(x.diff) === dir).slice(0, 3).map((x) => <MoveItem key={`${x.geo}-${x.name}`} x={x} onPick={selectGeo} status />)}</ul>
+                          </>
+                        )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {isCity && period === 'ytd' && (
+              <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div>
+                  <h3 className="text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-2">Where the citywide changes came from</h3>
+                  <ul className="space-y-2 text-[14px] leading-snug">
+                    {S.NOTABLE_CRIMES.filter((n) => (rapeOK || n !== 'Rape')).map((n) => {
+                      const r = cityRows.find((x) => x.name === n);
+                      if (!r || (r.verdict !== 'drop' && r.verdict !== 'rise')) return null;
+                      const c = S.contributions(raw, allPlaces, n, 'ytd', 5);
+                      if (!c) return null;
+                      return <li key={n}><strong>{r.label}</strong> {c.net < 0 ? 'fell' : 'rose'} by {S.fmtInt(Math.abs(c.net))} citywide. The five biggest precinct {c.net < 0 ? 'drops' : 'rises'} ({c.lead.map((m) => `${shortName(m.geo)}, ${S.fmtSigned(m.diff)}`).join('; ')}) add up to {Math.round(c.share * 100)}% of that.</li>;
+                    })}
+                  </ul>
+                </div>
+                <div>
+                  <h3 className="text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-2">Year after year</h3>
+                  <ul className="space-y-2 text-[14px] leading-snug">
+                    {ARC_OPTIONS.filter(([k]) => k !== 'Rape').map(([k, lbl]) => {
+                      const run = S.annualRun(seriesFor(k));
+                      if (!run || !run.dir) return null;
+                      const pc = paceFor(k); const cl = pc && !pc.tooEarly ? S.arcClaim(seriesFor(k), pc) : null;
+                      const way = run.dir < 0 ? 'down' : 'up';
+                      const runText = run.years >= 2
+                        ? `${way} ${nw(run.years)} years in a row through ${run.to.y}, from ${S.fmtInt(run.from.val)} in ${run.from.y} to ${S.fmtInt(run.to.val)}`
+                        : `${way} in ${run.to.y}, to ${S.fmtInt(run.to.val)} from ${S.fmtInt(run.from.val)}`;
+                      const falling = cl && ['record-low', 'low-since', 'below-last'].includes(cl.kind);
+                      const rising = cl && ['record-high', 'high-since', 'above-last'].includes(cl.kind);
+                      const paceText = !cl ? '' : falling ? (run.dir < 0 ? 'on pace to fall again this year' : 'on pace to fall this year')
+                        : rising ? (run.dir > 0 ? 'on pace to rise again this year' : 'on pace to rise this year') : `on pace to land about where ${run.to.y} did`;
+                      return <li key={k}><strong>{lbl}:</strong> {runText}{paceText ? `; ${paceText}` : ''}.</li>;
+                    })}
+                  </ul>
+                  <p className="mt-2 text-[12px] text-[#707175]">Full-year NYPD totals. "On pace" uses the same range as the long arc below, including revisions and chance, and has to hold across all of it. Rape is left out: its definition changed in 2024.</p>
+                </div>
+              </div>
+            )}
+            <Receipt>
+              <p>Three bars, all required. <strong>Chance:</strong> the precinct's own change clears the chance test (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes that recent NYPD revisions could erase are left out.</p>
+              <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them ${isPrecinct ? `are in the ${activeGeo}` : `are in Patrol Borough ${activeGeo}`}.` : ''}</p>
+              {period === 'ytd' && <p><strong>Two-year shape:</strong> NYPD's report also compares each line with the same stretch two years back, which gives 2024. "Second straight" means last year moved the same way, beyond chance. "After a jump (or drop) last year" means last year moved the other way, beyond chance: part of this year's move may be a return toward normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>. "New this year" means last year's change was within chance.</p>}
+            </Receipt>
+          </section>
+        )}
 
         {/* ============================ SIGNAL ============================ */}
         <section id="signal" className="pt-14 pb-12 border-b border-[#e6e6e6] scroll-mt-14">
@@ -1203,6 +1379,10 @@ export default function BoldApp() {
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">The chance test</h3>
               <p>z = (the gap between this year and last, minus 1) ÷ √(dispersion × (this year + last year)). Beyond ±1.96, a change is too big to put down to chance; inside it, the counts can't tell a real change from chance, which isn't the same as no change. The minus 1 keeps small counts honest: four murders against none last year is within chance. The dispersion allows for how much each line varies from week to week beyond a plain random count, measured from NYPD's own weekly reports (shooting victims vary about twice as much, because one shooting can wound several people; murder varies no more than chance). Clusters that span several weeks aren't fully caught, so near the line, treat the verdict as a prompt, not a conclusion.</p>
+            </div>
+            <div>
+              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Notable trends</h3>
+              <p>The notable-trends section looks for local stories: a precinct's change in a crime that clears the chance test, differs from the citywide trend for that crime, and survives a correction for testing every precinct and crime at once. Year to date, each move is tagged with its two-year shape. A drop right after last year's spike may be partly a return toward normal, not a new trend (<a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">regression to the mean</a>).</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Many tests at once</h3>
