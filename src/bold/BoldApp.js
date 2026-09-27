@@ -6,7 +6,7 @@ import {
   GITHUB_USER, REPO_NAME, RTCI_CSV_URL, toOrdinalPrecinct,
 } from '../App';
 import * as S from './stats';
-import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag, Reveal, CountUp } from './ui';
+import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag, Reveal, CountUp, Pct } from './ui';
 import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP, PairBars, ShareBar, Spark } from './charts';
 import './bold.css';
 
@@ -152,7 +152,7 @@ function MoveItem({ x: raw, onPick, showPlace = true, status = false, max = 60, 
         {tags.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5 vc-rise" style={{ '--d': '350ms' }}>{tags}</div>}
       </div>
       <div className="text-right">
-        <div className="text-[24px] font-black leading-none">{x.pct == null ? 'new' : S.fmtPct(x.pct, 0)}</div>
+        <div className="text-[24px] font-black leading-none"><Pct pct={x.pct} prior={x.prior} digits={0} /></div>
         <div className="mt-1 text-[11px] text-[#707175] whitespace-nowrap">vs. {x.yearNow - 1}</div>
       </div>
     </div>
@@ -772,8 +772,10 @@ export default function BoldApp() {
   const lumpy = tested.filter((r) => r.phi >= 1.5).sort((a, b) => b.phi - a.phi);
   // Some lines are hundreds of times as common as others, so one percent means very different numbers.
   const scaleNote = (() => {
-    const big = [...tested].filter((r) => r.prior > 0).sort((a, b) => b.prior - a.prior)[0];
-    const small = byName.Murder && byName.Murder.prior > 0 ? byName.Murder : [...tested].filter((r) => r.prior > 0).sort((a, b) => a.prior - b.prior)[0];
+    // Only lines with a real base: a 1% change on a count of two is a meaningless fraction of a crime.
+    const solid = tested.filter((r) => !S.smallBase(r.prior) && r.prior > 0);
+    const big = [...solid].sort((a, b) => b.prior - a.prior)[0];
+    const small = solid.includes(byName.Murder) ? byName.Murder : [...solid].sort((a, b) => a.prior - b.prior)[0];
     if (!big || !small || big === small || big.prior < 20 * small.prior) return '';
     const one = (r) => { const v = r.prior / 100; return v >= 10 ? S.fmtInt(v) : v >= 1 ? v.toFixed(1).replace(/\.0$/, '') : v.toFixed(2); };
     return `Some lines are far more common than others: a 1% change in ${lc(big.label)} is ${one(big)} crimes; in ${lc(small.label)}, ${one(small)}. ${boardMode === 'count' ? 'Here every change is drawn as a number of crimes, on one shared scale. ' : 'Switch to "Number of crimes" to compare sizes. '}`;
@@ -840,7 +842,7 @@ export default function BoldApp() {
               <div key={key} className="pt-5 pb-2 pr-4 border-b lg:border-b-0 border-white/10">
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">{label}</div>
                 <div className="vc-display font-black text-[40px] sm:text-[52px] leading-none mt-2"><CountUp value={r.cur} /></div>
-                <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}><strong className="text-[17px] text-white">{r.pct == null ? 'new' : S.fmtPct(r.pct, 0)}</strong> · {S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
+                <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}><strong className="text-[17px] text-white"><Pct pct={r.pct} prior={r.prior} digits={0} dark /></strong> · {S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5"><Chip verdict={r.verdict} dark small />{r.fragile && <FragileTag dark weeks={fragileWeeks} />}</div>
               </div>
             ))}
@@ -1124,7 +1126,9 @@ export default function BoldApp() {
                   const tail = own.verdict === 'noise' ? ', within the range of chance' : own.verdict === 'rise' ? ', a rise beyond chance' : own.verdict === 'drop' ? ', a drop beyond chance' : '';
                   const cmp = own.prior === 0
                     ? (own.count === 0 ? `, and none ${P.short}` : `, up from none ${P.short}`)
-                    : `, ${pctProse(own.pct)} from ${P.cmp}${tail}`;
+                    : S.smallBase(own.prior)
+                      ? `, ${own.count === own.prior ? 'the same as' : own.count > own.prior ? 'up from' : 'down from'} ${nw(own.prior)} ${P.short}${tail}`
+                      : `, ${pctProse(own.pct)} from ${P.cmp}${tail}`;
                   return `The ${activeGeo}: ${counted}${cmp}.`;
                 }
                 if (own.count === 0) {
@@ -1200,7 +1204,7 @@ export default function BoldApp() {
                         <button type="button" onClick={() => selectGeo(u.geoKey)} className={`w-full flex items-baseline justify-between gap-3 py-1.5 text-left border-b border-[#f0f0f0] hover:bg-[#f7f8dd] ${u.num === selectedNum ? 'bg-[#f7f8dd]' : ''}`}>
                           <span className="min-w-0"><span className="text-[14px] font-bold">{u.label.replace(' Precincts', '').replace(' Precinct', '')}</span>{u.hood && <span className="text-[12px] text-[#707175]"> · {u.hood.split(',')[0]}</span>}</span>
                           <span className="text-[13px] whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {mapMode === 'signal' ? <>{S.fmtInt(u.count)} vs. {S.fmtInt(u.prior)} <strong>{S.fmtPct(u.pct, 0)}</strong></> : <strong>{u.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>}
+                            {mapMode === 'signal' ? <>{S.fmtInt(u.count)} vs. {S.fmtInt(u.prior)} <strong><Pct pct={u.pct} prior={u.prior} digits={0} /></strong></> : <strong>{u.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>}
                           </span>
                         </button>
                       </li>
@@ -1427,7 +1431,7 @@ export default function BoldApp() {
                       <td className="py-2 px-2 text-right text-[14px] font-black">{S.fmtInt(r.cur)}</td>
                       <td className="py-2 px-2 text-right text-[14px] text-[#555]">{S.fmtInt(r.prior)}</td>
                       <td className="py-2 px-2 text-right text-[14px]">{S.fmtSigned(r.diff)}</td>
-                      <td className="py-2 px-2 text-right text-[14px]">{S.fmtPct(r.pct)}</td>
+                      <td className="py-2 px-2 text-right text-[14px]"><Pct pct={r.pct} prior={r.prior} /></td>
                       <td className="py-2 px-2"><span className="inline-flex items-center gap-2"><Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}<span className="text-[12px] text-[#707175] whitespace-nowrap">{r.z != null ? `z ${r.z < 0 ? '−' : ''}${Math.abs(r.z).toFixed(1)}` : ''}</span></span></td>
                       {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{r.rev ? S.fmtSigned(r.rev.cur) : '—'}</td>}
                       {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555] whitespace-nowrap">{r.risk ? `${S.fmtInt(r.risk.breakEven)} · ${Number.isFinite(r.risk.weeksToErase) ? `${r.risk.weeksToErase < 10 ? r.risk.weeksToErase.toFixed(1) : Math.round(r.risk.weeksToErase)} wks` : r.risk.direction === 'none' ? 'none' : 'opposite'}` : '—'}</td>}
@@ -1467,6 +1471,10 @@ export default function BoldApp() {
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Many tests at once</h3>
               <p>Run enough tests and some will clear the bar by luck. The headline picks from eight crimes, so it has to clear a stricter bar (|z| ≥ {S.Z_HEAD.toFixed(2)}, the usual 5% split eight ways). Precinct maps test every precinct at once, so a precinct is colored only if it survives the Benjamini-Hochberg correction, which holds false discoveries to about 5% of the precincts colored. The signal board shows each line's own test, with a note on how many could clear by chance.</p>
+            </div>
+            <div>
+              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Small numbers</h3>
+              <p>When last year's count was under {S.SMALL_BASE}, a percent change swings on a handful of crimes: two to six is "+200%." As in the original CompStat Ledger, those percentages are grayed out and starred wherever they appear, and headlines and sentences give the counts instead. The chance test handles small counts on its own, so a big percentage on a tiny base rarely clears it anyway.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Pace is a range, not a forecast</h3>

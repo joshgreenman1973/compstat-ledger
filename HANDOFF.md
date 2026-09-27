@@ -48,7 +48,7 @@ git checkout package-lock.json   # npm install rewrites it; don't commit that ch
 npm start            # http://localhost:3000 ; classic view at ?classic=1
 ```
 
-- **Unit tests** (42, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
+- **Unit tests** (44, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
 - **Publish the test copy:** `bash tools/deploy-pages.sh` builds with the right base path, adds noindex and pushes to `joshgreenman1973/compstat-read-closely`.
@@ -102,6 +102,7 @@ Every change on the page compares a stretch of this year with the same dates a y
 
 - **Scale.** Tiles show the percent change beside the count change. A hero line spells out scale ("NYPD recorded 117 felony assaults for every murder … A 0.9% rise in felony assaults is 186 more assaults; a 24% drop in murders is 61 fewer murders."). The signal board has a Percent / Number of crimes switch (`?board=count`): in Number mode every line is drawn by how many crimes it moved, on one shared axis, with its chance band in crimes. Its intro gives the size of 1% for the most common line and for murder.
 - **Notable moves** show two labeled bars from one zero line (the precinct in color, citywide in gray, values in their own column), the counts for the same dates in 2024, 2025 and 2026, and plain tags: "Up two years running," "Up after a flat 2025," "Down after a 2025 spike" (with the regression-to-the-mean explanation in its tooltip), "Biggest in city."
+- **Small bases.** As in the original ledger (its `VOLATILITY_THRESHOLD`), a percent change on a line with fewer than 30 last year is grayed out and starred everywhere it appears (`S.SMALL_BASE`, the `Pct` component, the signal board), and headlines and sentences give counts instead ("up from two at this point in 2025").
 - **Motion.** Small, one-time grace notes as each piece scrolls into view (`useReveal`, `Reveal`, `CountUp` in `ui.js`; styles in `bold.css`): bars grow from zero, sparklines and the long-arc line draw, tags and headings fade up, hero numbers count up, signal-board dots slide on the Percent / Number switch, and map fills ease. Everything is visible without JavaScript, and `prefers-reduced-motion` turns it all off. The verification harness renders with reduced motion so counts are final.
 
 ## How it's built
@@ -201,7 +202,7 @@ Don't loosen these without a reason you can defend in print.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 462 of 462 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 464 of 464 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.

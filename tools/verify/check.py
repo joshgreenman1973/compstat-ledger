@@ -133,6 +133,11 @@ for fname, geo, per in [('cw.txt', 'citywide', 'year_to_date'), ('cw75.txt', '75
     absent(t.upper(), 'PRESS REPORTS', f'{fname} press layer removed')
 
 t = open(f'{SP}/cw.txt').read().replace('−', '-')
+# small bases (under 30 last year) are starred, as in the original ledger: the weekly citywide murder line
+wk = open(f'{SP}/cwwk.txt').read().replace('−', '-')
+wc, wp = row('citywide', 'Murder', 'week_to_date')
+if wp < 30: expect(wk, f'{(wc - wp) / wp * 100:+.1f}%*'.replace('+-', '-'), 'small-base percent starred')
+absent(t, '%*\t', 'no citywide YTD line is starred (all bases are large)')
 # tiles carry the percent change; the hero spells out scale
 mc, mp = row('citywide', 'Murder')
 expect(t, f'{round((mc - mp) / mp * 100)}% · -{mp - mc} vs. {mp}', 'murder tile percent')

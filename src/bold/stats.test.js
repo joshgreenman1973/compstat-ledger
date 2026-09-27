@@ -8,6 +8,7 @@ import {
   dispersionFor, dispersionForSum, Z_HEAD, clause, pTwoSided, benjaminiHochberg, withChance, fmtPct,
   redrawnSince, isSplitPrecinct, spell,
   relativeZ, twoYearsBack, trendShape, notableMoves, contributions, annualRun, PATROL_BOROUGHS,
+  smallBase, SMALL_BASE,
 } from './stats';
 
 const cw = snapshot.citywide;
@@ -386,5 +387,18 @@ describe('notable trends', () => {
     const all = Object.values(PATROL_BOROUGHS).flat();
     expect(new Set(all).size).toBe(all.length);
     expect(all.length).toBe(78);
+  });
+});
+
+describe('small bases', () => {
+  test('under 30 last year, as in the original ledger', () => {
+    expect(SMALL_BASE).toBe(30);
+    expect(smallBase(29)).toBe(true);
+    expect(smallBase(30)).toBe(false);
+    expect(smallBase(null)).toBe(false);
+  });
+  test('headlines on a small base give counts', () => {
+    expect(clause({ name: 'Robbery', label: 'Robbery', cur: 12, prior: 25, pct: -52 }, 'drop')).toBe('Robberies fell to 12 from 25.');
+    expect(clause({ name: 'Robbery', label: 'Robbery', cur: 20, prior: 30, pct: -33.3 }, 'drop')).toBe('Robbery is down 33%.');
   });
 });

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from '../data/nyc_precincts.json';
 import { C, VERDICT, useWidth, Chip, FragileTag, Reveal } from './ui';
-import { fmtInt, fmtPct, zBin, binFor, spell } from './stats';
+import { fmtInt, fmtPct, zBin, binFor, spell, smallBase, SMALL_BASE_NOTE } from './stats';
 
 const Z_CRIT_BAND = 1.96;
 const niceMax = (v) => [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100].find((s) => s >= v) || 100;
@@ -55,12 +55,13 @@ export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
           const bandLo = band != null ? pos(-band) : null;
           const bandHi = band != null ? pos(band) : null;
           const solid = r.verdict === 'drop' || r.verdict === 'rise';
+          const faint = !isCount && smallBase(r.prior); // percent on a tiny base: grayed, as in the original ledger
           const tip = `${r.label}: ${fmtInt(r.cur)} vs. ${fmtInt(r.prior)}, ${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))} (${fmtPct(r.pct)}).${r.z != null ? ` Chance test z = ${r.z.toFixed(2)}.` : ''}${band != null ? ` Changes within ±${isCount ? fmtInt(band) : `${band.toFixed(1)}%`} could be chance.` : ''}`;
           return (
             <li key={r.name} title={tip} className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 py-2.5 border-b border-[#f0f0f0] vc-rise" style={{ '--d': `${i * 35}ms` }}>
               <div className="flex-1 min-w-0 sm:flex-none sm:w-[34%]">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-bold text-[15px] text-[#050507] leading-tight">{r.label}</span>
+                  <span className={`font-bold text-[15px] leading-tight ${faint ? 'text-[#a3a3ad]' : 'text-[#050507]'}`} title={faint ? SMALL_BASE_NOTE : undefined}>{r.label}{faint ? '*' : ''}</span>
                   <Chip verdict={r.verdict} small />
                   {r.fragile && <FragileTag weeks={fragileWeeks} />}
                 </div>
@@ -75,7 +76,7 @@ export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
                   <div
                     className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full vc-ease-left"
                     style={{
-                      left: `${pos(val)}%`, width: 14, height: 14,
+                      left: `${pos(val)}%`, width: 14, height: 14, opacity: faint ? 0.35 : 1,
                       background: solid ? v.color : C.white,
                       border: solid ? `2px solid ${C.white}` : `2.5px solid ${v.color}`,
                       boxShadow: solid ? `0 0 0 1px ${v.color}` : 'none',
@@ -87,7 +88,7 @@ export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
                 )}
               </div>
               <div className="w-[124px] sm:w-[140px] shrink-0 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                <div className="font-black text-[16px] text-[#050507] leading-tight">{isCount ? `${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))}` : r.pct != null ? fmtPct(r.pct) : 'n/a'}</div>
+                <div className={`font-black text-[16px] leading-tight ${faint ? 'text-[#a3a3ad]' : 'text-[#050507]'}`}>{isCount ? `${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))}` : r.pct != null ? `${fmtPct(r.pct)}${faint ? '*' : ''}` : r.prior === 0 && r.cur > 0 ? 'new*' : 'n/a'}</div>
                 <div className="text-[12px] text-[#555]">{isCount ? (r.pct != null ? fmtPct(r.pct) : 'n/a') : `${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))}`}</div>
                 <div className="text-[12px] text-[#707175]">{fmtInt(r.cur)} vs. {fmtInt(r.prior)}</div>
               </div>
@@ -102,6 +103,7 @@ export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
         <span className="flex items-center gap-1.5"><span className="inline-block w-6 h-3 rounded-sm bg-[#e4e4e8]" />Range chance alone could produce (95%)</span>
         {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Beyond chance today; {spell(fragileWeeks)} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
         <span className="text-[#707175]">{isCount ? `Axis: ±${fmtInt(D)} crimes, shared by every line.` : `Axis capped at ±${D}%; ‹ › mark values beyond it.`}</span>
+        {!isCount && rows.some((r) => smallBase(r.prior)) && <span className="text-[#707175]">* {SMALL_BASE_NOTE}</span>}
       </div>
     </div>
   );

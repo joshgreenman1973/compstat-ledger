@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
-import { spell, fmtInt } from './stats';
+import { spell, fmtInt, fmtPct, smallBase, SMALL_BASE_NOTE } from './stats';
 
 // Palette tokens. Verdict colors are a blue/red diverging pair around a neutral
 // gray (validated for protan/deutan separation); ▼ / ▲ / ~ glyphs and text labels carry the
@@ -195,4 +195,11 @@ export function CountUp({ value, ms = 800, format = fmtInt }) {
     return () => cancelAnimationFrame(raf);
   }, [value, ms]);
   return <span aria-label={format(value)}>{format(v)}</span>;
+}
+
+// A percent change, grayed and starred when last year's count was too small for a percentage to mean much.
+export function Pct({ pct, prior, digits = 1, className = '', dark = false }) {
+  if (pct == null || !Number.isFinite(pct)) return <span className={className}>{prior === 0 ? 'new' : 'n/a'}</span>;
+  if (!smallBase(prior)) return <span className={className}>{fmtPct(pct, digits)}</span>;
+  return <span className={`${className} ${dark ? 'text-white/45' : 'text-[#a3a3ad]'} cursor-help`} title={SMALL_BASE_NOTE}>{fmtPct(pct, digits)}*</span>;
 }

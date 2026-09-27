@@ -313,9 +313,12 @@ export const NOUNS = {
   'Murder': 'murders', 'Shooting Vic.': 'shooting victims', 'Rape': 'rapes', 'Robbery': 'robberies',
   'Fel. Assault': 'felony assaults', 'Burglary': 'burglaries', 'G.L.A.': 'vehicle thefts', 'Gr. Larceny': 'grand larcenies',
 };
-// Below this many last year, a percentage says more than the counts do ("up 700%" on 8 vs. 1), so the
-// headline gives the counts instead.
-export const SMALL_BASE = 20;
+// Below this many last year, a percent change swings on a handful of crimes (two to six is "+200%"). The
+// original CompStat Ledger grays those out at the same threshold (its VOLATILITY_THRESHOLD); here they're
+// grayed and starred wherever a percentage is shown, and headlines give the counts instead.
+export const SMALL_BASE = 30;
+export const smallBase = (prior) => Number.isFinite(prior) && prior < SMALL_BASE;
+export const SMALL_BASE_NOTE = `Fewer than ${SMALL_BASE} last year: a percent change on counts this small swings on a handful of crimes, so it's grayed out.`;
 // A change this small (either way) is "essentially flat," not "isn't falling."
 export const FLAT_PCT = 3;
 
