@@ -234,8 +234,12 @@ ups = sorted([x for x in notable if x['zr'] > 0], key=lambda x: -abs(x['zr'])); 
 print(f'notable: {len(ups)} rises, {len(downs)} drops of {len(pairs)} pairs')
 LBL = {'Murder': 'Murder', 'Shooting Vic.': 'Shooting victims', 'Rape': 'Rape', 'Robbery': 'Robbery', 'Fel. Assault': 'Felony assault', 'Burglary': 'Burglary', 'G.L.A.': 'Vehicle theft', 'Gr. Larceny': 'Grand larceny'}
 def prose(v): return 'unchanged' if round(abs(v)) == 0 else f'{"down" if v < 0 else "up"} {round(abs(v))}%'
-for x in (ups[:1] + downs[:1]):
-    expect(t, f"{LBL[x['n']]} is {prose((x['cc'] - x['pp']) / x['pp'] * 100)} in the {x['geo']} ({prose(x['cityPct'])} citywide).", f"trends title {x['geo']} {x['n']}")
+for i, x in enumerate(ups[:1] + downs[:1]):
+    lbl = LBL[x['n']]; ch = prose((x['cc'] - x['pp']) / x['pp'] * 100); cp = prose(x['cityPct'])
+    sent = (f"From Jan. 1 to Sept. 20, {lbl[0].lower() + lbl[1:]} is {ch} in the {x['geo']} compared with the same dates in 2025; citywide, it's {cp}." if i == 0
+            else f"{lbl} is {ch} in the {x['geo']}; citywide, it's {cp}.")
+    expect(t, sent, f"trends title {x['geo']} {x['n']}")
+expect(t.upper(), 'CITYWIDE · YEAR TO DATE, JAN. 1-SEPT. 20, 2026, VS. THE SAME DATES IN 2025', 'kicker names the comparison')
 expect(t, f'{len(ups)} rises and {len(downs)} drops clear all three citywide so far this year', 'trends receipt counts')
 # where robbery's citywide drop came from
 C, P = row('citywide', 'Robbery'); net = C - P

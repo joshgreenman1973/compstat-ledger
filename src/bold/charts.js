@@ -228,7 +228,7 @@ export const RATE_RAMP = ['#fde5dd', '#fabcaa', '#f69577', '#fb693c', '#e03a30']
 export const SIGNAL_RAMP = { '-2': '#217ebe', '-1': '#90bfdf', 0: '#e8e8ea', 1: '#fabcaa', 2: '#e03a30' };
 const ZERO_FILL = '#fbfaf8';
 
-export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun }) {
+export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun, priorLabel = 'at this point last year' }) {
   const [ref, w] = useWidth(640);
   const [hover, setHover] = useState(null);
   const [mouse, setMouse] = useState({ x: 0, y: 0 });
@@ -290,7 +290,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
           <div className="font-black text-[13px] text-[#050507]">{hovered.label}</div>
           {hovered.hood && <div className="text-[#707175] mb-1.5">{hovered.hood}</div>}
           <div style={{ fontVariantNumeric: 'tabular-nums' }}>
-            <div><strong>{fmtInt(hovered.count)}</strong> {measureNoun} <span className="text-[#707175]">vs. {fmtInt(hovered.prior)} last year</span></div>
+            <div><strong>{fmtInt(hovered.count)}</strong> {measureNoun} <span className="text-[#707175]">vs. {fmtInt(hovered.prior)} {priorLabel}</span></div>
             <div className="mt-1 flex items-center gap-2"><span>{fmtPct(hovered.pct)}</span><Chip verdict={hovered.real || (hovered.verdict === 'none' ? 'none' : 'noise')} small /></div>
             {mode === 'signal' && !hovered.real && hovered.sig === false && (hovered.verdict === 'drop' || hovered.verdict === 'rise') && <div className="mt-1 text-[#707175] italic">Clears the test on its own, but not after correcting for testing every precinct</div>}
             {hovered.rate != null && !hovered.tourist && <div className="mt-1">{hovered.rate.toFixed(1)} per 100k residents</div>}

@@ -185,19 +185,36 @@ function revisionSentence(r) {
   return `${base} ${need}: about ${wk < 10 ? wk.toFixed(1) : Math.round(wk)} weeks at the recent pace, ${risk.fragile ? `under our ${bar}, so it's marked fragile` : `beyond our ${bar}`}.`;
 }
 
+// Every change on the page compares a stretch of this year with the SAME dates a year earlier (CompStat's
+// own comparison), never with the previous week or month. These strings name the dates so each
+// sentence can say so.
 function periodText(periodId, geoData) {
   const end = S.parseMDY(geoData?.report_period?.week_end);
   const start = S.parseMDY(geoData?.report_period?.week_start);
   const endStr = S.apDate(geoData?.report_period?.week_end, { year: false });
   const y = end?.y;
+  const md = (d) => S.apDate(`${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`, { year: false });
+  const range = (a, b) => (a && b ? (md(a).split(' ')[0] === md(b).split(' ')[0] ? `${md(a)}-${b.getUTCDate()}` : `${md(a)}-${md(b)}`) : '');
+  const endDate = end ? new Date(Date.UTC(end.y, end.m - 1, end.d)) : null;
   if (periodId === 'd28') {
-    return { eyebrow: `28 days through ${S.apDate(geoData?.report_period?.week_end)}`, lead: `In the 28 days through ${endStr}`, cmp: `the same 28 days of ${y - 1}`, since: 'in the last 28 days', short: `in the same 28 days of ${y - 1}`, priorLabel: `in the same 28 days of ${y - 1}` };
+    const dates = endDate ? range(new Date(endDate.getTime() - 27 * 86400000), endDate) : '';
+    return {
+      eyebrow: `28 days through ${S.apDate(geoData?.report_period?.week_end)}`, lead: `In the 28 days through ${endStr}`, cmp: `the same 28 days of ${y - 1}`, since: 'in the last 28 days', short: `in the same 28 days of ${y - 1}`, priorLabel: `in the same 28 days of ${y - 1}`,
+      dates: `${dates}, ${y}`, kicker: `28 days, ${dates}, ${y}, vs. the same dates in ${y - 1}`, lead2: `From ${dates.replace('-', ' to ')}`, over: `compared with the same dates in ${y - 1}`, tag: `${dates} vs. the same dates in ${y - 1}`, compares: `${dates}, ${y}, with the same dates in ${y - 1}`,
+    };
   }
   if (periodId === 'wtd') {
-    const range = start && end && start.m === end.m ? `${S.apDate(geoData.report_period.week_start, { year: false })}-${end.d}` : `${S.apDate(geoData?.report_period?.week_start, { year: false })} to ${endStr}`;
-    return { eyebrow: `Week of ${range}, ${y}`, lead: `In the week of ${range}`, cmp: `the same week of ${y - 1}`, since: 'this week', short: `in the same week of ${y - 1}`, priorLabel: `in the same week of ${y - 1}` };
+    const dates = start && end && start.m === end.m ? `${S.apDate(geoData.report_period.week_start, { year: false })}-${end.d}` : `${S.apDate(geoData?.report_period?.week_start, { year: false })} to ${endStr}`;
+    return {
+      eyebrow: `Week of ${dates}, ${y}`, lead: `In the week of ${dates}`, cmp: `the same week of ${y - 1}`, since: 'this week', short: `in the same week of ${y - 1}`, priorLabel: `in the same week of ${y - 1}`,
+      dates: `${dates}, ${y}`, kicker: `Week of ${dates}, ${y}, vs. the same week of ${y - 1}`, lead2: `In the week of ${dates}`, over: `compared with the same week of ${y - 1}`, tag: `${dates} vs. the same week of ${y - 1}`, compares: `the week of ${dates}, ${y}, with the same week of ${y - 1}`,
+    };
   }
-  return { eyebrow: `Year to date through ${S.apDate(geoData?.report_period?.week_end)}`, lead: `Through ${endStr}`, cmp: `the same point in ${y - 1}`, since: 'so far this year', short: `at this point in ${y - 1}`, priorLabel: `at this point in ${y - 1}` };
+  const dates = `Jan. 1-${endStr}`;
+  return {
+    eyebrow: `Year to date through ${S.apDate(geoData?.report_period?.week_end)}`, lead: `Through ${endStr}`, cmp: `the same period of ${y - 1}`, since: 'so far this year', short: `at this point in ${y - 1}`, priorLabel: `at this point in ${y - 1}`,
+    dates: `${dates}, ${y}`, kicker: `Year to date, ${dates}, ${y}, vs. the same dates in ${y - 1}`, lead2: `From Jan. 1 to ${endStr}`, over: `compared with the same dates in ${y - 1}`, tag: `${dates} vs. the same dates in ${y - 1}`, compares: `${dates}, ${y}, with the same dates in ${y - 1}`,
+  };
 }
 
 const geoPopulation = (geo) => {
@@ -689,22 +706,25 @@ export default function BoldApp() {
     const bit = (x) => `${lc(x.label)} ${pctProse(x.pct)} in the ${shortName(x.geo)}`;
     if (isPrecinct) {
       const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
-      return x ? `Stands out here: ${lc(x.label)}, ${pctProse(x.pct)} (${pctProse(x.cityPct)} citywide).` : null;
+      return x ? `Stands out here (${P.tag}): ${lc(x.label)}, ${pctProse(x.pct)}, while citywide it's ${pctProse(x.cityPct)}.` : null;
     }
     if (!r0 && !d0) return null;
-    return `Standing out from the citywide trend: ${[r0, d0].filter(Boolean).map(bit).join('; ')}.`;
+    return `Standing out from the citywide trend (${P.tag}): ${[r0, d0].filter(Boolean).map(bit).join('; ')}.`;
   })();
-  const moveSentence = (x) => `${x.label} is ${pctProse(x.pct)} in the ${x.geo} (${pctProse(x.cityPct)} citywide).`;
+  // The first sentence names the dates compared; a second can lean on it.
+  const moveSentence = (x, first) => (first
+    ? `${P.lead2}, ${lc(x.label)} is ${pctProse(x.pct)} in the ${x.geo} ${P.over}; citywide, it's ${pctProse(x.cityPct)}.`
+    : `${x.label} is ${pctProse(x.pct)} in the ${x.geo}; citywide, it's ${pctProse(x.cityPct)}.`);
   const trendsTitle = (() => {
     if (!scoped) return '';
     if (isPrecinct) {
       const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
       return x
-        ? `In the ${activeGeo}, ${lc(x.label)} stands out: ${pctProse(x.pct)}, while citywide it's ${pctProse(x.cityPct)}.`
+        ? `In the ${activeGeo}, ${lc(x.label)} stands out: ${P.lead2.charAt(0).toLowerCase() + P.lead2.slice(1)}, it's ${pctProse(x.pct)} ${P.over}, while citywide it's ${pctProse(x.cityPct)}.`
         : `Nothing in the ${activeGeo} stands out from both chance and the citywide trend ${P.since}.`;
     }
     const r0 = scoped.rises[0]; const d0 = scoped.drops[0];
-    if (r0 || d0) return [r0, d0].filter(Boolean).map(moveSentence).join(' ');
+    if (r0 || d0) return [r0, d0].filter(Boolean).map((x, i) => moveSentence(x, i === 0)).join(' ');
     return `No precinct's change in a major crime${isCity ? '' : ` in Patrol Borough ${activeGeo}`} stands out from both chance and the citywide trend ${P.since}.`;
   })();
 
@@ -750,7 +770,7 @@ export default function BoldApp() {
           )}
           <div className={selectedNum ? 'lg:grid lg:grid-cols-[1fr_260px] lg:gap-10' : ''}>
           <div>
-          <Kicker dark>{isCity ? 'Citywide' : activeGeo}{!isCity && hoodOf(activeGeo) ? ` · ${hoodOf(activeGeo)}` : ''} · {P.eyebrow}</Kicker>
+          <Kicker dark>{isCity ? 'Citywide' : activeGeo}{!isCity && hoodOf(activeGeo) ? ` · ${hoodOf(activeGeo)}` : ''} · {P.kicker}</Kicker>
           <h1 id="verdict-h" className="vc-display vc-hero-headline font-black leading-[0.98] tracking-tight text-[40px] sm:text-[60px] md:text-[76px] lg:text-[88px] max-w-[15ch]">
             {headline.sentences.map((s, i) => (
               <span key={s} className={i === 1 && (headline.counterKind === 'stuck' || headline.counterKind === 'rise') ? 'vc-counter' : ''}>{s}{i < headline.sentences.length - 1 ? ' ' : ''}</span>
@@ -787,6 +807,7 @@ export default function BoldApp() {
             ))}
           </div>
 
+          <p className="mt-3 text-[12px] text-white/60">Each tile compares {P.compares}.</p>
           <Receipt dark>
             {headline.lead ? zLine(headline.lead) : (() => {
               const names = (list) => joinAnd(list.map((r) => r.label.charAt(0).toLowerCase() + r.label.slice(1)));
@@ -839,7 +860,7 @@ export default function BoldApp() {
               id="trends"
               kicker="Notable trends"
               title={trendsTitle}
-              dek={`A move makes this list only if it clears the chance test, stands out from the citywide trend for that crime and holds up after correcting for the ${S.fmtInt(notable.tested)} precinct-and-crime pairs tested at once. A precinct whose robbery fell as fast as the city's isn't a local story.${period !== 'ytd' ? ' Over 28 days or a week, counts are usually too small for any precinct to clear all three; the year-to-date view has more to show.' : ''}`}
+              dek={`Every change here compares ${P.compares}. A move makes this list only if it clears the chance test, stands out from the citywide trend for that crime and holds up after correcting for the ${S.fmtInt(notable.tested)} precinct-and-crime pairs tested at once. A precinct whose robbery fell as fast as the city's isn't a local story.${period !== 'ytd' ? ' Over 28 days or a week, counts are usually too small for any precinct to clear all three; the year-to-date view has more to show.' : ''}`}
             />
             {isPrecinct ? (
               <ul className="max-w-4xl">
@@ -885,7 +906,7 @@ export default function BoldApp() {
             {isCity && period === 'ytd' && (
               <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div>
-                  <h3 className="text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-2">Where the citywide changes came from</h3>
+                  <h3 className="text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-2">Where the citywide changes came from, {P.dates}, vs. the same dates in {reportYear - 1}</h3>
                   <ul className="space-y-2 text-[14px] leading-snug">
                     {S.NOTABLE_CRIMES.filter((n) => (rapeOK || n !== 'Rape')).map((n) => {
                       const r = cityRows.find((x) => x.name === n);
@@ -909,8 +930,9 @@ export default function BoldApp() {
                         : `${way} in ${run.to.y}, to ${S.fmtInt(run.to.val)} from ${S.fmtInt(run.from.val)}`;
                       const falling = cl && ['record-low', 'low-since', 'below-last'].includes(cl.kind);
                       const rising = cl && ['record-high', 'high-since', 'above-last'].includes(cl.kind);
-                      const paceText = !cl ? '' : falling ? (run.dir < 0 ? 'on pace to fall again this year' : 'on pace to fall this year')
-                        : rising ? (run.dir > 0 ? 'on pace to rise again this year' : 'on pace to rise this year') : `on pace to land about where ${run.to.y} did`;
+                      const paceText = !cl ? ''
+                        : falling ? `on pace to ${run.dir < 0 ? 'fall again, finishing' : 'finish'} ${reportYear} below ${run.to.y}`
+                          : rising ? `on pace to ${run.dir > 0 ? 'rise again, finishing' : 'finish'} ${reportYear} above ${run.to.y}` : `on pace to finish ${reportYear} about where ${run.to.y} did`;
                       return <li key={k}><strong>{lbl}:</strong> {runText}{paceText ? `; ${paceText}` : ''}.</li>;
                     })}
                   </ul>
@@ -932,7 +954,7 @@ export default function BoldApp() {
             id="signal"
             kicker="Signal or noise"
             title={boardTitle}
-            dek={`CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are within chance.' : 'Not all of them mean something.'} The gray band shows how big a swing chance alone could produce, given how many incidents there are and how much each line varies week to week. Dots outside it are changes too big to put down to chance. Dots inside it may still reflect a real change, but the counts can't show it.${fragileDek}`}
+            dek={`Each line compares ${P.compares}. CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are within chance.' : 'Not all of them mean something.'} The gray band shows how big a swing chance alone could produce, given how many incidents there are and how much each line varies week to week. Dots outside it are changes too big to put down to chance. Dots inside it may still reflect a real change, but the counts can't show it.${fragileDek}`}
             right={<Segmented label="Which offenses" size="sm" value={scope} onChange={setScope} options={[['all', 'Everything'], ['major', 'Seven majors']]} />}
           />
           <SignalBoard rows={boardRows} fragileWeeks={fragileWeeks} />
@@ -1072,7 +1094,7 @@ export default function BoldApp() {
               ? (() => {
                 const fr = precinctList.filter((u) => u.fragile && u.sig).length;
                 const lone = precinctList.filter((u) => (u.verdict === 'drop' || u.verdict === 'rise') && !u.sig).length;
-                return `Each precinct gets the same chance test used above. Because the map runs it in all ${precinctList.length} precincts at once, a precinct is colored only if it also survives a correction for that (holding false discoveries to about 5% of the precincts colored).${lone ? ` ${capFirst(nw(lone))} more ${lone === 1 ? 'clears' : 'clear'} the test on ${lone === 1 ? 'its' : 'their'} own but not after the correction.` : ''}${fr ? ` ${capFirst(nw(fr))} ${fr === 1 ? 'is' : 'are'} fragile (recent revisions could erase ${fr === 1 ? 'it' : 'them'}) and shaded as within chance.` : ''} Click a precinct to open it.`;
+                return `Each precinct's change compares ${P.compares}, with the same chance test used above. Because the map runs it in all ${precinctList.length} precincts at once, a precinct is colored only if it also survives a correction for that (holding false discoveries to about 5% of the precincts colored).${lone ? ` ${capFirst(nw(lone))} more ${lone === 1 ? 'clears' : 'clear'} the test on ${lone === 1 ? 'its' : 'their'} own but not after the correction.` : ''}${fr ? ` ${capFirst(nw(fr))} ${fr === 1 ? 'is' : 'are'} fragile (recent revisions could erase ${fr === 1 ? 'it' : 'them'}) and shaded as within chance.` : ''} Click a precinct to open it.`;
               })()
               : 'Shaded by rate per 100,000 residents, in fifths of the precincts that recorded any. Click a precinct to open it.'}
           />
@@ -1087,7 +1109,7 @@ export default function BoldApp() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
             <div className="lg:col-span-3">
-              <PrecinctMap units={units} mode={mapMode} cuts={cuts} selectedNum={selectedNum} onSelect={selectGeo} measureNoun={measureNoun} />
+              <PrecinctMap units={units} mode={mapMode} cuts={cuts} selectedNum={selectedNum} onSelect={selectGeo} measureNoun={measureNoun} priorLabel={P.short} />
               <div className="mt-3"><MapLegend mode={mapMode} cuts={cuts} periodNote={P.since} /></div>
             </div>
             <div className="lg:col-span-2 space-y-8">
@@ -1157,7 +1179,7 @@ export default function BoldApp() {
               dek={(() => {
                 const tests = smalls.reduce((n, x) => n + x.testable, 0);
                 const lone = smalls.reduce((n, x) => n + x.raw95, 0) - smalls.reduce((n, x) => n + x.drops + x.rises, 0);
-                return `One map per crime, ${S.fmtInt(tests)} tests in all. At the ordinary bar, chance alone could color up to about ${S.fmtInt(Math.round(tests * 0.05))} precincts across the maps, so a precinct is colored only if it also survives a correction for testing every precinct on its map (holding false discoveries to about 5% of the precincts colored).${lone > 0 ? ` That leaves out ${nw(lone)} ${plural(lone, 'change', 'changes')} that clear the test on ${plural(lone, 'its', 'their')} own.` : ''} Fragile changes count as within chance. Blue is a drop, red a rise, gray within chance. Click a precinct to open it.${!rapeOK ? ' Rape is left out because its legal definition changed within the comparison window.' : ''}`;
+                return `Each map compares ${P.compares}, precinct by precinct: ${S.fmtInt(tests)} tests in all. At the ordinary bar, chance alone could color up to about ${S.fmtInt(Math.round(tests * 0.05))} precincts across the maps, so a precinct is colored only if it also survives a correction for testing every precinct on its map (holding false discoveries to about 5% of the precincts colored).${lone > 0 ? ` That leaves out ${nw(lone)} ${plural(lone, 'change', 'changes')} that clear the test on ${plural(lone, 'its', 'their')} own.` : ''} Fragile changes count as within chance. Blue is a drop, red a rise, gray within chance. Click a precinct to open it.${!rapeOK ? ' Rape is left out because its legal definition changed within the comparison window.' : ''}`;
               })()}
             />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-8">
@@ -1294,7 +1316,7 @@ export default function BoldApp() {
             id="ledger"
             kicker="The ledger"
             title="Every CompStat line, with the chance test attached."
-            dek={`${isCity ? 'Citywide' : activeGeo}, ${P.eyebrow.charAt(0).toLowerCase()}${P.eyebrow.slice(1)}. Download it and check our work.`}
+            dek={`${isCity ? 'Citywide' : activeGeo}: ${P.compares}. Download it and check our work.`}
             right={(
               <button
                 type="button"
@@ -1322,8 +1344,8 @@ export default function BoldApp() {
               <thead>
                 <tr className="text-[11px] font-bold uppercase tracking-wider text-[#707175] border-b-2 border-[#050507]">
                   <th className="py-2 pr-3">Offense</th>
-                  <th className="py-2 px-2 text-right">{S.PERIODS[period].short}</th>
-                  <th className="py-2 px-2 text-right">Last year</th>
+                  <th className="py-2 px-2 text-right">{reportYear}</th>
+                  <th className="py-2 px-2 text-right">{reportYear - 1}, same dates</th>
                   <th className="py-2 px-2 text-right">Change</th>
                   <th className="py-2 px-2 text-right">%</th>
                   <th className="py-2 px-2">Chance test</th>

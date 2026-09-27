@@ -94,6 +94,10 @@ Josh asked for the page to spotlight big local moves, rising and falling, which 
 - **Views:** citywide lists the top moves with a map; a patrol borough filters to its own precincts (membership in `S.PATROL_BOROUGHS`, verified against the report: every borough's totals equal its precincts' on all 108 values, except Bronx South, whose reported totals run slightly higher in a few person-crime lines); a precinct lists all its crimes, ranked against the city, with a verdict on each.
 - **Citywide extras:** where each citywide change beyond chance came from (the five biggest precinct moves and their share of the net change), and year-after-year runs from NYPD's annual totals with the pace verdict from the long arc.
 
+### Naming the comparison (Sept. 27)
+
+Every change on the page compares a stretch of this year with the same dates a year earlier (CompStat's own comparison), never the previous week or month. At Josh's request, every place that states a change now says so: the hero kicker ("Year to date, Jan. 1-Sept. 20, 2026, vs. the same dates in 2025"), the lead sentences ("From Jan. 1 to Sept. 20, grand larceny is up 54% in the 112th Precinct compared with the same dates in 2025; citywide, it's down 6%."), each section's intro, the tiles and the ledger's column headers. The strings live in `periodText` in `BoldApp.js`.
+
 ## How it's built
 
 | Path | What it does |
@@ -191,7 +195,7 @@ Don't loosen these without a reason you can defend in print.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 452 of 452 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 453 of 453 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.
