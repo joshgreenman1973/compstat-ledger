@@ -32,6 +32,7 @@ def get(geo, name, src_=None):
 def row(geo, name, per='year_to_date'):
     s = get(geo, name); return s[per]['current_year'], s[per]['prior_year']
 MAJ = ['Murder', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'Gr. Larceny', 'G.L.A.']
+LBLS = {'Petit Larceny': 'Petit larceny', 'Misd. Assault': 'Misdemeanor assault', 'Gr. Larceny': 'Grand larceny', 'Retail Theft': 'Retail theft', 'Fel. Assault': 'Felony assault'}
 
 # ---- archive: dispersion and revision flows, from scratch ----
 arch = {os.path.basename(f)[:-5]: json.load(open(f)) for f in glob.glob(f'{SP}/scraper/data/archive/*.json')}
@@ -132,6 +133,13 @@ for fname, geo, per in [('cw.txt', 'citywide', 'year_to_date'), ('cw75.txt', '75
     absent(t.upper(), 'PRESS REPORTS', f'{fname} press layer removed')
 
 t = open(f'{SP}/cw.txt').read().replace('−', '-')
+# tiles carry the percent change; the hero spells out scale
+mc, mp = row('citywide', 'Murder')
+expect(t, f'{round((mc - mp) / mp * 100)}% · -{mp - mc} vs. {mp}', 'murder tile percent')
+fa_c, fa_p = row('citywide', 'Fel. Assault')
+expect(t, f'A {abs((fa_c - fa_p) / fa_p * 100):.1f}% rise in felony assaults is {fmt(fa_c - fa_p)} more assaults; a {round(abs((mc - mp) / mp * 100))}% drop in murders is {mp - mc} fewer murders', 'scale sentence')
+big = max((n for n in names if row('citywide', n)[1]), key=lambda n: row('citywide', n)[1])
+expect(t, f'a 1% change in {LBLS.get(big, big).lower()} is {fmt(row("citywide", big)[1] / 100)} crimes; in murder, {row("citywide", "Murder")[1] / 100:g}', 'scale note on the board')
 # headline: murder clears the stricter headline bar; felony assault is within 3%, so "essentially flat"
 c, p = row('citywide', 'Murder')
 check(abs(z(c, p, phi('Murder'))) >= 2.734, 'murder clears the headline bar')

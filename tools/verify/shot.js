@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 5055;
   for (const s of specs) {
     const ctx = await browser.newContext({ viewport: { width: s.w, height: s.h || 900 }, deviceScaleFactor: 1 });
     const page = await ctx.newPage();
+    await page.emulateMedia({ reducedMotion: 'reduce' }); // motion off, so counts render final, not mid-animation
     const errors = [];
     page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
     page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.type() + ': ' + m.text()); });

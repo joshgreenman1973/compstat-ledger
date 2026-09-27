@@ -6,8 +6,8 @@ import {
   GITHUB_USER, REPO_NAME, RTCI_CSV_URL, toOrdinalPrecinct,
 } from '../App';
 import * as S from './stats';
-import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag } from './ui';
-import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP, MoveBar, MoveBarKey, ShareBar, Spark } from './charts';
+import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag, Reveal, CountUp } from './ui';
+import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP, PairBars, ShareBar, Spark } from './charts';
 import './bold.css';
 
 const DATA_BASE = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/`;
@@ -118,7 +118,8 @@ function PrecinctDay({ precincts, initialKey }) {
 
 // One precinct-and-crime move in the notable-trends section: the precinct's change as a bar against
 // the city's (tick), the size in big type, and short tags whose tooltips carry the explanation.
-function MoveItem({ x, onPick, showPlace = true, status = false, max = 60 }) {
+function MoveItem({ x: raw, onPick, showPlace = true, status = false, max = 60, year }) {
+  const x = { ...raw, yearNow: year };
   const up = x.diff > 0;
   const beyond = x.verdict === 'drop' || x.verdict === 'rise';
   const tags = [];
@@ -130,38 +131,46 @@ function MoveItem({ x, onPick, showPlace = true, status = false, max = 60 }) {
     else if (Math.abs(x.zRel || 0) >= S.Z_CRIT) tags.push(<Tag key="st" tone="line" title="Beyond chance and unusual next to the city, but not once you allow for how many precincts and crimes were tested.">Close call</Tag>);
     else tags.push(<Tag key="st" tone="soft" title="Beyond chance, but moving about as the city is.">In step with city</Tag>);
   }
+  // The three-year pattern, in words a reader can check against the counts shown under the bars.
   if (x.shape && beyond) {
-    const two = S.fmtInt(x.shape.twoBack);
-    if (x.shape.kind === 'again') tags.push(<Tag key="sh" tone="soft" title={`Last year moved the same way, beyond chance: ${two} in the same stretch of 2024.`}>{up ? '2nd year up' : '2nd year down'}</Tag>);
-    else if (x.shape.kind === 'rebound') tags.push(<Tag key="sh" tone="warn" title={`After a ${x.shape.last === 'rise' ? 'jump' : 'drop'} last year (${two} in the same stretch of 2024), part of this may be a return toward normal (regression to the mean).`}>{x.shape.last === 'rise' ? 'After a 2025 jump' : 'After a 2025 drop'}</Tag>);
-    else tags.push(<Tag key="sh" tone="soft" title="Last year's change was within chance.">New this year</Tag>);
+    const way = up ? 'Up' : 'Down';
+    if (x.shape.kind === 'again') tags.push(<Tag key="sh" tone="soft" title="The count also moved this way from 2024 to 2025, by more than chance would explain.">{way} two years running</Tag>);
+    else if (x.shape.kind === 'rebound') tags.push(<Tag key="sh" tone="warn" title={`The count ${x.shape.last === 'rise' ? 'jumped' : 'dipped'} from 2024 to 2025 by more than chance would explain. When a count swings unusually one year, it tends to swing back, so part of this year's change may be a return to normal (regression to the mean).`}>{way} after a 2025 {x.shape.last === 'rise' ? 'spike' : 'dip'}</Tag>);
+    else tags.push(<Tag key="sh" tone="soft" title="The change from 2024 to 2025 was within what chance alone produces; this year's move is the first clear one.">{way} after a flat 2025</Tag>);
   }
+  const years = x.shape?.twoBack != null
+    ? [[x.yearNow - 2, x.shape.twoBack], [x.yearNow - 1, x.prior], [x.yearNow, x.cur]]
+    : [[x.yearNow - 1, x.prior], [x.yearNow, x.cur]];
   const body = (
     <div className="grid grid-cols-[1fr_auto] gap-x-4 items-start">
       <div className="min-w-0 pr-1">
         <div className="text-[15px] font-bold leading-tight">{x.label}{showPlace && <span className="font-normal text-[#555]"> · {shortName(x.geo)}{hoodOf(x.geo) ? `, ${hoodOf(x.geo).split(',')[0]}` : ''}</span>}</div>
-        <div className="mt-1.5"><MoveBar pct={x.pct ?? 0} cityPct={x.cityPct} max={max} title={`${x.label}${showPlace ? `, ${x.geo}` : ''}: ${S.fmtInt(x.cur)} vs. ${S.fmtInt(x.prior)}, ${S.fmtPct(x.pct, 0)}; citywide ${S.fmtPct(x.cityPct, 0)}`} /></div>
-        {tags.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5">{tags}</div>}
+        <div className="mt-2"><PairBars pct={x.pct ?? 0} cityPct={x.cityPct} max={max} placeLabel={shortName(x.geo)} /></div>
+        <div className="mt-1 text-[12px] text-[#555]" style={{ fontVariantNumeric: 'tabular-nums' }} title="Counts for the same dates in each year">
+          {years.map(([yy, v], i) => <span key={yy}>{i > 0 && <span className="text-[#aaa]"> → </span>}<span className="text-[#707175]">{yy}:</span> <span className={i === years.length - 1 ? 'font-bold text-[#050507]' : ''}>{S.fmtInt(v)}</span></span>)}
+        </div>
+        {tags.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5 vc-rise" style={{ '--d': '350ms' }}>{tags}</div>}
       </div>
       <div className="text-right">
         <div className="text-[24px] font-black leading-none">{x.pct == null ? 'new' : S.fmtPct(x.pct, 0)}</div>
-        <div className="mt-1 text-[11px] text-[#555] whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtInt(x.cur)} vs. {S.fmtInt(x.prior)}</div>
-        <div className="text-[11px] text-[#707175] whitespace-nowrap">city {S.fmtPct(x.cityPct, 0)}</div>
+        <div className="mt-1 text-[11px] text-[#707175] whitespace-nowrap">vs. {x.yearNow - 1}</div>
       </div>
     </div>
   );
   return (
-    <li className="border-b border-[#eee]">
-      {onPick
-        ? <button type="button" onClick={() => onPick(x.geo)} className="w-full text-left py-3 px-1.5 -mx-1.5 rounded hover:bg-[#f7f8dd]">{body}</button>
-        : <div className="py-3">{body}</div>}
-    </li>
+    <Reveal as="li" className="border-b border-[#eee]">
+      <div className="vc-rise">
+        {onPick
+          ? <button type="button" onClick={() => onPick(x.geo)} className="w-full text-left py-3 px-1.5 -mx-1.5 rounded hover:bg-[#f7f8dd]">{body}</button>
+          : <div className="py-3">{body}</div>}
+      </div>
+    </Reveal>
   );
 }
 // A shared scale for a list of moves, so bars compare.
 const moveMax = (list) => {
   const m = Math.max(10, ...list.map((x) => Math.max(Math.abs(x.pct ?? 0), Math.abs(x.cityPct ?? 0))));
-  return [20, 30, 40, 60, 80, 100].find((v) => v >= m) || 100;
+  return Math.min(150, Math.ceil((m * 1.45) / 10) * 10); // headroom so the value label fits past the bar end
 };
 
 const ARC_OPTIONS = [
@@ -406,6 +415,7 @@ export default function BoldApp() {
   const [measure, setMeasure] = useState(MEASURES[init.get('measure')] ? init.get('measure') : 'shootvic');
   const [mapMode, setMapMode] = useState(init.get('map') === 'signal' ? 'signal' : 'rate');
   const [scope, setScope] = useState(init.get('rows') === 'major' ? 'major' : 'all');
+  const [boardMode, setBoardMode] = useState(init.get('board') === 'count' ? 'count' : 'pct');
   const [peerKey, setPeerKey] = useState(S.PEER_GROUPS.some((g) => g.key === init.get('peers')) ? init.get('peers') : 'largest');
   const [thenBase, setThenBase] = useState(init.get('base') === '1993' ? 1993 : 2010);
 
@@ -463,12 +473,13 @@ export default function BoldApp() {
     if (measure !== 'shootvic') p.set('measure', measure);
     if (mapMode !== 'rate') p.set('map', mapMode);
     if (scope !== 'all') p.set('rows', scope);
+    if (boardMode !== 'pct') p.set('board', boardMode);
     if (peerKey !== 'largest') p.set('peers', peerKey);
     if (thenBase !== 2010) p.set('base', String(thenBase));
     const qs = p.toString();
     const url = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash;
     if (url !== window.location.pathname + window.location.search + window.location.hash) window.history.replaceState({}, '', url);
-  }, [raw, activeGeo, period, arcKey, measure, mapMode, scope, peerKey, thenBase]);
+  }, [raw, activeGeo, period, arcKey, measure, mapMode, scope, boardMode, peerKey, thenBase]);
 
   // Honor a #section deep link once content has rendered.
   const scrolledRef = useRef(false);
@@ -759,6 +770,14 @@ export default function BoldApp() {
       ? `All ${nw(tested.length)} changes ${periodWord} are bigger than chance would produce.`
       : `${capFirst(nw(realCount))} of ${nw(tested.length)} changes ${periodWord} ${realCount === 1 ? 'is' : 'are'} bigger than chance would produce.`;
   const lumpy = tested.filter((r) => r.phi >= 1.5).sort((a, b) => b.phi - a.phi);
+  // Some lines are hundreds of times as common as others, so one percent means very different numbers.
+  const scaleNote = (() => {
+    const big = [...tested].filter((r) => r.prior > 0).sort((a, b) => b.prior - a.prior)[0];
+    const small = byName.Murder && byName.Murder.prior > 0 ? byName.Murder : [...tested].filter((r) => r.prior > 0).sort((a, b) => a.prior - b.prior)[0];
+    if (!big || !small || big === small || big.prior < 20 * small.prior) return '';
+    const one = (r) => { const v = r.prior / 100; return v >= 10 ? S.fmtInt(v) : v >= 1 ? v.toFixed(1).replace(/\.0$/, '') : v.toFixed(2); };
+    return `Some lines are far more common than others: a 1% change in ${lc(big.label)} is ${one(big)} crimes; in ${lc(small.label)}, ${one(small)}. ${boardMode === 'count' ? 'Here every change is drawn as a number of crimes, on one shared scale. ' : 'Switch to "Number of crimes" to compare sizes. '}`;
+  })();
   const fragileRows = boardRows.filter((r) => r.fragile);
   const fragileDek = fragileRows.length
     ? ` ${capFirst(joinAnd(fragileRows.map((r) => r.label.charAt(0).toLowerCase() + r.label.slice(1))))} ${fragileRows.length === 1 ? 'clears' : 'clear'} it today but ${fragileRows.length === 1 ? 'is' : 'are'} fragile: ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase ${fragileRows.length === 1 ? 'it' : 'them'}.`
@@ -784,17 +803,24 @@ export default function BoldApp() {
           <div className={selectedNum ? 'lg:grid lg:grid-cols-[1fr_260px] lg:gap-10' : ''}>
           <div>
           <Kicker dark>{isCity ? 'Citywide' : activeGeo}{!isCity && hoodOf(activeGeo) ? ` · ${hoodOf(activeGeo)}` : ''} · {P.kicker}</Kicker>
-          <h1 id="verdict-h" className="vc-display vc-hero-headline font-black leading-[0.98] tracking-tight text-[40px] sm:text-[60px] md:text-[76px] lg:text-[88px] max-w-[15ch]">
+          <h1 id="verdict-h" className="vc-enter vc-display vc-hero-headline font-black leading-[0.98] tracking-tight text-[40px] sm:text-[60px] md:text-[76px] lg:text-[88px] max-w-[15ch]">
             {headline.sentences.map((s, i) => (
               <span key={s} className={i === 1 && (headline.counterKind === 'stuck' || headline.counterKind === 'rise') ? 'vc-counter' : ''}>{s}{i < headline.sentences.length - 1 ? ' ' : ''}</span>
             ))}
           </h1>
-          {deck && <p className="vc-serif mt-6 max-w-3xl text-[19px] sm:text-[23px] leading-snug text-white/80">{deck}</p>}
-          {ratio && (
-            <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">
-              For every murder {P.since}, NYPD recorded <strong className="text-white">{ratio.display} felony assaults</strong>.
-            </p>
-          )}
+          {deck && <p style={{ '--d': '200ms' }} className="vc-enter vc-serif mt-6 max-w-3xl text-[19px] sm:text-[23px] leading-snug text-white/80">{deck}</p>}
+          {ratio && (() => {
+            // Percentages hide scale: the same percent means very different numbers of crimes.
+            const fa = ratio.numer; const mu = ratio.denom;
+            const sized = (r) => (r.diff === 0 || r.pct == null ? null : `${Math.abs(r.pct) < 10 ? Math.abs(r.pct).toFixed(1) : Math.round(Math.abs(r.pct))}% ${r.diff > 0 ? 'rise' : 'drop'}`);
+            const parts = [[fa, 'felony assaults', 'assaults'], [mu, 'murders', 'murders']].filter(([r]) => sized(r))
+              .map(([r, pl, noun]) => `a ${sized(r)} in ${pl} is ${S.fmtInt(Math.abs(r.diff))} ${r.diff > 0 ? 'more' : 'fewer'} ${noun}`);
+            return (
+              <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">
+                Scale matters: NYPD recorded <strong className="text-white">{ratio.display} felony assaults</strong> for every murder {P.since}.{parts.length ? ` ${capFirst(parts.join('; '))}.` : ''}
+              </p>
+            );
+          })()}
           {spotlight && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/85">{spotlight} <a href="#trends" className="underline decoration-[#dde44c] underline-offset-2 hover:text-[#dde44c] whitespace-nowrap">Notable trends ↓</a></p>}
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
@@ -813,8 +839,8 @@ export default function BoldApp() {
             {tiles.map(({ key, label, r }) => (
               <div key={key} className="pt-5 pb-2 pr-4 border-b lg:border-b-0 border-white/10">
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">{label}</div>
-                <div className="vc-display font-black text-[40px] sm:text-[52px] leading-none mt-2">{S.fmtInt(r.cur)}</div>
-                <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
+                <div className="vc-display font-black text-[40px] sm:text-[52px] leading-none mt-2"><CountUp value={r.cur} /></div>
+                <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}><strong className="text-[17px] text-white">{r.pct == null ? 'new' : S.fmtPct(r.pct, 0)}</strong> · {S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5"><Chip verdict={r.verdict} dark small />{r.fragile && <FragileTag dark weeks={fragileWeeks} />}</div>
               </div>
             ))}
@@ -877,8 +903,7 @@ export default function BoldApp() {
             />
             {isPrecinct ? (
               <div className="max-w-3xl">
-                <div className="mb-2"><MoveBarKey /></div>
-                <ul>{scoped.all.map((x) => <MoveItem key={x.name} x={x} status showPlace={false} max={moveMax(scoped.all)} />)}</ul>
+                <ul>{scoped.all.map((x) => <MoveItem key={x.name} x={x} status showPlace={false} max={moveMax(scoped.all)} year={reportYear} />)}</ul>
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -901,16 +926,15 @@ export default function BoldApp() {
                   </div>
                 </div>
                 <div className="lg:col-span-3 grid grid-cols-1 xl:grid-cols-2 gap-x-8 gap-y-6">
-                  <div className="xl:col-span-2 -mb-3"><MoveBarKey /></div>
                   {[['Rising faster than the city', scoped.rises, 1], ['Falling faster than the city', scoped.drops, -1]].map(([title, list, dir]) => (
                     <div key={title}>
                       <h3 className="flex items-baseline justify-between gap-3 text-[12px] font-black uppercase tracking-[0.14em] border-b border-[#050507] pb-2 mb-1"><span>{title}</span>{list.length > 0 && <span className="text-[11px] font-bold normal-case tracking-normal text-[#707175] whitespace-nowrap">{list.length > 8 ? `top 8 of ${list.length}` : `${list.length}`}</span>}</h3>
                       {list.length > 0
-                        ? <ul>{list.slice(0, 8).map((x) => <MoveItem key={`${x.geo}-${x.name}`} x={x} onPick={selectGeo} max={moveMax([...scoped.rises.slice(0, 8), ...scoped.drops.slice(0, 8)])} />)}</ul>
+                        ? <ul>{list.slice(0, 8).map((x) => <MoveItem key={`${x.geo}-${x.name}`} x={x} onPick={selectGeo} max={moveMax([...scoped.rises.slice(0, 8), ...scoped.drops.slice(0, 8)])} year={reportYear} />)}</ul>
                         : (
                           <>
                             <p className="text-[13px] text-[#707175] py-2">None clears all three bars. The biggest {dir > 0 ? 'rises' : 'drops'} next to the city, for what they're worth:</p>
-                            <ul>{scoped.all.filter((x) => Math.sign(x.zRel) === dir && Math.sign(x.diff) === dir).slice(0, 3).map((x) => <MoveItem key={`${x.geo}-${x.name}`} x={x} onPick={selectGeo} status max={100} />)}</ul>
+                            <ul>{scoped.all.filter((x) => Math.sign(x.zRel) === dir && Math.sign(x.diff) === dir).slice(0, 3).map((x) => <MoveItem key={`${x.geo}-${x.name}`} x={x} onPick={selectGeo} status max={100} year={reportYear} />)}</ul>
                           </>
                         )}
                     </div>
@@ -929,13 +953,13 @@ export default function BoldApp() {
                       const c = S.contributions(raw, allPlaces, n, 'ytd', 5);
                       if (!c) return null;
                       return (
-                        <li key={n}>
+                        <Reveal as="li" key={n}>
                           <div className="flex items-baseline justify-between gap-3 mb-1.5">
                             <span className="text-[15px] font-bold">{r.label} <span className="font-normal text-[#555]" style={{ fontVariantNumeric: 'tabular-nums' }}>{S.fmtSigned(c.net)}</span></span>
                             <span className="text-[12px] text-[#555]">Top five: <strong className="text-[#050507]">{Math.round(c.share * 100)}%</strong></span>
                           </div>
                           <ShareBar net={c.net} lead={c.lead} nameFor={shortName} />
-                        </li>
+                        </Reveal>
                       );
                     })}
                   </ul>
@@ -954,14 +978,14 @@ export default function BoldApp() {
                       const runTitle = `${run.dir < 0 ? 'Down' : 'Up'} ${nw(run.years)} ${run.years === 1 ? 'year' : 'years in a row'} through ${run.to.y}: ${S.fmtInt(run.from.val)} in ${run.from.y} to ${S.fmtInt(run.to.val)}.`;
                       const paceTitle = pc && !pc.tooEarly ? `${reportYear} pace: ${S.fmtInt(pc.low)} to ${S.fmtInt(pc.high)}, including revisions and chance, against ${S.fmtInt(run.to.val)} in ${run.to.y}.` : '';
                       return (
-                        <li key={k} className="grid grid-cols-[96px_150px] sm:grid-cols-[110px_150px_1fr] items-center gap-x-3 gap-y-1 py-2 border-b border-[#eee]">
+                        <Reveal as="li" key={k} className="grid grid-cols-[96px_150px] sm:grid-cols-[110px_150px_1fr] items-center gap-x-3 gap-y-1 py-2 border-b border-[#eee]">
                           <span className="text-[14px] font-bold leading-tight">{lbl}</span>
                           <Spark series={series} pace={pc} noun={noun} />
                           <span className="col-span-2 sm:col-span-1 flex flex-wrap gap-1.5">
                             <Tag tone="soft" title={runTitle}>{run.dir < 0 ? '↓' : '↑'} {run.years} {run.years === 1 ? 'yr' : 'yrs'} through {run.to.y}</Tag>
                             {cl && <Tag tone={falling || rising ? 'ink' : 'line'} title={paceTitle}>{reportYear}: {falling ? 'lower' : rising ? 'higher' : `about as ${run.to.y}`}</Tag>}
                           </span>
-                        </li>
+                        </Reveal>
                       );
                     })}
                   </ul>
@@ -972,7 +996,7 @@ export default function BoldApp() {
             <Receipt>
               <p>Three bars, all required. <strong>Chance:</strong> the precinct's own change clears the chance test (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes that recent NYPD revisions could erase are left out.</p>
               <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them ${isPrecinct ? `are in the ${activeGeo}` : `are in Patrol Borough ${activeGeo}`}.` : ''}</p>
-              {period === 'ytd' && <p><strong>Two-year shape:</strong> NYPD's report also compares each line with the same stretch two years back, which gives 2024. "Second straight" means last year moved the same way, beyond chance. "After a jump (or drop) last year" means last year moved the other way, beyond chance: part of this year's move may be a return toward normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>. "New this year" means last year's change was within chance.</p>}
+              {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the 2024 count shown. "Two years running" means the count also moved the same way from 2024 to 2025, beyond chance. "After a flat 2025" means the 2024-to-2025 change was within chance, so this year's move is the first clear one. "After a 2025 spike (or dip)" means the count swung the other way from 2024 to 2025, beyond chance; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
             </Receipt>
           </section>
         )}
@@ -983,10 +1007,15 @@ export default function BoldApp() {
             id="signal"
             kicker="Signal or noise"
             title={boardTitle}
-            dek={`Each line compares ${P.compares}. CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are within chance.' : 'Not all of them mean something.'} The gray band shows how big a swing chance alone could produce, given how many incidents there are and how much each line varies week to week. Dots outside it are changes too big to put down to chance. Dots inside it may still reflect a real change, but the counts can't show it.${fragileDek}`}
-            right={<Segmented label="Which offenses" size="sm" value={scope} onChange={setScope} options={[['all', 'Everything'], ['major', 'Seven majors']]} />}
+            dek={`Each line compares ${P.compares}. ${scaleNote}CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are within chance.' : 'Not all of them mean something.'} The gray band shows how big a swing chance alone could produce, given how many incidents there are and how much each line varies week to week. Dots outside it are changes too big to put down to chance. Dots inside it may still reflect a real change, but the counts can't show it.${fragileDek}`}
+            right={(
+              <div className="flex flex-col items-start md:items-end gap-2">
+                <Segmented label="Show changes as" size="sm" value={boardMode} onChange={setBoardMode} options={[['pct', 'Percent'], ['count', 'Number of crimes']]} />
+                <Segmented label="Which offenses" size="sm" value={scope} onChange={setScope} options={[['all', 'Everything'], ['major', 'Seven majors']]} />
+              </div>
+            )}
           />
-          <SignalBoard rows={boardRows} fragileWeeks={fragileWeeks} />
+          <SignalBoard rows={boardRows} fragileWeeks={fragileWeeks} mode={boardMode} />
           <Receipt>
             <p>For each line, NYPD gives two counts from windows of equal length: {P.since} and {P.cmp}. If nothing had changed, and the counts were plain random counts, z = (the gap between them, minus 1) ÷ √(this year + last year) would fall within ±1.96 about 95% of the time. The minus 1 is a standard correction that keeps small counts from being over-called.</p>
             <p>Crime counts vary more than plain random counts: one shooting can wound several people, and violence clusters. So each line's test is widened by how much that line has actually varied from week to week in NYPD's weekly reports ({S.DISPERSION_INFO.pairs} pairs of consecutive weeks, this year and last). {lumpy.length > 0 && `Here that matters most for ${joinAnd(lumpy.slice(0, 4).map((r) => `${r.label.charAt(0).toLowerCase() + r.label.slice(1)} (${r.phi.toFixed(1)} times as variable)`))}. `}Murder and rape vary no more than chance, so their tests aren't widened.</p>

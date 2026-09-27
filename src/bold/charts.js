@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from '../data/nyc_precincts.json';
-import { C, VERDICT, useWidth, Chip, FragileTag } from './ui';
+import { C, VERDICT, useWidth, Chip, FragileTag, Reveal } from './ui';
 import { fmtInt, fmtPct, zBin, binFor, spell } from './stats';
 
+const Z_CRIT_BAND = 1.96;
 const niceMax = (v) => [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100].find((s) => s >= v) || 100;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -11,14 +12,24 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 /* SIGNAL BOARD — % change per offense, against the band chance alone  */
 /* could produce. Dots outside the gray band are beyond chance.        */
 /* ------------------------------------------------------------------ */
-export function SignalBoard({ rows, fragileWeeks = 8 }) {
-  const sorted = useMemo(() => [...rows].sort((a, b) => (b.pct ?? -Infinity) - (a.pct ?? -Infinity)), [rows]);
+// Nice round axis limits for counts.
+const niceCount = (v) => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].find((s) => s >= v) || Math.ceil(v / 50000) * 50000;
+// mode 'pct': each line's percent change against the band chance alone could produce. mode 'count': the
+// same, in number of crimes, on one shared axis, so a line a hundred times as common as another shows
+// as a change a hundred times as large.
+export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
+  const isCount = mode === 'count';
+  const bandOf = (r) => (isCount ? Z_CRIT_BAND * Math.sqrt((r.phi || 1) * (r.cur + r.prior)) + 1 : r.band);
+  const valOf = (r) => (isCount ? r.diff : r.pct);
+  const sorted = useMemo(() => [...rows].sort((a, b) => ((isCount ? b.diff : b.pct) ?? -Infinity) - ((isCount ? a.diff : a.pct) ?? -Infinity)), [rows, isCount]);
   const D = useMemo(() => {
+    if (isCount) return niceCount(Math.max(10, ...rows.map((r) => Math.max(Math.abs(r.diff), bandOf(r) || 0))) * 1.04);
     const m = Math.max(5, ...rows.filter((r) => r.pct != null).map((r) => Math.max(Math.abs(r.pct), r.band || 0)));
     return niceMax(Math.min(100, m * 1.04));
-  }, [rows]);
+  }, [rows, isCount]); // eslint-disable-line react-hooks/exhaustive-deps
   const pos = (v) => 50 + (clamp(v, -D, D) / D) * 50;
   const ticks = [-D, -D / 2, 0, D / 2, D];
+  const fmtTick = (t) => (t === 0 ? '0' : isCount ? `${t > 0 ? '+' : '−'}${fmtInt(Math.abs(t))}` : fmtPct(t, 0));
 
   return (
     <div className="w-full">
@@ -28,23 +39,25 @@ export function SignalBoard({ rows, fragileWeeks = 8 }) {
         <div className="flex-1 relative h-5">
           {ticks.map((t) => (
             <span key={t} className="absolute -translate-x-1/2 text-[11px] text-[#707175]" style={{ left: `${pos(t)}%`, fontVariantNumeric: 'tabular-nums' }}>
-              {t === 0 ? '0' : fmtPct(t, 0)}
+              {fmtTick(t)}
             </span>
           ))}
         </div>
-        <div className="w-[128px] text-right text-[11px] font-bold uppercase tracking-widest text-[#707175]">Change</div>
+        <div className="w-[140px] text-right text-[11px] font-bold uppercase tracking-widest text-[#707175]">{isCount ? 'Crimes' : 'Change'}</div>
       </div>
-      <ul>
-        {sorted.map((r) => {
+      <Reveal as="ul">
+        {sorted.map((r, i) => {
           const v = VERDICT[r.verdict] || VERDICT.none;
-          const hasPct = r.pct != null;
-          const clipped = hasPct && Math.abs(r.pct) > D;
-          const bandLo = r.band != null ? pos(-r.band) : null;
-          const bandHi = r.band != null ? pos(r.band) : null;
+          const val = valOf(r);
+          const hasPct = val != null;
+          const clipped = hasPct && Math.abs(val) > D;
+          const band = bandOf(r);
+          const bandLo = band != null ? pos(-band) : null;
+          const bandHi = band != null ? pos(band) : null;
           const solid = r.verdict === 'drop' || r.verdict === 'rise';
-          const tip = `${r.label}: ${fmtInt(r.cur)} vs. ${fmtInt(r.prior)} (${fmtPct(r.pct)}).${r.z != null ? ` Chance test z = ${r.z.toFixed(2)}.` : ''}${r.band != null ? ` Changes within ±${r.band.toFixed(1)}% could be chance.` : ''}`;
+          const tip = `${r.label}: ${fmtInt(r.cur)} vs. ${fmtInt(r.prior)}, ${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))} (${fmtPct(r.pct)}).${r.z != null ? ` Chance test z = ${r.z.toFixed(2)}.` : ''}${band != null ? ` Changes within ±${isCount ? fmtInt(band) : `${band.toFixed(1)}%`} could be chance.` : ''}`;
           return (
-            <li key={r.name} title={tip} className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 py-2.5 border-b border-[#f0f0f0]">
+            <li key={r.name} title={tip} className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 py-2.5 border-b border-[#f0f0f0] vc-rise" style={{ '--d': `${i * 35}ms` }}>
               <div className="flex-1 min-w-0 sm:flex-none sm:w-[34%]">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-bold text-[15px] text-[#050507] leading-tight">{r.label}</span>
@@ -55,14 +68,14 @@ export function SignalBoard({ rows, fragileWeeks = 8 }) {
               <div className="order-last sm:order-none w-full sm:w-auto sm:flex-1 relative h-6" aria-hidden="true">
                 <div className="absolute top-1/2 left-0 right-0 h-px bg-[#ececec]" />
                 {bandLo != null && (
-                  <div className="absolute top-1/2 -translate-y-1/2 h-3 rounded-sm bg-[#e4e4e8]" style={{ left: `${bandLo}%`, width: `${Math.max(0.5, bandHi - bandLo)}%` }} />
+                  <div className="absolute top-1/2 -translate-y-1/2 h-3 rounded-sm bg-[#e4e4e8] vc-ease-left" style={{ left: `${bandLo}%`, width: `${Math.max(0.5, bandHi - bandLo)}%` }} />
                 )}
                 <div className="absolute top-0 bottom-0 w-px bg-[#9a9a9a]" style={{ left: '50%' }} />
                 {hasPct && (
                   <div
-                    className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                    className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full vc-ease-left"
                     style={{
-                      left: `${pos(r.pct)}%`, width: 14, height: 14,
+                      left: `${pos(val)}%`, width: 14, height: 14,
                       background: solid ? v.color : C.white,
                       border: solid ? `2px solid ${C.white}` : `2.5px solid ${v.color}`,
                       boxShadow: solid ? `0 0 0 1px ${v.color}` : 'none',
@@ -70,24 +83,25 @@ export function SignalBoard({ rows, fragileWeeks = 8 }) {
                   />
                 )}
                 {clipped && (
-                  <span className="absolute top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#050507]" style={{ [r.pct > 0 ? 'right' : 'left']: -2 }}>{r.pct > 0 ? '›' : '‹'}</span>
+                  <span className="absolute top-1/2 -translate-y-1/2 text-[12px] font-bold text-[#050507]" style={{ [val > 0 ? 'right' : 'left']: -2 }}>{val > 0 ? '›' : '‹'}</span>
                 )}
               </div>
-              <div className="w-[112px] sm:w-[128px] shrink-0 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                <div className="font-black text-[16px] text-[#050507] leading-tight">{hasPct ? fmtPct(r.pct) : 'n/a'}</div>
+              <div className="w-[124px] sm:w-[140px] shrink-0 text-right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                <div className="font-black text-[16px] text-[#050507] leading-tight">{isCount ? `${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))}` : r.pct != null ? fmtPct(r.pct) : 'n/a'}</div>
+                <div className="text-[12px] text-[#555]">{isCount ? (r.pct != null ? fmtPct(r.pct) : 'n/a') : `${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))}`}</div>
                 <div className="text-[12px] text-[#707175]">{fmtInt(r.cur)} vs. {fmtInt(r.prior)}</div>
               </div>
             </li>
           );
         })}
-      </ul>
+      </Reveal>
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[#444]">
         <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.drop.color }} />Drop beyond chance</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.rise.color }} />Rise beyond chance</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full border-[2.5px]" style={{ borderColor: VERDICT.noise.color }} />Within chance</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-6 h-3 rounded-sm bg-[#e4e4e8]" />Range chance alone could produce (95%)</span>
         {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Beyond chance today; {spell(fragileWeeks)} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
-        <span className="text-[#707175]">Axis capped at ±{D}%; ‹ › mark values beyond it.</span>
+        <span className="text-[#707175]">{isCount ? `Axis: ±${fmtInt(D)} crimes, shared by every line.` : `Axis capped at ±${D}%; ‹ › mark values beyond it.`}</span>
       </div>
     </div>
   );
@@ -164,6 +178,7 @@ export function LongArc({ series, pace, events = [], noun }) {
   };
   const xTicks = series.filter((d) => (d.y - x0) % (w < 520 ? 8 : 4) === 0).map((d) => d.y);
   return (
+    <Reveal>
     <div ref={ref} className="relative w-full">
       <svg width={w} height={h} role="img" aria-label={`Annual ${noun}, ${x0}-${last.y}${hasPace ? `, with a ${pace.year} pace of ${fmtInt(pace.low)} to ${fmtInt(pace.high)}` : ''}.`} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
@@ -182,7 +197,7 @@ export function LongArc({ series, pace, events = [], noun }) {
           </g>
         ))}
         <path d={area} fill={C.periwinkle} fillOpacity="0.14" />
-        <path d={line} fill="none" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line} pathLength="400" className="vc-draw" fill="none" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         {/* labels: first, lowest, last */}
         <circle cx={X(first.y)} cy={Y(first.val)} r="4.5" fill={C.ink} stroke={C.white} strokeWidth="2" />
         <text x={X(first.y) + 8} y={Y(first.val) + 4} fontSize="12" fontWeight="700" fill={C.ink}>{fmtInt(first.val)} in {first.y}</text>
@@ -197,7 +212,7 @@ export function LongArc({ series, pace, events = [], noun }) {
         {hasPace && (
           <g>
             <line x1={X(last.y)} y1={Y(last.val)} x2={X(pace.year)} y2={Y((pace.low + pace.high) / 2)} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3" />
-            <line x1={X(pace.year)} x2={X(pace.year)} y1={Y(pace.high)} y2={Y(pace.low)} stroke={C.orange} strokeWidth="4" strokeLinecap="round" />
+            <line x1={X(pace.year)} x2={X(pace.year)} y1={Y(pace.high)} y2={Y(pace.low)} stroke={C.orange} strokeWidth="4" strokeLinecap="round" className="vc-pop" style={{ '--d': '1000ms' }} />
             <circle cx={X(pace.year)} cy={Y(pace.high)} r="4" fill={C.orange} stroke={C.white} strokeWidth="2" />
             <circle cx={X(pace.year)} cy={Y(pace.low)} r="4" fill={C.orange} stroke={C.white} strokeWidth="2" />
             <text x={X(pace.year) + 10} y={Y((pace.low + pace.high) / 2) - 4} fontSize="12" fontWeight="700" fill={C.ink}>{pace.year} pace</text>
@@ -218,6 +233,7 @@ export function LongArc({ series, pace, events = [], noun }) {
         </div>
       )}
     </div>
+    </Reveal>
   );
 }
 
@@ -272,6 +288,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
             <g key={num}>
               <path
                 d={d}
+                className="vc-ease-fill"
                 fill={fillFor(u)}
                 stroke={isSel ? C.ink : isHov ? '#555' : C.white}
                 strokeWidth={isSel ? 2.5 : isHov ? 1.5 : 0.6}
@@ -357,6 +374,7 @@ export function MiniMap({ fills = {}, titles = {}, hatch = {}, selectedNum = nul
             <g key={num}>
               <path
                 d={d}
+                className="vc-ease-fill"
                 fill={fills[num] || (dark ? '#232328' : '#f1f1f1')}
                 stroke={sel ? (dark ? C.chartreuse : C.ink) : (dark ? '#050507' : C.white)}
                 strokeWidth={sel ? 2 : 0.4}
@@ -395,36 +413,30 @@ export function PeerBars({ list }) {
 }
 
 /* ------------------------------------------------------------------ */
-/* MOVE BAR — one precinct's change and the city's, on one diverging  */
-/* axis: the bar is the precinct, the ink tick is the city.           */
+/* PAIR BARS — a precinct's change and the city's, as two labeled     */
+/* bars from one zero line, so the gap between them is the story.     */
 /* ------------------------------------------------------------------ */
-export function MoveBar({ pct, cityPct, max = 60, title }) {
-  const W = 180; const H = 22; const mid = W / 2; const h = 12; const y = (H - h) / 2;
-  const x = (v) => mid + (clamp(v, -max, max) / max) * (mid - 6);
-  const v = Number.isFinite(pct) ? pct : 0;
-  const x1 = x(v); const w = Math.abs(x1 - mid); const r = Math.min(4, w);
-  const col = v >= 0 ? VERDICT.rise.color : VERDICT.drop.color;
-  // square at the baseline (zero), 4px rounded at the data end
-  const d = v >= 0
-    ? `M${mid},${y}H${x1 - r}Q${x1},${y} ${x1},${y + r}V${y + h - r}Q${x1},${y + h} ${x1 - r},${y + h}H${mid}Z`
-    : `M${mid},${y}H${x1 + r}Q${x1},${y} ${x1},${y + r}V${y + h - r}Q${x1},${y + h} ${x1 + r},${y + h}H${mid}Z`;
-  const cx = x(cityPct);
+export function PairBars({ pct, cityPct, max = 60, placeLabel }) {
+  const row = (label, v, col, strong, delay) => {
+    const w = (Math.min(Math.abs(v), max) / max) * 50; // share of the track; each side is half
+    const up = v >= 0;
+    return (
+      <div className="grid grid-cols-[52px_1fr_44px] items-center gap-2 h-[18px]">
+        <span className={`text-[11px] text-right truncate ${strong ? 'font-bold text-[#050507]' : 'text-[#555]'}`}>{label}</span>
+        <div className="relative h-full">
+          <div className="absolute inset-y-0 left-1/2 w-px bg-[#bdbdc4]" aria-hidden="true" />
+          <div className="absolute top-[3px] bottom-[3px] vc-grow-x" aria-hidden="true" style={{ [up ? 'left' : 'right']: '50%', width: `${Math.max(w, 0.6)}%`, background: col, borderRadius: up ? '0 4px 4px 0' : '4px 0 0 4px', transformOrigin: up ? 'left center' : 'right center', '--d': `${delay}ms` }} />
+        </div>
+        <span className={`text-[11px] text-right whitespace-nowrap ${strong ? 'font-bold text-[#050507]' : 'text-[#555]'}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {Number.isFinite(v) ? fmtPct(v, 0) : 'n/a'}
+        </span>
+      </div>
+    );
+  };
   return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block" style={{ maxWidth: W }} role="img" aria-label={title}>
-      <title>{title}</title>
-      <line x1={mid} x2={mid} y1={1} y2={H - 1} stroke="#cfcfd4" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-      {w > 0.5 && <path d={d} fill={col} />}
-      {Math.abs(v) > max && <text x={v > 0 ? W - 1 : 1} y={y + h - 2} fontSize="10" fontWeight="800" textAnchor={v > 0 ? 'end' : 'start'} fill={C.white}>{v > 0 ? '›' : '‹'}</text>}
-      <line x1={cx} x2={cx} y1={1} y2={H - 1} stroke={C.ink} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
-export function MoveBarKey() {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#555]">
-      <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-l-[3px]" style={{ background: VERDICT.drop.color }} /><span className="inline-block w-3 h-2.5 -ml-1.5 rounded-r-[3px]" style={{ background: VERDICT.rise.color }} />Precinct's change</span>
-      <span className="flex items-center gap-1.5"><span className="inline-block w-[2px] h-3.5 bg-[#050507]" />Citywide change</span>
+    <div className="w-full max-w-[360px]" role="img" aria-label={`${placeLabel}: ${fmtPct(pct, 0)}; citywide: ${fmtPct(cityPct, 0)}`}>
+      {row(placeLabel, pct, pct >= 0 ? VERDICT.rise.color : VERDICT.drop.color, true, 0)}
+      {row('Citywide', cityPct, '#a3a3ad', false, 140)}
     </div>
   );
 }
@@ -441,7 +453,7 @@ export function ShareBar({ net, lead, nameFor }) {
   const rest = Math.max(0, total - leadSum);
   return (
     <div className="w-full">
-      <div className="flex w-full h-3.5 gap-[2px]" role="img" aria-label={`${lead.map((m) => `${nameFor(m.geo)} ${m.diff}`).join(', ')}; all other precincts ${net < 0 ? '−' : '+'}${rest}`}>
+      <div className="flex w-full h-3.5 gap-[2px] vc-grow-x" style={{ transformOrigin: 'left center' }} role="img" aria-label={`${lead.map((m) => `${nameFor(m.geo)} ${m.diff}`).join(', ')}; all other precincts ${net < 0 ? '−' : '+'}${rest}`}>
         {lead.map((m, i) => (
           <span key={m.geo} title={`${nameFor(m.geo)}: ${m.diff > 0 ? '+' : '−'}${fmtInt(Math.abs(m.diff))}`} className={i === 0 ? 'rounded-l-[4px]' : ''} style={{ width: `${(Math.abs(m.diff) / denom) * 100}%`, background: col, opacity: 1 - i * 0.12 }} />
         ))}
@@ -476,10 +488,10 @@ export function Spark({ series, pace, years = 12, noun }) {
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="shrink-0" role="img" aria-label={tip}>
       <title>{tip}</title>
-      <path d={line} fill="none" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={X(s.length - 1)} cy={Y(last.val)} r="4" fill={C.ink} stroke={C.white} strokeWidth="2" />
+      <path d={line} pathLength="400" className="vc-draw" fill="none" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={X(s.length - 1)} cy={Y(last.val)} r="4" fill={C.ink} stroke={C.white} strokeWidth="2" className="vc-pop" style={{ '--d': '900ms' }} />
       {hasPace && (
-        <line x1={X(n - 1)} x2={X(n - 1)} y1={Y(pace.high)} y2={Math.max(Y(pace.low), Y(pace.high) + 3)} stroke={C.orange} strokeWidth="5" strokeLinecap="round" />
+        <line x1={X(n - 1)} x2={X(n - 1)} y1={Y(pace.high)} y2={Math.max(Y(pace.low), Y(pace.high) + 3)} stroke={C.orange} strokeWidth="5" strokeLinecap="round" className="vc-pop" style={{ '--d': '1100ms' }} />
       )}
     </svg>
   );

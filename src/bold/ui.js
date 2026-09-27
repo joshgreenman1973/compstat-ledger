@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { spell } from './stats';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import { spell, fmtInt } from './stats';
 
 // Palette tokens. Verdict colors are a blue/red diverging pair around a neutral
 // gray (validated for protan/deutan separation); ▼ / ▲ / ~ glyphs and text labels carry the
@@ -99,8 +99,8 @@ export function SectionHead({ id, kicker, title, dek, right }) {
     setTimeout(() => setCopied(false), 1200);
   }, [id]);
   return (
-    <div className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-      <div className="max-w-3xl">
+    <Reveal className="mb-6 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div className="max-w-3xl vc-rise">
         <div className="flex items-center gap-3">
           <Kicker>{kicker}</Kicker>
           <a href={`#${id}`} onClick={copy} className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[#707175] hover:text-[#050507]" title="Copy a link to this section">{copied ? 'Copied' : 'Link'}</a>
@@ -108,8 +108,8 @@ export function SectionHead({ id, kicker, title, dek, right }) {
         <h2 className="vc-display text-[28px] sm:text-[36px] md:text-[42px] leading-[1.05] font-black tracking-tight text-[#050507]">{title}</h2>
         {dek && <p className="vc-serif mt-3 text-[17px] md:text-[19px] leading-snug text-[#555]">{dek}</p>}
       </div>
-      {right && <div className="flex-shrink-0">{right}</div>}
-    </div>
+      {right && <div className="flex-shrink-0 vc-rise" style={{ '--d': '150ms' }}>{right}</div>}
+    </Reveal>
   );
 }
 
@@ -154,4 +154,45 @@ export function Tag({ children, tone = 'soft', title }) {
       {children}
     </span>
   );
+}
+
+/* ---------------------------- motion ----------------------------- */
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Plays the vc-* animations inside an element once, when it scrolls into view. Adds the "before"
+// state only when motion will actually play, so the page is fully visible without it.
+export function useReveal(threshold = 0.15) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || reducedMotion() || typeof IntersectionObserver === 'undefined') return undefined;
+    el.classList.add('vc-pre');
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some((e) => e.isIntersecting)) { el.classList.remove('vc-pre'); el.classList.add('vc-play'); io.disconnect(); }
+    }, { threshold });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [threshold]);
+  return ref;
+}
+export const Reveal = React.forwardRef(function Reveal({ as: As = 'div', children, ...rest }, _ref) {
+  const ref = useReveal();
+  return <As ref={ref} {...rest}>{children}</As>;
+});
+
+// A number that counts up to its value once (skipped for reduced motion).
+export function CountUp({ value, ms = 800, format = fmtInt }) {
+  const [v, setV] = useState(reducedMotion() ? value : 0);
+  useEffect(() => {
+    if (reducedMotion() || !Number.isFinite(value)) { setV(value); return undefined; }
+    let raf; const t0 = performance.now();
+    const step = (t) => {
+      const k = Math.min(1, (t - t0) / ms);
+      setV(value * (1 - (1 - k) ** 3));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [value, ms]);
+  return <span aria-label={format(value)}>{format(v)}</span>;
 }
