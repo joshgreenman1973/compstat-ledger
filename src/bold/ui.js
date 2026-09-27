@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { spell } from './stats';
 
 // Palette tokens. Verdict colors are a blue/red diverging pair around a neutral
 // gray (validated for protan/deutan separation); ▼ / ▲ / ~ glyphs and text labels carry the
@@ -9,9 +10,9 @@ export const C = {
   cerulean: '#217ebe', hair: '#e6e6e6', paper: '#f7f7f5',
 };
 export const VERDICT = {
-  drop: { label: 'Real drop', glyph: '▼', color: '#217ebe', onDark: '#4e98cb', tint: '#d2e4f0' },
-  rise: { label: 'Real rise', glyph: '▲', color: '#e03a30', onDark: '#fb693c', tint: '#fadad7' },
-  noise: { label: 'Noise', glyph: '~', color: '#9b9fbc', onDark: '#9b9fbc', tint: '#ececf2' },
+  drop: { label: 'Beyond chance', title: 'A drop too big to put down to chance', glyph: '▼', color: '#217ebe', onDark: '#4e98cb', tint: '#d2e4f0' },
+  rise: { label: 'Beyond chance', title: 'A rise too big to put down to chance', glyph: '▲', color: '#e03a30', onDark: '#fb693c', tint: '#fadad7' },
+  noise: { label: 'Within chance', title: "Within the range of chance: the counts can't show whether the rate changed", glyph: '~', color: '#9b9fbc', onDark: '#9b9fbc', tint: '#ececf2' },
   flagged: { label: 'Not comparable', glyph: '!', color: '#707175', onDark: '#b5b6ba', tint: '#eeeeee' },
   none: { label: 'Zero both years', glyph: '·', color: '#bbbbbb', onDark: '#777777', tint: '#f2f2f2' },
 };
@@ -40,7 +41,7 @@ export function Chip({ verdict, dark = false, small = false, title }) {
   const col = dark ? v.onDark : v.color;
   return (
     <span
-      title={title || v.label}
+      title={title || v.title || v.label}
       className={`inline-flex items-center gap-1 rounded-full border font-bold uppercase whitespace-nowrap ${small ? 'text-[10px] px-1.5 py-[1px] tracking-wide' : 'text-[11px] px-2 py-0.5 tracking-wider'}`}
       style={{ borderColor: col, color: dark ? C.white : C.ink }}
     >
@@ -53,7 +54,7 @@ export function Chip({ verdict, dark = false, small = false, title }) {
 export function FragileTag({ weeks, dark = false }) {
   return (
     <span
-      title={`Clears the chance test on today's counts, but ${weeks} more ${weeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it.`}
+      title={`Beyond chance on today's counts, but ${spell(weeks)} more ${weeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it.`}
       className={`inline-flex items-center rounded-full border border-dashed px-1.5 py-[1px] text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${dark ? 'border-white/60 text-white/80' : 'border-[#707175] text-[#444]'}`}
     >
       Fragile

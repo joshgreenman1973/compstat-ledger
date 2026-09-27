@@ -5,6 +5,8 @@ import {
   paceRange, arcClaim, concentration, rapeYoYComparable, apDate, parseRTCI, peerComparison,
   PEER_GROUPS, MAJORS, quantileCuts, binFor, zBin, historicalColumns,
   revisionFlows, breakEven, revisionRisk, withRevisions,
+  dispersionFor, dispersionForSum, Z_HEAD, clause, pTwoSided, benjaminiHochberg, withChance, fmtPct,
+  redrawnSince, isSplitPrecinct, spell,
 } from './stats';
 
 const cw = snapshot.citywide;
@@ -59,11 +61,28 @@ describe('signal vs. noise', () => {
     }
     expect(overcalls).toBe(0);
   });
-  test('verdicts on the snapshot', () => {
-    expect(row(ytd, 'Murder').verdict).toBe('drop');
+  test('verdicts on the snapshot, allowing for how lumpy each line is', () => {
+    expect(row(ytd, 'Murder').verdict).toBe('drop'); // murder varies no more than a plain random count
     expect(row(ytd, 'Fel. Assault').verdict).toBe('noise');
     expect(row(ytd, 'Rape').verdict).toBe('noise');
-    expect(row(ytd, 'Hate Crimes').verdict).toBe('rise'); // 456 vs 393: z = 63/√849 ≈ 2.16
+    // 581 vs. 668 clears 1.96 as a plain count (z −2.43) but shooting victims vary about 2.3 times as
+    // much as that week to week (one shooting, several victims), so it is within chance.
+    expect(poissonZ(581, 668)).toBeLessThan(-1.96);
+    expect(row(ytd, 'Shooting Vic.').verdict).toBe('noise');
+    expect(row(ytd, 'Hate Crimes').verdict).toBe('noise'); // 456 vs 393: z 2.13 plain, 1.69 adjusted
+    expect(row(ytd, 'Misd. Assault').verdict).toBe('noise');
+    expect(row(ytd, 'Retail Theft').verdict).toBe('drop'); // a big change survives any adjustment
+  });
+  test('dispersion is measured, never below 1, and widens the test', () => {
+    expect(dispersionFor('Murder', 'city')).toBe(1); // measured 0.65: floored
+    expect(dispersionFor('Shooting Vic.', 'city')).toBeGreaterThan(2);
+    expect(dispersionFor('Shooting Vic.', 'precinct')).toBeLessThan(dispersionFor('Shooting Vic.', 'city'));
+    expect(dispersionFor('No such line')).toBe(1);
+    expect(poissonZ(150, 100, 4)).toBeCloseTo(poissonZ(150, 100) / 2, 10);
+    expect(dispersionForSum([{ name: 'Murder', n: 100 }, { name: 'Shooting Vic.', n: 100 }], 'city'))
+      .toBeCloseTo((1 + dispersionFor('Shooting Vic.', 'city')) / 2, 10);
+    // the seven majors move together: never less than the dispersion measured on their total
+    expect(dispersionForSum(MAJORS.map((name) => ({ name, n: 10 })), 'city')).toBeGreaterThanOrEqual(dispersionFor('_majors', 'city'));
   });
   test('the noise band and the verdict agree', () => {
     ytd.filter((r) => r.band != null && r.verdict !== 'flagged').forEach((r) => {
@@ -87,18 +106,35 @@ describe('signal vs. noise', () => {
 });
 
 describe('headline', () => {
-  test('leads with the gravest real change, then the counterpoint', () => {
+  test('leads with the gravest change beyond the headline bar, then the counterpoint', () => {
     const h = buildHeadline(ytd);
-    expect(h.sentences).toEqual(['Murder is down 24%.', "Felony assault isn't falling."]);
+    // murder z −2.87 clears the stricter headline bar (2.73); felony assault is +0.9%: flat, not "isn't falling"
+    expect(Math.abs(row(ytd, 'Murder').z)).toBeGreaterThan(Z_HEAD);
+    expect(h.sentences).toEqual(['Murder is down 24%.', 'Felony assault is essentially flat.']);
     expect(h.kind).toBe('split');
+  });
+  test('a change that clears 1.96 but not the headline bar does not headline', () => {
+    const rows = [{ name: 'Robbery', label: 'Robbery', cur: 80, prior: 110, pct: -27.3, phi: 1, z: poissonZ(80, 110), verdict: verdictFor(poissonZ(80, 110)) }];
+    expect(rows[0].verdict).toBe('drop'); // z ≈ −2.1
+    const h = buildHeadline(rows);
+    expect(h.lead).toBeNull();
+    expect(h.sentences).toEqual(['No major crime moved by a clear margin.']);
+    expect(h.cleared.map((r) => r.name)).toEqual(['Robbery']);
+  });
+  test('small bases headline in counts, not percentages', () => {
+    expect(clause({ name: 'Murder', label: 'Murder', cur: 8, prior: 1, pct: 700 }, 'rise')).toBe('Murders rose to eight from one.');
+    expect(clause({ name: 'Fel. Assault', label: 'Felony assault', cur: 0, prior: 12, pct: -100 }, 'drop')).toBe('No felony assaults, down from 12.');
+    expect(clause({ name: 'Robbery', label: 'Robbery', cur: 1, prior: 0, pct: null }, 'rise')).toBe('One robbery, up from none.');
+    expect(clause({ name: 'Robbery', label: 'Robbery', cur: 60, prior: 100, pct: -40 }, 'drop')).toBe('Robbery is down 40%.');
   });
   test('says so when nothing clears the bar', () => {
     const flat = ytd.map((r) => ({ ...r, verdict: 'noise' }));
     expect(buildHeadline(flat).sentences[0]).toMatch(/chance/);
   });
-  test('frequency ratio', () => {
+  test('frequency ratio, only on enough murders to mean something', () => {
     const f = frequencyRatio(ytd);
     expect(f.display).toBe(String(Math.round(22023 / 189)));
+    expect(frequencyRatio([{ name: 'Fel. Assault', cur: 153 }, { name: 'Murder', cur: 1 }])).toBeNull();
   });
 });
 
@@ -233,27 +269,74 @@ describe('revisions', () => {
     const ny = revisionFlows([snap('12/28/2025', { Murder: [300, 370, 5, 5] }), snap('1/4/2026', { Murder: [4, 6, 4, 6] })]);
     expect(ny).toBeNull();
   });
+  const rise = { name: 'Test', cur: 150, prior: 100, phi: 1, verdict: verdictFor(poissonZ(150, 100)) }; // z ≈ 3.1
   test('break-even: the smallest revision that turns a real change into noise', () => {
     const m = row(ytd, 'Murder'); // 189 vs 250
     expect(breakEven(m)).toBe(19); // 208 vs 250 is noise; 207 vs 250 is still real
     expect(verdictFor(poissonZ(189 + 18, 250))).toBe('drop');
     expect(verdictFor(poissonZ(189 + 19, 250))).toBe('noise');
-    const ma = row(ytd, 'Misd. Assault'); // a rise weakens if revised down
-    const be = breakEven(ma);
-    expect(verdictFor(poissonZ(ma.cur - be, ma.prior))).toBe('noise');
-    expect(verdictFor(poissonZ(ma.cur - be + 1, ma.prior))).toBe('rise');
+    const be = breakEven(rise); // a rise weakens if revised down
+    expect(verdictFor(poissonZ(rise.cur - be, rise.prior))).toBe('noise');
+    expect(verdictFor(poissonZ(rise.cur - be + 1, rise.prior))).toBe('rise');
+    // a lumpier line has less cushion
+    expect(breakEven({ ...rise, phi: 2, verdict: verdictFor(poissonZ(150, 100, 2)) })).toBeLessThan(be);
   });
   test('fragile when fewer than eight weeks of recent revisions would erase it', () => {
-    const ma = row(ytd, 'Misd. Assault');
-    expect(revisionRisk(ma, { cur: -131, prior: 0, weeks: 8 }).fragile).toBe(true);
+    expect(revisionRisk(rise, { cur: -60, prior: 0, weeks: 8 }).fragile).toBe(true);
     expect(revisionRisk(row(ytd, 'Murder'), { cur: 8, prior: 0, weeks: 8 }).fragile).toBe(false);
     // Revisions running the other way can't erase it.
-    expect(revisionRisk(ma, { cur: 50, prior: 0, weeks: 8 }).weeksToErase).toBe(Infinity);
+    const opp = revisionRisk(rise, { cur: 50, prior: 0, weeks: 8 });
+    expect(opp.weeksToErase).toBe(Infinity);
+    expect(opp.direction).toBe('opposite');
+    // No net revisions at all is not "the other way."
+    expect(revisionRisk(rise, { cur: 0, prior: 0, weeks: 8 }).direction).toBe('none');
   });
   test('a fragile change never leads the headline', () => {
     const rows = withRevisions(ytd, { Murder: { cur: 200, prior: 0 } }, 8); // absurd pace: murder fragile
     const h = buildHeadline(rows);
     expect(h.lead.name).not.toBe('Murder');
     expect(rows.find((r) => r.name === 'Murder').fragile).toBe(true);
+  });
+});
+
+describe('many tests at once', () => {
+  test('two-sided p-values', () => {
+    expect(pTwoSided(1.96)).toBeCloseTo(0.05, 3);
+    expect(pTwoSided(0)).toBeCloseTo(1, 6);
+    expect(pTwoSided(-3.29)).toBeCloseTo(0.001, 4);
+  });
+  test('Benjamini–Hochberg keeps the smallest p-values up to the largest rank under its line', () => {
+    // m = 5, q = 0.05: lines at 0.01, 0.02, 0.03, 0.04, 0.05
+    expect([...benjaminiHochberg([0.001, 0.8, 0.019, 0.04, 0.2])].sort()).toEqual([0, 2]);
+    expect(benjaminiHochberg([0.3, 0.6]).size).toBe(0);
+    // 78 precincts each at p = 0.04 would all pass one at a time, and all pass together too
+    expect(benjaminiHochberg(Array(78).fill(0.04)).size).toBe(78);
+    // one precinct at p = 0.04 among 77 at p = 0.9 does not survive
+    expect(benjaminiHochberg([0.04, ...Array(77).fill(0.9)]).size).toBe(0);
+  });
+});
+
+describe('rest-of-year chance', () => {
+  test('widens both ends by 1.96 × √(φ × the count still to come), never below what is recorded', () => {
+    const r = withChance({ low: 234, high: 273 }, 189, 1);
+    expect(r.high).toBeCloseTo(273 + 1.96 * Math.sqrt(273 - 189), 6);
+    expect(r.low).toBeCloseTo(234 - 1.96 * Math.sqrt(234 - 189), 6);
+    expect(withChance({ low: 190, high: 200 }, 189, 9).low).toBe(189);
+  });
+});
+
+describe('formatting and geography', () => {
+  test('no negative zero, AP numbers', () => {
+    expect(fmtPct(-0.36, 0)).toBe('0%');
+    expect(fmtPct(-0.6, 0)).toBe('−1%');
+    expect(spell(0)).toBe('no');
+    expect(spell(9)).toBe('nine');
+    expect(spell(10)).toBe('10');
+  });
+  test('redrawn precincts and the 105th/113th/116th group', () => {
+    expect(redrawnSince(2010, '113th Precinct')).toBe(true);
+    expect(redrawnSince(2010, '34th Precinct')).toBe(false);
+    expect(redrawnSince(1993, '34th Precinct')).toBe(true);
+    expect(isSplitPrecinct('113th Precinct')).toBe(true);
   });
 });

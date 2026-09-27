@@ -4,6 +4,7 @@
 /* here from NYPD's own counts, so it can be unit-tested and so each   */
 /* claim can print its receipt (the inputs and the arithmetic).        */
 /* ------------------------------------------------------------------ */
+import DISPERSION from './dispersion.json';
 
 export const PERIODS = {
   ytd: { key: 'year_to_date', label: 'Year to date', short: 'YTD' },
@@ -42,7 +43,15 @@ export const isPlural = (name) => PLURAL.has(name);
 
 /* ---------------------------- formatting ---------------------------- */
 export const fmtInt = (n) => (typeof n === 'number' && Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '—');
-export const fmtPct = (v, digits = 1) => (typeof v === 'number' && Number.isFinite(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(digits)}%` : '—');
+export const fmtPct = (v, digits = 1) => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '—';
+  const r = Math.abs(v).toFixed(digits); // sign only if the rounded value isn't zero: no "−0%"
+  const zero = Number(r) === 0;
+  return `${zero ? '' : v > 0 ? '+' : '−'}${r}%`;
+};
+// AP style: spell out whole numbers under 10 in running text.
+const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+export const spell = (n) => (Number.isInteger(n) && n >= 0 && n < 10 ? WORDS[n] : fmtInt(n));
 export const fmtSigned = (n) => (typeof n === 'number' && Number.isFinite(n) ? `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(Math.round(n)).toLocaleString('en-US')}` : '—');
 
 // "9/20/2026" -> { y, m, d }. Parsed by hand so no time zone can shift the day.
@@ -66,20 +75,42 @@ export function dayOfYear({ y, m, d }) {
 
 /* ------------------------- signal vs. noise ------------------------- */
 // Two counts from equal-length windows (this year's YTD vs. the same window last year).
-// If both were Poisson with the same underlying rate, the gap c − p has standard deviation
-// √(c + p), so |z| ≥ 1.96 means a gap that large would show up less than 5% of the time.
-// We subtract 1 from the gap (a continuity correction): without it, small counts get
-// over-called — 4 vs. 0 scores z = 2.0 although the exact binomial test gives p = 0.125. With
-// it, the verdict never calls a change real that the exact test calls noise (checked for every
-// pair of counts up to 150 in stats.test.js). Crime counts are also lumpier than Poisson
-// (clustering, multi-victim incidents), which makes any such test generous: a screen, not proof.
+// If both were plain random (Poisson) counts with the same underlying rate, the gap c − p would have
+// standard deviation √(c + p). Crime counts vary more than that: one shooting can wound several
+// people and violence clusters. So the variance is scaled by the line's measured "dispersion"
+// (variance ÷ mean of weekly counts in NYPD's archived reports, never taken below 1; see
+// dispersion.json and tools/dispersion/build_dispersion.py): z = (|c − p| − 1) ÷ √(φ(c + p)).
+// |z| ≥ 1.96 means a gap that large would show up less than 5% of the time if nothing had changed.
+// The −1 is a continuity correction: without it, small counts get over-called (4 vs. 0 would score
+// z = 2.0 although the exact binomial test gives p = 0.125). With it, the verdict never calls a
+// change beyond chance that the exact test calls chance (checked for every pair of counts up to 150
+// in stats.test.js, at φ = 1).
 export const Z_CRIT = 1.96;
-export function poissonZ(cur, prior) {
+// A headline picks the gravest of eight crimes whose change clears the bar, so it gets a stricter
+// one: 1.96 for each of eight tries would produce a headline by chance alone about a third of the
+// time. 2.734 is the two-sided 5% bar split eight ways (Bonferroni).
+export const Z_HEAD = 2.734;
+export const LEVEL = (geoKey) => (geoKey === 'citywide' ? 'city' : String(geoKey).includes('Precinct') ? 'precinct' : 'borough');
+export const DISPERSION_INFO = { weeks: DISPERSION._weeks, pairs: DISPERSION._pairs };
+export function dispersionFor(name, level = 'city') {
+  const v = DISPERSION.lines?.[name]?.[level];
+  return Number.isFinite(v) ? Math.max(1, v) : 1;
+}
+// For a sum of lines: the count-weighted average of the parts' dispersion. For the seven majors,
+// never less than the value measured on the total directly (the lines tend to move together).
+export function dispersionForSum(parts, level = 'city') {
+  const w = parts.reduce((s, x) => s + (x.n || 0), 0);
+  const avg = w > 0 ? parts.reduce((s, x) => s + dispersionFor(x.name, level) * (x.n || 0), 0) / w : 1;
+  const names = parts.map((x) => x.name);
+  const isMajors = MAJORS.every((n) => names.includes(n)) && names.length === MAJORS.length;
+  return Math.max(1, avg, isMajors ? dispersionFor('_majors', level) : 1);
+}
+export function poissonZ(cur, prior, phi = 1) {
   if (!Number.isFinite(cur) || !Number.isFinite(prior)) return null;
   const n = cur + prior;
   if (!(n > 0)) return null;
   const gap = Math.max(0, Math.abs(cur - prior) - 1);
-  return (Math.sign(cur - prior) * gap) / Math.sqrt(n);
+  return (Math.sign(cur - prior) * gap) / Math.sqrt(Math.max(1, phi) * n);
 }
 export function verdictFor(z) {
   if (z == null) return 'none';
@@ -89,9 +120,27 @@ export function verdictFor(z) {
 }
 // Half-width of the "could be chance" band, expressed in percent-of-prior so it can sit on the
 // same axis as the % change. A dot outside the band <=> |z| >= Z_CRIT.
-export function noiseBandPct(cur, prior) {
+export function noiseBandPct(cur, prior, phi = 1) {
   if (!(prior > 0) || !Number.isFinite(cur)) return null;
-  return ((Z_CRIT * Math.sqrt(cur + prior) + 1) / prior) * 100;
+  return ((Z_CRIT * Math.sqrt(Math.max(1, phi) * (cur + prior)) + 1) / prior) * 100;
+}
+
+// Two-sided p-value for a z-score (normal approximation), and the Benjamini–Hochberg procedure:
+// when a map runs a test in every precinct at once, it holds the expected share of false calls among
+// the precincts it colors to q, instead of letting about 5% of all precincts light up by chance.
+function erfc(x) {
+  // Abramowitz–Stegun 7.1.26, |error| < 1.5e-7
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = t * (0.254829592 + t * (-0.284496736 + t * (1.421413741 + t * (-1.453152027 + t * 1.061405429)))) * Math.exp(-x * x);
+  return x >= 0 ? y : 2 - y;
+}
+export const pTwoSided = (z) => (z == null ? 1 : Math.min(1, erfc(Math.abs(z) / Math.SQRT2)));
+export function benjaminiHochberg(ps, q = 0.05) {
+  const idx = ps.map((p, i) => [p, i]).filter(([p]) => Number.isFinite(p)).sort((a, b) => a[0] - b[0]);
+  const m = idx.length;
+  let k = 0;
+  idx.forEach(([p], r) => { if (p <= ((r + 1) / m) * q) k = r + 1; });
+  return new Set(idx.slice(0, k).map(([, i]) => i));
 }
 
 /* ------------------------------ rows ------------------------------- */
@@ -113,7 +162,7 @@ export function rapeYoYComparable(periodId, weekEnd) {
 
 // One row per CompStat line for a geography and period. pct is recomputed from the two counts
 // (it matches NYPD's printed pct_change) so the receipt is reproducible from what's shown.
-export function extractRows(geoData, periodId) {
+export function extractRows(geoData, periodId, level = 'city') {
   const pkey = PERIODS[periodId]?.key || PERIODS.ytd.key;
   const weekEnd = geoData?.report_period?.week_end;
   const out = [];
@@ -122,14 +171,15 @@ export function extractRows(geoData, periodId) {
     const cur = num(w.current_year);
     const prior = num(w.prior_year);
     if (cur == null || prior == null) return;
-    const z = poissonZ(cur, prior);
+    const phi = dispersionFor(name, level);
+    const z = poissonZ(cur, prior, phi);
     const flag = (name === 'Rape' && !rapeYoYComparable(periodId, weekEnd)) ? 'rape-definition' : null;
     out.push({
-      name, group, label: labelFor(name), cur, prior,
+      name, group, label: labelFor(name), cur, prior, phi,
       diff: cur - prior,
       pct: prior > 0 ? ((cur - prior) / prior) * 100 : null,
       z, verdict: flag ? 'flagged' : verdictFor(z),
-      band: noiseBandPct(cur, prior),
+      band: noiseBandPct(cur, prior, phi),
       hist: stats?.historical || {},
       flag,
     });
@@ -139,13 +189,14 @@ export function extractRows(geoData, periodId) {
   return out;
 }
 
-export function sumRows(rows, names, label) {
+export function sumRows(rows, names, label, level = 'city') {
   const picked = rows.filter((r) => names.includes(r.name));
   if (!picked.length) return null;
   const cur = picked.reduce((s, r) => s + r.cur, 0);
   const prior = picked.reduce((s, r) => s + r.prior, 0);
-  const z = poissonZ(cur, prior);
-  return { name: label, label, cur, prior, diff: cur - prior, pct: prior > 0 ? ((cur - prior) / prior) * 100 : null, z, verdict: verdictFor(z), band: noiseBandPct(cur, prior), parts: picked.map((r) => r.name) };
+  const phi = dispersionForSum(picked.map((r) => ({ name: r.name, n: r.cur + r.prior })), level);
+  const z = poissonZ(cur, prior, phi);
+  return { name: label, label, cur, prior, phi, diff: cur - prior, pct: prior > 0 ? ((cur - prior) / prior) * 100 : null, z, verdict: verdictFor(z), band: noiseBandPct(cur, prior, phi), parts: picked.map((r) => r.name) };
 }
 
 // NYPD's "historical perspective" columns. The scraper names them 2_yr / 14_yr / 31_yr (the labels
@@ -187,9 +238,11 @@ export function revisionFlows(snapshots) {
   }
   if (!pairs.length) return null;
   const byGeo = {};
+  const weeksByGeo = {}; // a place missing from some reports (a new precinct) has fewer weeks of flow
   pairs.forEach(([a, b]) => {
     Object.keys(b).forEach((geo) => {
       if (!a[geo]) return;
+      weeksByGeo[geo] = (weeksByGeo[geo] || 0) + 1;
       ['seven_major_felonies', 'additional_stats'].forEach((grp) => {
         Object.entries(b[geo][grp] || {}).forEach(([name, sb]) => {
           const sa = a[geo][grp]?.[name];
@@ -204,7 +257,7 @@ export function revisionFlows(snapshots) {
       });
     });
   });
-  return { weeks: pairs.length, from: pairs[0][0].citywide.report_period.week_end, to: pairs[pairs.length - 1][1].citywide.report_period.week_end, byGeo };
+  return { weeks: pairs.length, weeksByGeo, from: pairs[0][0].citywide.report_period.week_end, to: pairs[pairs.length - 1][1].citywide.report_period.week_end, byGeo };
 }
 
 // Smallest change to this year's count — in the direction that weakens the finding — that turns a
@@ -215,7 +268,7 @@ export function breakEven(row) {
   let lo = 1; let hi = Math.abs(row.cur - row.prior); // at hi the two counts are equal: z = 0, noise
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    if (verdictFor(poissonZ(row.cur + dir * mid, row.prior)) === row.verdict) lo = mid + 1; else hi = mid;
+    if (verdictFor(poissonZ(row.cur + dir * mid, row.prior, row.phi)) === row.verdict) lo = mid + 1; else hi = mid;
   }
   return lo;
 }
@@ -231,7 +284,9 @@ export function revisionRisk(row, flow, thresholdWeeks = REVISION_WEEKS) {
   const dir = row.verdict === 'drop' ? 1 : -1;
   const perWeek = (dir * flow.cur) / flow.weeks; // revisions per week in the weakening direction
   const weeksToErase = perWeek > 0 ? be / perWeek : Infinity;
-  return { breakEven: be, perWeek, weeksToErase, thresholdWeeks, fragile: weeksToErase < thresholdWeeks };
+  // 'none': no net revisions to this line; 'opposite': revisions have been strengthening the change.
+  const direction = perWeek > 0 ? 'weakening' : perWeek < 0 ? 'opposite' : 'none';
+  return { breakEven: be, perWeek, weeksToErase, direction, thresholdWeeks, fragile: weeksToErase < thresholdWeeks };
 }
 export const WINDOW_WEEKS = { ytd: Infinity, d28: 4, wtd: 1 };
 export const fragileThreshold = (periodId) => Math.min(REVISION_WEEKS, WINDOW_WEEKS[periodId] ?? Infinity);
@@ -253,58 +308,80 @@ export function withRevisions(rows, flowsForGeo, weeks, thresholdWeeks = REVISIO
 export const HEADLINE_ORDER = ['Murder', 'Shooting Vic.', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'G.L.A.', 'Gr. Larceny'];
 // Counterpoint candidates: the high-volume violent lines a reader should not lose sight of.
 const STUCK_ORDER = ['Fel. Assault', 'Robbery', 'Rape', 'Shooting Vic.', 'Murder'];
+// Plural nouns for headlines written in counts.
+export const NOUNS = {
+  'Murder': 'murders', 'Shooting Vic.': 'shooting victims', 'Rape': 'rapes', 'Robbery': 'robberies',
+  'Fel. Assault': 'felony assaults', 'Burglary': 'burglaries', 'G.L.A.': 'vehicle thefts', 'Gr. Larceny': 'grand larcenies',
+};
+// Below this many last year, a percentage says more than the counts do ("up 700%" on 8 vs. 1), so the
+// headline gives the counts instead.
+export const SMALL_BASE = 20;
+// A change this small (either way) is "essentially flat," not "isn't falling."
+export const FLAT_PCT = 3;
 
-const clause = (r, kind) => {
+const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+export function clause(r, kind) {
   const L = r.label;
   const be = isPlural(r.name) ? 'are' : 'is';
+  const noun = NOUNS[r.name] || L.toLowerCase();
+  if ((kind === 'drop' || kind === 'rise') && r.prior < SMALL_BASE) {
+    if (r.cur === 0) return `No ${noun}, down from ${spell(r.prior)}.`;
+    if (r.prior === 0) return `${cap(spell(r.cur))} ${r.cur === 1 ? noun.replace(/s$/, '').replace(/ie$/, 'y') : noun}, up from none.`;
+    return `${cap(noun)} ${kind === 'drop' ? 'fell' : 'rose'} to ${spell(r.cur)} from ${spell(r.prior)}.`;
+  }
   const pct = Math.round(Math.abs(r.pct));
   if (kind === 'drop') return `${L} ${be} down ${pct}%.`;
   if (kind === 'rise') return `${L} ${be} up ${pct}%.`;
   if (kind === 'stuck') return `${L} ${isPlural(r.name) ? "aren't" : "isn't"} falling.`;
   if (kind === 'flat') return `${L} ${be} essentially flat.`;
   return '';
-};
+}
 
-// Returns { sentences: [..], lead, counter, kind } — kind is 'split' | 'rise' | 'fall' | 'noise'.
+// Returns { sentences, lead, counter, counterKind, kind, cleared, fragileOnes } — kind is
+// 'split' | 'rise' | 'fall' | 'noise'. `cleared` lists lines that cleared the ordinary bar (1.96) but
+// not the headline bar; `fragileOnes`, lines that cleared it but that revisions could erase.
 export function buildHeadline(rows) {
   const by = Object.fromEntries(rows.map((r) => [r.name, r]));
   const eligible = HEADLINE_ORDER.map((n) => by[n]).filter((r) => r && r.verdict !== 'flagged' && r.verdict !== 'none' && r.pct != null);
-  // A real change that recent revisions could erase ("fragile") never headlines.
+  // A change beyond chance that recent revisions could erase ("fragile") never headlines.
   const firm = (r) => (r.verdict === 'drop' || r.verdict === 'rise') && !r.fragile;
+  const strong = (r) => firm(r) && Math.abs(r.z) >= Z_HEAD;
   // "Isn't falling" must survive the recent pace of downward revisions, if any.
   const stuckHolds = (r) => r.cur + Math.min(0, r.rev?.cur || 0) >= r.prior;
-  const lead = eligible.find(firm);
+  const lead = eligible.find(strong);
+  const fragileOnes = eligible.filter((r) => (r.verdict === 'drop' || r.verdict === 'rise') && r.fragile);
+  const cleared = eligible.filter((r) => firm(r) && !strong(r));
   if (!lead) {
-    const fragileOnly = eligible.some((r) => (r.verdict === 'drop' || r.verdict === 'rise') && r.fragile);
-    return {
-      kind: 'noise', lead: null, counter: null,
-      sentences: [fragileOnly
+    const text = cleared.length
+      ? 'No major crime moved by a clear margin.'
+      : fragileOnes.length
         ? "No major crime moved by enough to outlast both chance and NYPD's revisions."
-        : 'No major crime moved more than chance alone would explain.'],
-    };
+        : 'No major crime moved more than chance alone would explain.';
+    return { kind: 'noise', lead: null, counter: null, cleared, fragileOnes, sentences: [text] };
   }
   const others = eligible.filter((r) => r !== lead);
+  const quiet = (r) => r && r !== lead && r.verdict === 'noise' && r.prior >= 30;
   let counter = null; let counterKind = null;
   if (lead.verdict === 'drop') {
-    counter = others.find((r) => r.verdict === 'rise' && firm(r));
+    counter = others.find((r) => r.verdict === 'rise' && strong(r));
     if (counter) counterKind = 'rise';
     if (!counter) {
-      counter = STUCK_ORDER.map((n) => by[n]).find((r) => r && r !== lead && r.verdict === 'noise' && r.pct >= 0 && r.prior >= 30 && stuckHolds(r));
+      counter = STUCK_ORDER.map((n) => by[n]).find((r) => quiet(r) && r.pct >= FLAT_PCT && stuckHolds(r));
       if (counter) counterKind = 'stuck';
     }
     if (!counter) {
-      counter = STUCK_ORDER.map((n) => by[n]).find((r) => r && r !== lead && r.verdict === 'noise' && r.pct < 0 && r.pct > -3 && r.prior >= 30);
+      counter = STUCK_ORDER.map((n) => by[n]).find((r) => quiet(r) && Math.abs(r.pct) < FLAT_PCT);
       if (counter) counterKind = 'flat';
     }
     if (!counter) {
-      counter = others.find((r) => r.verdict === 'drop' && firm(r));
+      counter = others.find((r) => r.verdict === 'drop' && strong(r));
       if (counter) counterKind = 'drop';
     }
   } else {
-    counter = others.find((r) => r.verdict === 'drop' && firm(r));
+    counter = others.find((r) => r.verdict === 'drop' && strong(r));
     if (counter) counterKind = 'drop';
     if (!counter) {
-      counter = others.find((r) => r.verdict === 'rise' && firm(r));
+      counter = others.find((r) => r.verdict === 'rise' && strong(r));
       if (counter) counterKind = 'rise';
     }
   }
@@ -313,14 +390,16 @@ export function buildHeadline(rows) {
   const kind = !counter ? (lead.verdict === 'drop' ? 'fall' : 'rise')
     : (lead.verdict === 'drop' && counterKind === 'drop') ? 'fall'
     : (lead.verdict === 'rise' && counterKind === 'rise') ? 'rise' : 'split';
-  return { kind, lead, counter, counterKind, sentences };
+  return { kind, lead, counter, counterKind, sentences, cleared, fragileOnes };
 }
 
-// "For every murder, 117 felony assaults." Only when both counts are positive.
+// "For every murder, 117 felony assaults." Only when there are enough murders for a ratio to mean
+// something: on one or two murders the ratio swings wildly.
+export const RATIO_MIN = 20;
 export function frequencyRatio(rows, numerName = 'Fel. Assault', denomName = 'Murder') {
   const a = rows.find((r) => r.name === numerName);
   const b = rows.find((r) => r.name === denomName);
-  if (!a || !b || !(a.cur > 0) || !(b.cur > 0)) return null;
+  if (!a || !b || !(a.cur > 0) || !(b.cur >= RATIO_MIN)) return null;
   const ratio = a.cur / b.cur;
   return { ratio, display: ratio >= 10 ? Math.round(ratio).toLocaleString('en-US') : ratio.toFixed(1), numer: a, denom: b };
 }
@@ -341,6 +420,17 @@ export function paceRange({ cur, priorYtd, priorFull, weekEnd, minElapsed = 0.25
   const seasonal = seasonalShare ? cur / seasonalShare : null;
   const vals = [linear, seasonal].filter((v) => Number.isFinite(v));
   return { low: Math.min(...vals), high: Math.max(...vals), linear, seasonal, seasonalShare, elapsed, year: end.y };
+}
+
+// The rest of the year is still a random count. Each end of the range is widened by
+// 1.96 × √(φ × the count still to come), so a claim about where the year lands also has to survive
+// ordinary chance in the months left. The low end can't fall below what's already been recorded.
+export function withChance(range, cur, phi = 1) {
+  if (!range || range.tooEarly || !Number.isFinite(cur)) return range;
+  const f = Math.max(1, phi);
+  const dLow = Z_CRIT * Math.sqrt(f * Math.max(0, range.low - cur));
+  const dHigh = Z_CRIT * Math.sqrt(f * Math.max(0, range.high - cur));
+  return { ...range, paceLow: range.low, paceHigh: range.high, chanceLow: dLow, chanceHigh: dHigh, low: Math.max(cur, range.low - dLow), high: range.high + dHigh };
 }
 
 // Where a full-year value would rank in a series of complete years ({y, val}, ascending by y).
@@ -416,7 +506,7 @@ export const PEER_GROUPS = [
     blurb: 'the eight other largest U.S. cities',
   },
   {
-    key: 'northeast', label: 'Northeast & mid-Atlantic',
+    key: 'northeast', label: 'Northeast and mid-Atlantic',
     cities: [['New York City', 'New York'], ['Philadelphia', 'Pennsylvania'], ['Boston', 'Massachusetts'], ['Baltimore', 'Maryland'], ['Washington', 'District of Columbia'], ['Pittsburgh', 'Pennsylvania'], ['Buffalo', 'New York'], ['Newark', 'New Jersey']],
     blurb: 'these Northeast and mid-Atlantic cities',
   },
@@ -470,13 +560,30 @@ export function peerComparison(parsed, group) {
     .sort((a, b) => a.rate - b.rate);
   const nyc = list.find((c) => c.isNYC);
   if (!nyc) return null;
-  const others = list.filter((c) => !c.isNYC);
+  // The same chance test, applied to rates: is the gap between a city's rate and New York's beyond
+  // chance, given how many murders each had? (Poisson standard error of a rate: √count ÷ population.)
+  const se2 = (c) => c.murderFull / (c.pop / 100000) ** 2;
+  const others = list.filter((c) => !c.isNYC).map((c) => {
+    const z = (c.rate - nyc.rate) / Math.sqrt(se2(c) + se2(nyc) || 1);
+    return { ...c, zVsNYC: z, vsNYC: z >= Z_CRIT ? 'higher' : z <= -Z_CRIT ? 'lower' : 'same' };
+  });
   const higher = others.filter((c) => c.rate > nyc.rate).length;
   return { year, list, nyc, others, higher, missing: group.cities.length - list.length };
 }
 
 /* ------------------------------ geography ---------------------------- */
-// The 116th Precinct was created from part of the 105th. The precinct map and the 2020 Census
-// populations predate the split, so per-capita figures for either one alone would be wrong;
-// the two are combined into the old 105th's footprint for anything per-capita.
-export const SPLIT_PRECINCTS = { parent: '105th Precinct', child: '116th Precinct', label: '105th + 116th' };
+// The 116th Precinct was created in December 2024 from parts of the 105th and the 113th (the mayor's
+// announcement: "areas previously covered by either the 105th or the 113th precincts"). NYPD restated
+// all three for the new lines, but the precinct map and the 2020 Census populations use the old lines.
+// Per-resident figures for any one of the three would be wrong, so anything per-resident or mapped
+// combines them: the old 105th and 113th footprints together cover exactly the three new precincts.
+export const SPLIT_PRECINCTS = { members: ['105th Precinct', '113th Precinct', '116th Precinct'], shapes: ['105', '113'], label: '105th, 113th + 116th' };
+export const isSplitPrecinct = (k) => SPLIT_PRECINCTS.members.includes(k);
+
+// Precincts whose long-view comparisons (NYPD's same-period columns vs. 2010 and 1993) cover different
+// ground from today's. The 121st (2013) was carved from the 120th and 122nd; the 116th (2024) from the
+// 105th and 113th. NYPD says it restated the 2024 split, but we can't check how for 1993 or 2010, so we
+// leave them out. The 33rd was carved from the 34th after 1993 (NYPD prints no 1993 comparison for it).
+export const REDRAWN_SINCE_2010 = ['105th Precinct', '113th Precinct', '116th Precinct', '120th Precinct', '121st Precinct', '122nd Precinct'];
+export const REDRAWN_SINCE_1993 = [...REDRAWN_SINCE_2010, '33rd Precinct', '34th Precinct'];
+export const redrawnSince = (year, geo) => (year <= 1993 ? REDRAWN_SINCE_1993 : year <= 2010 ? REDRAWN_SINCE_2010 : []).includes(geo);

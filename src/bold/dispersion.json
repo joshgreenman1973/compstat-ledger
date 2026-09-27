@@ -1,0 +1,103 @@
+{
+ "_source": "tools/dispersion/build_dispersion.py over NYPD weekly CompStat reports archived by nypd-compstat-scraper",
+ "_weeks": "2026-03-01 to 2026-09-20",
+ "_pairs": 29,
+ "_note": "variance / mean of weekly counts (1 = a plain random count), pooled by level; the page never uses less than 1",
+ "lines": {
+  "Burglary": {
+   "borough": 1.08,
+   "city": 1.69,
+   "precinct": 1.12
+  },
+  "Fel. Assault": {
+   "borough": 1.31,
+   "city": 2.64,
+   "precinct": 1.26
+  },
+  "G.L.A.": {
+   "borough": 1.28,
+   "city": 2.28,
+   "precinct": 1.17
+  },
+  "Gr. Larceny": {
+   "borough": 1.13,
+   "city": 1.95,
+   "precinct": 1.09
+  },
+  "Hate Crimes": {
+   "borough": 1.56,
+   "city": 1.59,
+   "precinct": 1.34
+  },
+  "Housing": {
+   "borough": 1.1,
+   "city": 1.08,
+   "precinct": 1.14
+  },
+  "Misd. Assault": {
+   "borough": 1.47,
+   "city": 2.95,
+   "precinct": 1.27
+  },
+  "Murder": {
+   "borough": 0.96,
+   "city": 0.65,
+   "precinct": 1.15
+  },
+  "Other Sex Crimes": {
+   "borough": 0.93,
+   "city": 1.29,
+   "precinct": 1.09
+  },
+  "Petit Larceny": {
+   "borough": 1.68,
+   "city": 4.27,
+   "precinct": 1.65
+  },
+  "Rape": {
+   "borough": 0.96,
+   "city": 0.89,
+   "precinct": 1.04
+  },
+  "Retail Theft": {
+   "borough": 1.61,
+   "city": 3.23,
+   "precinct": 1.53
+  },
+  "Robbery": {
+   "borough": 0.96,
+   "city": 1.57,
+   "precinct": 1.03
+  },
+  "Shooting Inc.": {
+   "borough": 1.02,
+   "city": 1.31,
+   "precinct": 1.02
+  },
+  "Shooting Vic.": {
+   "borough": 1.75,
+   "city": 2.33,
+   "precinct": 1.76
+  },
+  "Traffic Fatalities": {
+   "borough": 0.95,
+   "city": 1.12,
+   "precinct": 1.01
+  },
+  "Transit": {
+   "borough": 0.92,
+   "city": 1.37,
+   "precinct": 1.03
+  },
+  "UCR Rape*": {
+   "borough": 0.87,
+   "city": 1.01,
+   "precinct": 1.03
+  },
+  "_majors": {
+   "borough": 1.1,
+   "city": 2.32,
+   "precinct": 1.1
+  }
+ }
+}

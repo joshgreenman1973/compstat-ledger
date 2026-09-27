@@ -2,14 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from '../data/nyc_precincts.json';
 import { C, VERDICT, useWidth, Chip, FragileTag } from './ui';
-import { fmtInt, fmtPct, zBin, binFor } from './stats';
+import { fmtInt, fmtPct, zBin, binFor, spell } from './stats';
 
 const niceMax = (v) => [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100].find((s) => s >= v) || 100;
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /* ------------------------------------------------------------------ */
 /* SIGNAL BOARD — % change per offense, against the band chance alone  */
-/* could produce. Dots outside the gray band are real movement.        */
+/* could produce. Dots outside the gray band are beyond chance.        */
 /* ------------------------------------------------------------------ */
 export function SignalBoard({ rows, fragileWeeks = 8 }) {
   const sorted = useMemo(() => [...rows].sort((a, b) => (b.pct ?? -Infinity) - (a.pct ?? -Infinity)), [rows]);
@@ -82,11 +82,11 @@ export function SignalBoard({ rows, fragileWeeks = 8 }) {
         })}
       </ul>
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[#444]">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.drop.color }} />Real drop</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.rise.color }} />Real rise</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full border-[2.5px]" style={{ borderColor: VERDICT.noise.color }} />Noise</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.drop.color }} />Drop beyond chance</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.rise.color }} />Rise beyond chance</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full border-[2.5px]" style={{ borderColor: VERDICT.noise.color }} />Within chance</span>
         <span className="flex items-center gap-1.5"><span className="inline-block w-6 h-3 rounded-sm bg-[#e4e4e8]" />Range chance alone could produce (95%)</span>
-        {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Real today; {fragileWeeks} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
+        {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Beyond chance today; {spell(fragileWeeks)} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
         <span className="text-[#707175]">Axis capped at ±{D}%; ‹ › mark values beyond it.</span>
       </div>
     </div>
@@ -165,7 +165,7 @@ export function LongArc({ series, pace, events = [], noun }) {
   const xTicks = series.filter((d) => (d.y - x0) % (w < 520 ? 8 : 4) === 0).map((d) => d.y);
   return (
     <div ref={ref} className="relative w-full">
-      <svg width={w} height={h} role="img" aria-label={`Annual ${noun}, ${x0}–${last.y}${hasPace ? `, with a ${pace.year} pace of ${fmtInt(pace.low)} to ${fmtInt(pace.high)}` : ''}.`} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+      <svg width={w} height={h} role="img" aria-label={`Annual ${noun}, ${x0}-${last.y}${hasPace ? `, with a ${pace.year} pace of ${fmtInt(pace.low)} to ${fmtInt(pace.high)}` : ''}.`} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={m.l} x2={m.l + iw} y1={Y(t)} y2={Y(t)} stroke={t === 0 ? '#bdbdbd' : '#ededed'} strokeWidth="1" />
@@ -201,7 +201,7 @@ export function LongArc({ series, pace, events = [], noun }) {
             <circle cx={X(pace.year)} cy={Y(pace.high)} r="4" fill={C.orange} stroke={C.white} strokeWidth="2" />
             <circle cx={X(pace.year)} cy={Y(pace.low)} r="4" fill={C.orange} stroke={C.white} strokeWidth="2" />
             <text x={X(pace.year) + 10} y={Y((pace.low + pace.high) / 2) - 4} fontSize="12" fontWeight="700" fill={C.ink}>{pace.year} pace</text>
-            <text x={X(pace.year) + 10} y={Y((pace.low + pace.high) / 2) + 11} fontSize="12" fill={C.ink} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtInt(pace.low)}–{fmtInt(pace.high)}</text>
+            <text x={X(pace.year) + 10} y={Y((pace.low + pace.high) / 2) + 11} fontSize="12" fill={C.ink} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtInt(pace.low)}-{fmtInt(pace.high)}</text>
           </g>
         )}
         {hover && (
@@ -226,6 +226,7 @@ export function LongArc({ series, pace, events = [], noun }) {
 /* ------------------------------------------------------------------ */
 export const RATE_RAMP = ['#fde5dd', '#fabcaa', '#f69577', '#fb693c', '#e03a30'];
 export const SIGNAL_RAMP = { '-2': '#217ebe', '-1': '#90bfdf', 0: '#e8e8ea', 1: '#fabcaa', 2: '#e03a30' };
+const ZERO_FILL = '#fbfaf8';
 
 export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureNoun }) {
   const [ref, w] = useWidth(640);
@@ -239,12 +240,14 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
   const fillFor = (u) => {
     if (!u) return '#f4f4f4';
     if (mode === 'signal') {
-      // A change recent revisions could erase is shaded as noise, same rule as the headline.
-      const b = zBin(u.fragile ? 0 : u.z);
-      return b == null ? '#f4f4f4' : SIGNAL_RAMP[b];
+      // Colored only if the change is beyond chance after the correction for testing every precinct,
+      // and not fragile (u.real); otherwise shaded as within chance.
+      if (u.z == null) return '#f4f4f4';
+      return SIGNAL_RAMP[zBin(u.real ? u.z : 0)];
     }
     if (u.tourist || u.rate == null) return '#efefef';
-    const b = binFor(u.rate, cuts);
+    if (u.count === 0) return ZERO_FILL;
+    const b = cuts.length === 4 ? binFor(u.rate, cuts) : 2;
     return b == null ? '#f4f4f4' : RATE_RAMP[b];
   };
   const hovered = hover != null ? units[hover] : null;
@@ -288,11 +291,12 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
           {hovered.hood && <div className="text-[#707175] mb-1.5">{hovered.hood}</div>}
           <div style={{ fontVariantNumeric: 'tabular-nums' }}>
             <div><strong>{fmtInt(hovered.count)}</strong> {measureNoun} <span className="text-[#707175]">vs. {fmtInt(hovered.prior)} last year</span></div>
-            <div className="mt-1 flex items-center gap-2"><span>{fmtPct(hovered.pct)}</span><Chip verdict={hovered.verdict} small /></div>
+            <div className="mt-1 flex items-center gap-2"><span>{fmtPct(hovered.pct)}</span><Chip verdict={hovered.real || (hovered.verdict === 'none' ? 'none' : 'noise')} small /></div>
+            {mode === 'signal' && !hovered.real && hovered.sig === false && (hovered.verdict === 'drop' || hovered.verdict === 'rise') && <div className="mt-1 text-[#707175] italic">Clears the test on its own, but not after correcting for testing every precinct</div>}
             {hovered.rate != null && !hovered.tourist && <div className="mt-1">{hovered.rate.toFixed(1)} per 100k residents</div>}
             {hovered.tourist && <div className="mt-1 text-[#707175] italic">Commuter and visitor hub; per-resident rate not meaningful</div>}
-            {hovered.merged && <div className="mt-1 text-[#707175] italic">105th and 116th shown combined (see note)</div>}
-            {hovered.fragile && <div className="mt-1 text-[#707175] italic">Fragile: recent revisions could erase this change, so the map shades it as noise</div>}
+            {hovered.merged && <div className="mt-1 text-[#707175] italic">105th, 113th and 116th shown combined (see note)</div>}
+            {hovered.fragile && hovered.sig && <div className="mt-1 text-[#707175] italic">Fragile: recent revisions could erase this change, so the map shades it as within chance</div>}
           </div>
           <div className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-[#ff7c53]">Click to open</div>
         </div>
@@ -303,7 +307,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
 
 export function MapLegend({ mode, cuts, periodNote }) {
   if (mode === 'signal') {
-    const items = [['-2', 'Strong drop'], ['-1', 'Drop'], ['0', 'Noise'], ['1', 'Rise'], ['2', 'Strong rise']];
+    const items = [['-2', 'Strong drop'], ['-1', 'Drop'], ['0', 'Within chance'], ['1', 'Rise'], ['2', 'Strong rise']];
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-[#444]">
         {items.map(([k, l]) => <span key={k} className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: SIGNAL_RAMP[k] }} />{l}</span>)}
@@ -314,12 +318,14 @@ export function MapLegend({ mode, cuts, periodNote }) {
   const labels = [];
   const fmt = (v) => (v >= 100 ? Math.round(v).toLocaleString('en-US') : v >= 10 ? v.toFixed(0) : v.toFixed(1));
   for (let i = 0; cuts.length === 4 && i < 5; i++) {
-    labels.push(i === 0 ? `< ${fmt(cuts[0])}` : i === 4 ? `> ${fmt(cuts[3])}` : `${fmt(cuts[i - 1])}–${fmt(cuts[i])}`);
+    labels.push(i === 0 ? `Under ${fmt(cuts[0])}` : i === 4 ? `Over ${fmt(cuts[3])}` : `${fmt(cuts[i - 1])}-${fmt(cuts[i])}`);
   }
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-[#444]">
-      <span className="text-[#707175]">Per 100k residents{periodNote ? `, ${periodNote}` : ''} (fifths):</span>
+      <span className="text-[#707175]">Per 100k residents{periodNote ? `, ${periodNote}` : ''}{cuts.length === 4 ? ' (fifths of precincts with any)' : ''}:</span>
+      <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm border border-[#e2e2e2]" style={{ background: ZERO_FILL }} />None</span>
       {cuts.length === 4 && labels.map((l, i) => <span key={l} className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: RATE_RAMP[i] }} />{l}</span>)}
+      {cuts.length !== 4 && <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: RATE_RAMP[2] }} />Any recorded</span>}
       <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #efefef 0 2px, #9a9a9a 2px 3px)' }} />Commuter and visitor hubs (14th, 18th, 22nd)</span>
     </div>
   );

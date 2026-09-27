@@ -2,7 +2,7 @@
 # Independent check of the "read closely" view against NYPD's Sept. 20, 2026 report: builds the app,
 # renders three pages offline with pinned data, re-derives every headline number in Python and
 # confirms the page prints exactly those. Needs git, curl, python3, node and Playwright
-# (once: cd tools/verify && npm i --no-save playwright && npx playwright install chromium).
+# (once: cd tools/verify && npm i --no-save playwright && npx playwright install chromium) and python3 with xlrd.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/../.." && pwd)"
@@ -15,6 +15,8 @@ git -C "$WORK/scraper" checkout -q c0165dc
 cp "$WORK/scraper/data/archive/2026-09-20.json" "$WORK/latest.json"
 # RTCI changes monthly; the page and check.py both read this same copy, so either vintage works.
 [ -f "$WORK/rtci.csv" ] || curl -sSfL https://raw.githubusercontent.com/AH-Datalytics/rtci/main/docs/app_data/scorecard.csv -o "$WORK/rtci.csv"
+# NYPD's own annual table, to check the page's history file against (nyc.gov refuses curl's default agent).
+[ -f "$WORK/nypd7.xls" ] || curl -sSfL -A "Mozilla/5.0" https://www.nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/seven-major-felony-offenses-2000-2025.xls -o "$WORK/nypd7.xls"
 (cd "$ROOT" && CI=true npx react-scripts build > "$WORK/build.log" 2>&1) || { cat "$WORK/build.log"; exit 1; }
 python3 -m http.server "$PORT" --directory "$ROOT/build" > "$WORK/http.log" 2>&1 &
 SERVER=$!

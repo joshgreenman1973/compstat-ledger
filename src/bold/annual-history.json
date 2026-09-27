@@ -1,0 +1,371 @@
+{
+ "_sources": {
+  "2000-2025 majors": "https://www.nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/seven-major-felony-offenses-2000-2025.xls",
+  "1993-1999 majors and all shooting incidents": "src/data/crime_history.json (classic view compilation)"
+ },
+ "citywide": [
+  {
+   "y": 1993,
+   "Burglary": 100936,
+   "Fel. Assault": 41121,
+   "G.L.A.": 111622,
+   "Gr. Larceny": 85737,
+   "Murder": 1927,
+   "Rape": 3225,
+   "Robbery": 85892,
+   "Shooting Inc.": 5269
+  },
+  {
+   "y": 1994,
+   "Burglary": 90383,
+   "Fel. Assault": 39773,
+   "G.L.A.": 94523,
+   "Gr. Larceny": 75459,
+   "Murder": 1582,
+   "Rape": 3196,
+   "Robbery": 72550,
+   "Shooting Inc.": 4411
+  },
+  {
+   "y": 1995,
+   "Burglary": 75649,
+   "Fel. Assault": 35528,
+   "G.L.A.": 71798,
+   "Gr. Larceny": 65425,
+   "Murder": 1181,
+   "Rape": 3018,
+   "Robbery": 59733,
+   "Shooting Inc.": 3265
+  },
+  {
+   "y": 1996,
+   "Burglary": 61986,
+   "Fel. Assault": 30615,
+   "G.L.A.": 59465,
+   "Gr. Larceny": 58690,
+   "Murder": 984,
+   "Rape": 2888,
+   "Robbery": 49324,
+   "Shooting Inc.": 2563
+  },
+  {
+   "y": 1997,
+   "Burglary": 54866,
+   "Fel. Assault": 30259,
+   "G.L.A.": 51312,
+   "Gr. Larceny": 55686,
+   "Murder": 767,
+   "Rape": 2783,
+   "Robbery": 44335,
+   "Shooting Inc.": 1980
+  },
+  {
+   "y": 1998,
+   "Burglary": 47181,
+   "Fel. Assault": 28848,
+   "G.L.A.": 43315,
+   "Gr. Larceny": 51461,
+   "Murder": 629,
+   "Rape": 2476,
+   "Robbery": 39003,
+   "Shooting Inc.": 1759
+  },
+  {
+   "y": 1999,
+   "Burglary": 41348,
+   "Fel. Assault": 25962,
+   "G.L.A.": 38976,
+   "Gr. Larceny": 50139,
+   "Murder": 667,
+   "Rape": 2089,
+   "Robbery": 35654,
+   "Shooting Inc.": 1759
+  },
+  {
+   "y": 2000,
+   "Murder": 673,
+   "Rape": 2068,
+   "Robbery": 32562,
+   "Fel. Assault": 25924,
+   "Burglary": 38352,
+   "Gr. Larceny": 49631,
+   "G.L.A.": 35442,
+   "Shooting Inc.": 1794
+  },
+  {
+   "y": 2001,
+   "Murder": 649,
+   "Rape": 1981,
+   "Robbery": 28202,
+   "Fel. Assault": 23453,
+   "Burglary": 32763,
+   "Gr. Larceny": 46329,
+   "G.L.A.": 29531,
+   "Shooting Inc.": 1608
+  },
+  {
+   "y": 2002,
+   "Murder": 587,
+   "Rape": 2144,
+   "Robbery": 27229,
+   "Fel. Assault": 21147,
+   "Burglary": 31275,
+   "Gr. Larceny": 45771,
+   "G.L.A.": 26656,
+   "Shooting Inc.": 1629
+  },
+  {
+   "y": 2003,
+   "Murder": 597,
+   "Rape": 2070,
+   "Robbery": 25989,
+   "Fel. Assault": 19139,
+   "Burglary": 29110,
+   "Gr. Larceny": 46751,
+   "G.L.A.": 23413,
+   "Shooting Inc.": 1577
+  },
+  {
+   "y": 2004,
+   "Murder": 570,
+   "Rape": 1905,
+   "Robbery": 24373,
+   "Fel. Assault": 18622,
+   "Burglary": 26976,
+   "Gr. Larceny": 48763,
+   "G.L.A.": 20884,
+   "Shooting Inc.": 1481
+  },
+  {
+   "y": 2005,
+   "Murder": 539,
+   "Rape": 1858,
+   "Robbery": 24722,
+   "Fel. Assault": 17750,
+   "Burglary": 24117,
+   "Gr. Larceny": 48243,
+   "G.L.A.": 18246,
+   "Shooting Inc.": 1534
+  },
+  {
+   "y": 2006,
+   "Murder": 596,
+   "Rape": 1525,
+   "Robbery": 23739,
+   "Fel. Assault": 17309,
+   "Burglary": 23143,
+   "Gr. Larceny": 46625,
+   "G.L.A.": 15745,
+   "Shooting Inc.": 1567
+  },
+  {
+   "y": 2007,
+   "Murder": 496,
+   "Rape": 1351,
+   "Robbery": 21809,
+   "Fel. Assault": 17493,
+   "Burglary": 21762,
+   "Gr. Larceny": 44924,
+   "G.L.A.": 13174,
+   "Shooting Inc.": 1443
+  },
+  {
+   "y": 2008,
+   "Murder": 523,
+   "Rape": 1299,
+   "Robbery": 22401,
+   "Fel. Assault": 16284,
+   "Burglary": 20725,
+   "Gr. Larceny": 44242,
+   "G.L.A.": 12482,
+   "Shooting Inc.": 1519
+  },
+  {
+   "y": 2009,
+   "Murder": 471,
+   "Rape": 1205,
+   "Robbery": 18601,
+   "Fel. Assault": 16773,
+   "Burglary": 19430,
+   "Gr. Larceny": 39580,
+   "G.L.A.": 10670,
+   "Shooting Inc.": 1420
+  },
+  {
+   "y": 2010,
+   "Murder": 536,
+   "Rape": 1373,
+   "Robbery": 19486,
+   "Fel. Assault": 16956,
+   "Burglary": 18600,
+   "Gr. Larceny": 37835,
+   "G.L.A.": 10329,
+   "Shooting Inc.": 1473
+  },
+  {
+   "y": 2011,
+   "Murder": 515,
+   "Rape": 1420,
+   "Robbery": 19717,
+   "Fel. Assault": 18482,
+   "Burglary": 18720,
+   "Gr. Larceny": 38501,
+   "G.L.A.": 9314,
+   "Shooting Inc.": 1510
+  },
+  {
+   "y": 2012,
+   "Murder": 419,
+   "Rape": 1445,
+   "Robbery": 20144,
+   "Fel. Assault": 19381,
+   "Burglary": 19168,
+   "Gr. Larceny": 42497,
+   "G.L.A.": 8093,
+   "Shooting Inc.": 1374
+  },
+  {
+   "y": 2013,
+   "Murder": 335,
+   "Rape": 1378,
+   "Robbery": 19128,
+   "Fel. Assault": 20297,
+   "Burglary": 17429,
+   "Gr. Larceny": 45368,
+   "G.L.A.": 7400,
+   "Shooting Inc.": 1103
+  },
+  {
+   "y": 2014,
+   "Murder": 333,
+   "Rape": 1352,
+   "Robbery": 16539,
+   "Fel. Assault": 20207,
+   "Burglary": 16765,
+   "Gr. Larceny": 43862,
+   "G.L.A.": 7664,
+   "Shooting Inc.": 1171
+  },
+  {
+   "y": 2015,
+   "Murder": 352,
+   "Rape": 1438,
+   "Robbery": 16931,
+   "Fel. Assault": 20270,
+   "Burglary": 15125,
+   "Gr. Larceny": 44005,
+   "G.L.A.": 7332,
+   "Shooting Inc.": 1138
+  },
+  {
+   "y": 2016,
+   "Murder": 335,
+   "Rape": 1438,
+   "Robbery": 15500,
+   "Fel. Assault": 20847,
+   "Burglary": 12990,
+   "Gr. Larceny": 44279,
+   "G.L.A.": 6327,
+   "Shooting Inc.": 998
+  },
+  {
+   "y": 2017,
+   "Murder": 292,
+   "Rape": 1449,
+   "Robbery": 13956,
+   "Fel. Assault": 20052,
+   "Burglary": 12083,
+   "Gr. Larceny": 43150,
+   "G.L.A.": 5676,
+   "Shooting Inc.": 789
+  },
+  {
+   "y": 2018,
+   "Murder": 295,
+   "Rape": 1794,
+   "Robbery": 12913,
+   "Fel. Assault": 20208,
+   "Burglary": 11687,
+   "Gr. Larceny": 43558,
+   "G.L.A.": 5428,
+   "Shooting Inc.": 754
+  },
+  {
+   "y": 2019,
+   "Murder": 319,
+   "Rape": 1755,
+   "Robbery": 13371,
+   "Fel. Assault": 20698,
+   "Burglary": 10783,
+   "Gr. Larceny": 43250,
+   "G.L.A.": 5430,
+   "Shooting Inc.": 776
+  },
+  {
+   "y": 2020,
+   "Murder": 468,
+   "Rape": 1427,
+   "Robbery": 13106,
+   "Fel. Assault": 20572,
+   "Burglary": 15478,
+   "Gr. Larceny": 35505,
+   "G.L.A.": 9037,
+   "Shooting Inc.": 1531
+  },
+  {
+   "y": 2021,
+   "Murder": 488,
+   "Rape": 1491,
+   "Robbery": 13831,
+   "Fel. Assault": 22835,
+   "Burglary": 12811,
+   "Gr. Larceny": 40870,
+   "G.L.A.": 10415,
+   "Shooting Inc.": 1561
+  },
+  {
+   "y": 2022,
+   "Murder": 438,
+   "Rape": 1617,
+   "Robbery": 17411,
+   "Fel. Assault": 26063,
+   "Burglary": 15746,
+   "Gr. Larceny": 51565,
+   "G.L.A.": 13749,
+   "Shooting Inc.": 1294
+  },
+  {
+   "y": 2023,
+   "Murder": 391,
+   "Rape": 1455,
+   "Robbery": 16910,
+   "Fel. Assault": 27876,
+   "Burglary": 13773,
+   "Gr. Larceny": 50586,
+   "G.L.A.": 15795,
+   "Shooting Inc.": 974
+  },
+  {
+   "y": 2024,
+   "Murder": 382,
+   "Rape": 1748,
+   "Robbery": 16580,
+   "Fel. Assault": 29461,
+   "Burglary": 13070,
+   "Gr. Larceny": 48450,
+   "G.L.A.": 14199,
+   "Shooting Inc.": 904
+  },
+  {
+   "y": 2025,
+   "Murder": 309,
+   "Rape": 2048,
+   "Robbery": 15075,
+   "Fel. Assault": 29838,
+   "Burglary": 12798,
+   "Gr. Larceny": 48061,
+   "G.L.A.": 13523,
+   "Shooting Inc.": 688
+  }
+ ]
+}
