@@ -139,3 +139,19 @@ export function Segmented({ options, value, onChange, dark = false, size = 'md',
 export function SourceLine({ children }) {
   return <p className="mt-5 text-[12px] leading-snug text-[#707175]">{children}</p>;
 }
+
+// A short label on a finding, with the full explanation in its tooltip.
+const TAG_TONES = {
+  accent: 'bg-[#dde44c] text-[#050507] border-[#dde44c]',
+  ink: 'bg-[#050507] text-white border-[#050507]',
+  soft: 'bg-[#f1f1f3] text-[#333] border-[#f1f1f3]',
+  warn: 'bg-white text-[#050507] border-[#ff7c53]',
+  line: 'bg-white text-[#555] border-[#cfcfd4]',
+};
+export function Tag({ children, tone = 'soft', title }) {
+  return (
+    <span title={title} className={`inline-flex items-center rounded-full border px-2 py-[1px] text-[11px] font-bold whitespace-nowrap ${TAG_TONES[tone] || TAG_TONES.soft} ${title ? 'cursor-help' : ''}`}>
+      {children}
+    </span>
+  );
+}

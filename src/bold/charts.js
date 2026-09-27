@@ -393,3 +393,94 @@ export function PeerBars({ list }) {
     </ul>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/* MOVE BAR — one precinct's change and the city's, on one diverging  */
+/* axis: the bar is the precinct, the ink tick is the city.           */
+/* ------------------------------------------------------------------ */
+export function MoveBar({ pct, cityPct, max = 60, title }) {
+  const W = 180; const H = 22; const mid = W / 2; const h = 12; const y = (H - h) / 2;
+  const x = (v) => mid + (clamp(v, -max, max) / max) * (mid - 6);
+  const v = Number.isFinite(pct) ? pct : 0;
+  const x1 = x(v); const w = Math.abs(x1 - mid); const r = Math.min(4, w);
+  const col = v >= 0 ? VERDICT.rise.color : VERDICT.drop.color;
+  // square at the baseline (zero), 4px rounded at the data end
+  const d = v >= 0
+    ? `M${mid},${y}H${x1 - r}Q${x1},${y} ${x1},${y + r}V${y + h - r}Q${x1},${y + h} ${x1 - r},${y + h}H${mid}Z`
+    : `M${mid},${y}H${x1 + r}Q${x1},${y} ${x1},${y + r}V${y + h - r}Q${x1},${y + h} ${x1 + r},${y + h}H${mid}Z`;
+  const cx = x(cityPct);
+  return (
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="block" style={{ maxWidth: W }} role="img" aria-label={title}>
+      <title>{title}</title>
+      <line x1={mid} x2={mid} y1={1} y2={H - 1} stroke="#cfcfd4" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+      {w > 0.5 && <path d={d} fill={col} />}
+      {Math.abs(v) > max && <text x={v > 0 ? W - 1 : 1} y={y + h - 2} fontSize="10" fontWeight="800" textAnchor={v > 0 ? 'end' : 'start'} fill={C.white}>{v > 0 ? '›' : '‹'}</text>}
+      <line x1={cx} x2={cx} y1={1} y2={H - 1} stroke={C.ink} strokeWidth="2" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+export function MoveBarKey() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#555]">
+      <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-l-[3px]" style={{ background: VERDICT.drop.color }} /><span className="inline-block w-3 h-2.5 -ml-1.5 rounded-r-[3px]" style={{ background: VERDICT.rise.color }} />Precinct's change</span>
+      <span className="flex items-center gap-1.5"><span className="inline-block w-[2px] h-3.5 bg-[#050507]" />Citywide change</span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* SHARE BAR — a citywide change split into the precincts that moved  */
+/* it most and everyone else.                                          */
+/* ------------------------------------------------------------------ */
+export function ShareBar({ net, lead, nameFor }) {
+  const total = Math.abs(net);
+  const leadSum = lead.reduce((s, m) => s + Math.abs(m.diff), 0);
+  const denom = Math.max(total, leadSum); // if other precincts moved the other way, the leaders can exceed the net
+  const col = net < 0 ? VERDICT.drop.color : VERDICT.rise.color;
+  const rest = Math.max(0, total - leadSum);
+  return (
+    <div className="w-full">
+      <div className="flex w-full h-3.5 gap-[2px]" role="img" aria-label={`${lead.map((m) => `${nameFor(m.geo)} ${m.diff}`).join(', ')}; all other precincts ${net < 0 ? '−' : '+'}${rest}`}>
+        {lead.map((m, i) => (
+          <span key={m.geo} title={`${nameFor(m.geo)}: ${m.diff > 0 ? '+' : '−'}${fmtInt(Math.abs(m.diff))}`} className={i === 0 ? 'rounded-l-[4px]' : ''} style={{ width: `${(Math.abs(m.diff) / denom) * 100}%`, background: col, opacity: 1 - i * 0.12 }} />
+        ))}
+        {rest > 0 && <span title={`All other precincts, net: ${net < 0 ? '−' : '+'}${fmtInt(rest)}`} className="rounded-r-[4px]" style={{ width: `${(rest / denom) * 100}%`, background: '#e4e4e8' }} />}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-[#555] leading-snug" style={{ fontVariantNumeric: 'tabular-nums' }}>
+        {lead.map((m, i) => (
+          <span key={m.geo} className="whitespace-nowrap"><span className="inline-block w-2 h-2 rounded-sm align-middle mr-1" style={{ background: col, opacity: 1 - i * 0.12 }} />{nameFor(m.geo)} {m.diff > 0 ? '+' : '−'}{fmtInt(Math.abs(m.diff))}</span>
+        ))}
+        {rest > 0 && <span className="whitespace-nowrap"><span className="inline-block w-2 h-2 rounded-sm align-middle mr-1 bg-[#e4e4e8]" />all others {net < 0 ? '−' : '+'}{fmtInt(rest)}</span>}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* SPARK — a crime's full-year NYPD totals for the last dozen years,  */
+/* with this year's pace range at the end.                            */
+/* ------------------------------------------------------------------ */
+export function Spark({ series, pace, years = 12, noun }) {
+  const W = 150; const H = 40; const pad = 5;
+  const s = series.slice(-years);
+  const hasPace = pace && !pace.tooEarly && Number.isFinite(pace.low);
+  const vals = [...s.map((d) => d.val), ...(hasPace ? [pace.low, pace.high] : [])];
+  const lo = Math.min(...vals); const hi = Math.max(...vals);
+  const n = s.length + (hasPace ? 1 : 0);
+  const X = (i) => pad + (i / Math.max(1, n - 1)) * (W - 2 * pad);
+  const Y = (v) => H - pad - ((v - lo) / Math.max(1, hi - lo)) * (H - 2 * pad);
+  const line = s.map((d, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(d.val).toFixed(1)}`).join('');
+  const last = s[s.length - 1];
+  const tip = `${noun}: ${s.map((d) => `${d.y} ${fmtInt(d.val)}`).join(', ')}${hasPace ? `; ${pace.year} pace ${fmtInt(pace.low)}-${fmtInt(pace.high)}` : ''}`;
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="shrink-0" role="img" aria-label={tip}>
+      <title>{tip}</title>
+      <path d={line} fill="none" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={X(s.length - 1)} cy={Y(last.val)} r="4" fill={C.ink} stroke={C.white} strokeWidth="2" />
+      {hasPace && (
+        <line x1={X(n - 1)} x2={X(n - 1)} y1={Y(pace.high)} y2={Math.max(Y(pace.low), Y(pace.high) + 3)} stroke={C.orange} strokeWidth="5" strokeLinecap="round" />
+      )}
+    </svg>
+  );
+}

@@ -234,11 +234,14 @@ ups = sorted([x for x in notable if x['zr'] > 0], key=lambda x: -abs(x['zr'])); 
 print(f'notable: {len(ups)} rises, {len(downs)} drops of {len(pairs)} pairs')
 LBL = {'Murder': 'Murder', 'Shooting Vic.': 'Shooting victims', 'Rape': 'Rape', 'Robbery': 'Robbery', 'Fel. Assault': 'Felony assault', 'Burglary': 'Burglary', 'G.L.A.': 'Vehicle theft', 'Gr. Larceny': 'Grand larceny'}
 def prose(v): return 'unchanged' if round(abs(v)) == 0 else f'{"down" if v < 0 else "up"} {round(abs(v))}%'
-for i, x in enumerate(ups[:1] + downs[:1]):
-    lbl = LBL[x['n']]; ch = prose((x['cc'] - x['pp']) / x['pp'] * 100); cp = prose(x['cityPct'])
-    sent = (f"From Jan. 1 to Sept. 20, {lbl[0].lower() + lbl[1:]} is {ch} in the {x['geo']} compared with the same dates in 2025; citywide, it's {cp}." if i == 0
-            else f"{lbl} is {ch} in the {x['geo']}; citywide, it's {cp}.")
-    expect(t, sent, f"trends title {x['geo']} {x['n']}")
+u0, d0 = ups[0], downs[0]
+ch = lambda x: prose((x['cc'] - x['pp']) / x['pp'] * 100)
+if u0['n'] == d0['n']:
+    title = f"{LBL[u0['n']]} is {ch(u0)} in the {u0['geo']} and {ch(d0)} in the {d0['geo'].replace(' Precinct', '')}; citywide, it's {prose(u0['cityPct'])}."
+else:
+    title = f"{LBL[u0['n']]} is {ch(u0)} in the {u0['geo']}; {LBL[d0['n']][0].lower() + LBL[d0['n']][1:]} is {ch(d0)} in the {d0['geo'].replace(' Precinct', '')}."
+expect(t, title, 'trends title')
+expect(t.upper(), 'NOTABLE TRENDS · JAN. 1-SEPT. 20 VS. THE SAME DATES IN 2025', 'trends kicker names the comparison')
 expect(t.upper(), 'CITYWIDE · YEAR TO DATE, JAN. 1-SEPT. 20, 2026, VS. THE SAME DATES IN 2025', 'kicker names the comparison')
 expect(t, f'{len(ups)} rises and {len(downs)} drops clear all three citywide so far this year', 'trends receipt counts')
 # where robbery's citywide drop came from
@@ -246,12 +249,15 @@ C, P = row('citywide', 'Robbery'); net = C - P
 moves = sorted([(k, row(k, 'Robbery')[0] - row(k, 'Robbery')[1]) for k in d if 'Precinct' in k and get(k, 'Robbery')], key=lambda m: m[1])[:5]
 listed = '; '.join(k.replace(' Precinct', '') + ', -' + str(abs(v)) for k, v in moves)
 share = round(sum(v for _, v in moves) / net * 100)
-expect(t, f'Robbery fell by {fmt(abs(net))} citywide. The five biggest precinct drops ({listed}) add up to {share}% of that.', 'robbery contributions')
+expect(t, f'Robbery -{fmt(abs(net))}', 'robbery contributions: net')
+expect(t, f'Top five: {share}%', 'robbery contributions: share')
+for k, v in moves:
+    expect(t, f"{k.replace(' Precinct', '')} -{fmt(abs(v))}", f'robbery contributions: {k}')
 # murder's run of annual declines
 mur = [(r['y'], r['Murder']) for r in hist]
 yrs_down = 0
 while yrs_down + 1 < len(mur) and mur[-1 - yrs_down][1] < mur[-2 - yrs_down][1]: yrs_down += 1
-expect(t, f'Murder: down {nw(yrs_down)} years in a row through 2025, from {fmt(mur[-1 - yrs_down][1])} in {mur[-1 - yrs_down][0]} to {fmt(mur[-1][1])}', 'murder annual run')
+expect(t, f'↓ {yrs_down} yrs through 2025', 'murder annual run')
 print(f'{oks} checks passed, {len(fails)} failed')
 print('\n'.join(fails[:40]))
 sys.exit(1 if fails else 0)

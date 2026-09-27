@@ -195,7 +195,7 @@ Don't loosen these without a reason you can defend in print.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 453 of 453 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Sept. 27, 459 of 459 checks pass, including an independent Python reimplementation of the notable-trends tests. `check.py` now also re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.
