@@ -1,33 +1,49 @@
 #!/usr/bin/env bash
-# Publishes this branch's build to https://joshgreenman1973.github.io/compstat-read-closely/
-# (repo joshgreenman1973/compstat-read-closely, build output only). Josh asked for it Sept. 26, 2026,
-# to try the page out. It's public to anyone with the link, marked noindex to stay out of search
-# engines, and separate from compstat-ledger's own Pages site and its Vercel deployment.
-# Run from anywhere; needs gh logged in as joshgreenman1973.
+# Keeps the old GitHub Pages address, https://joshgreenman1973.github.io/compstat-read-closely/
+# (repo joshgreenman1973/compstat-read-closely), forwarding to version B's home on Vercel,
+# https://compstat-in-context-b.vercel.app/. Josh moved B to Vercel on Oct. 14, 2026; until then this
+# script published the full build here. The forward keeps the path after /compstat-read-closely/, the
+# query string (?geo=, ?period=) and the #section, so links already shared still land in the right place.
+# Publish B itself with tools/deploy-vercel.sh. Run from anywhere; needs gh logged in as joshgreenman1973.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO=joshgreenman1973/compstat-read-closely
-SLUG=compstat-read-closely
+TARGET=https://compstat-in-context-b.vercel.app
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 [ "$(gh api user --jq .login)" = joshgreenman1973 ] || { echo "gh is not acting as joshgreenman1973; stopping"; exit 1; }
-SHA="$(git -C "$ROOT" rev-parse --short HEAD)"
-git -C "$ROOT" diff --quiet HEAD || echo "note: uncommitted changes are included in this build"
 
-(cd "$ROOT" && PUBLIC_URL="/$SLUG" BUILD_PATH="$WORK/site" CI=true npx react-scripts build > "$WORK/build.log" 2>&1) || { cat "$WORK/build.log"; exit 1; }
-for f in "$WORK/site/index.html" "$WORK/site/precinct-day/index.html"; do
-  sed -i '' 's#<head>#<head><meta name="robots" content="noindex,nofollow">#' "$f"
-  grep -q 'content="noindex' "$f" || { echo "noindex tag missing in $f"; exit 1; }
-done
+mkdir -p "$WORK/site/precinct-day"
+cat > "$WORK/site/index.html" <<EOF
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>CompStat in Context: B has moved</title>
+<link rel="canonical" href="$TARGET/">
+<script>
+(function () {
+  var p = location.pathname.replace(/^\/compstat-read-closely/, '') || '/';
+  location.replace('$TARGET' + p + location.search + location.hash);
+})();
+</script>
+<meta http-equiv="refresh" content="0; url=$TARGET/">
+</head>
+<body>
+<p>CompStat in Context: B has moved to <a href="$TARGET/">compstat-in-context-b.vercel.app</a>.</p>
+</body>
+</html>
+EOF
+cp "$WORK/site/index.html" "$WORK/site/precinct-day/index.html"
+cp "$WORK/site/index.html" "$WORK/site/404.html"
 printf 'User-agent: *\nDisallow: /\n' > "$WORK/site/robots.txt"
 touch "$WORK/site/.nojekyll"
 cat > "$WORK/site/README.md" <<EOF
-# CompStat in Context: B (prototype)
+# CompStat in Context: B (moved)
 
-Build output only, published for testing. An independent prototype, not an official Vital City
-product. Source: branch claude/compstat-bold-reimagining-vediu3 of joshgreenman1973/compstat-ledger,
-commit $SHA. Redeploy with tools/deploy-pages.sh there; don't edit this repo by hand.
+This address now forwards to $TARGET/. Source: branch claude/compstat-bold-reimagining-vediu3 of
+joshgreenman1973/compstat-ledger. Regenerate with tools/deploy-pages.sh there; don't edit this repo by hand.
 EOF
 
 git clone -q "https://github.com/$REPO.git" "$WORK/repo"
@@ -36,7 +52,7 @@ cp -R "$WORK/site/." "$WORK/repo/"
 cd "$WORK/repo"
 git add -A
 if git diff --cached --quiet; then echo "nothing changed; already deployed"; exit 0; fi
-git commit -q -m "Deploy $SHA" ${DEPLOY_TRAILER:+-m "$DEPLOY_TRAILER"}
+git commit -q -m "Forward to $TARGET" ${DEPLOY_TRAILER:+-m "$DEPLOY_TRAILER"}
 git branch -M main
 git push -q origin main
-echo "pushed $SHA; live in a minute or two at https://joshgreenman1973.github.io/$SLUG/"
+echo "pushed; https://joshgreenman1973.github.io/compstat-read-closely/ forwards to $TARGET/ in a minute or two"

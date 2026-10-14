@@ -28,7 +28,7 @@ It is **not** an official Vital City product and carries no Vital City branding.
 
 ## Standing rules from Josh
 
-- **One public copy, for Josh to try out.** On Sept. 26 Josh asked for it on GitHub Pages: https://joshgreenman1973.github.io/compstat-read-closely/ (repo `joshgreenman1973/compstat-read-closely`, build output only). It's public to anyone with the link but marked noindex and blocked in robots.txt. Redeploy with `bash tools/deploy-pages.sh`. Otherwise the old rule stands: don't merge to `main`, deploy anywhere else or remove the `vercel.json` block. compstat-ledger's own Pages site and Vercel deployment still serve the classic view from `main`.
+- **One public copy.** On Sept. 26 Josh asked for it on GitHub Pages; on Oct. 14 he moved it to Vercel as version B: https://compstat-in-context-b.vercel.app/ (Vercel project `compstat-in-context-b`, same account as `compstat-ledger`). It's public to anyone with the link and linked from version A, but marked noindex (meta tag, `X-Robots-Tag` header) and blocked in robots.txt. Redeploy with `bash tools/deploy-vercel.sh`. The old Pages address (repo `joshgreenman1973/compstat-read-closely`) now only forwards there; `tools/deploy-pages.sh` regenerates the forward. Otherwise the old rule stands: don't merge to `main`, deploy anywhere else or remove the `vercel.json` block. compstat-ledger's own Pages site and Vercel deployment still serve the classic view from `main`.
 - **Don't replace the original.** This is a fork. The classic view stays reachable, and `src/App.js` changed only by adding exports.
 - **Not a Vital City product.** No wordmark, logo or house branding. The footer says "An independent prototype, not an official Vital City product."
 - **Accuracy is the point.** Every number and every generated sentence must follow from NYPD's published figures. Bold framing is fine; overclaiming is not. When in doubt, say less.
@@ -51,7 +51,7 @@ npm start            # http://localhost:3000 ; classic view at ?classic=1
 - **Unit tests** (44, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
-- **Publish the test copy:** `bash tools/deploy-pages.sh` builds with the right base path, adds noindex and pushes to `joshgreenman1973/compstat-read-closely`.
+- **Publish version B:** `bash tools/deploy-vercel.sh` builds, adds noindex and uploads the build to the Vercel project `compstat-in-context-b` (project IDs in `tools/vercel-project-b.json`; needs a one-time `npx vercel login`).
 
 ## Desktop session, Sept. 26
 
@@ -123,7 +123,8 @@ Josh asked for the two versions to link to each other so readers can pick one, t
 - Here, "Version A" and the two older classic links point to the live classic site, https://compstat-ledger.vercel.app/, not `?classic=1` (this branch's copy of the classic view lacks main's corrected annual figures from PR #3). `?classic=1` still works if typed.
 - On `main`, the classic page links to the Pages copy above. That is a small change to `main`'s `src/App.js` (a constant, the switch and a link builder); nothing from this branch was merged.
 - The switch carries the place and period across: `geo` maps directly (both read the same keys), except whole boroughs, which the classic view doesn't have; `period=wtd` ↔ `tab=wtd`; 28 days has no classic equivalent and lands on year to date.
-- The Pages copy is still noindexed.
+- B moved from GitHub Pages to Vercel the same day (https://compstat-in-context-b.vercel.app/), and A links there. The old Pages address forwards, keeping the query string and #section. B is still noindexed.
+- The section nav no longer shows a scrollbar (Josh disliked it): it is wider (1,320px) and tighter, so it fits on one line from 1,280px up, and scrolls sideways without a bar below that.
 
 ## How it's built
 

@@ -927,9 +927,9 @@ export default function BoldApp() {
 
       {/* ============================ NAV ============================ */}
       <nav aria-label="Page sections" className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-[#e6e6e6] vc-noprint">
-        <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-2 flex items-center gap-1 vc-scroll-x whitespace-nowrap">
+        <div className="max-w-[1320px] mx-auto px-4 sm:px-8 py-2 flex items-center gap-1 vc-scroll-x vc-scroll-quiet whitespace-nowrap">
           {navItems.map(([id, label]) => (
-            <a key={id} href={`#${id}`} className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#555] hover:text-[#050507] px-2.5 py-1.5 rounded-full hover:bg-[#f7f8dd]">{label}</a>
+            <a key={id} href={`#${id}`} className="text-[11px] font-bold uppercase tracking-[0.1em] text-[#555] hover:text-[#050507] px-2 py-1.5 rounded-full hover:bg-[#f7f8dd]">{label}</a>
           ))}
           <span className="ml-auto pl-3 flex items-center gap-3">
             <span className="hidden xl:inline text-[12px] font-bold text-[#050507]">{isCity ? 'Citywide' : placeLabel(activeGeo)}</span>

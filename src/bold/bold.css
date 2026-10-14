@@ -7,6 +7,9 @@
 }
 .vc-hero-headline .vc-counter { color: #ff7c53; }
 .vc-scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+/* The section nav scrolls sideways on narrow screens without showing a scrollbar. */
+.vc-scroll-quiet { scrollbar-width: none; }
+.vc-scroll-quiet::-webkit-scrollbar { display: none; }
 @media print {
   .vc-noprint { display: none !important; }
 }
