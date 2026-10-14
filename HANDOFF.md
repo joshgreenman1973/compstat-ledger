@@ -116,6 +116,15 @@ Every change on the page compares a stretch of this year with the same dates a y
 - **Hover cards** on every map: the small multiples and the hero locator show a card like the main precinct map's.
 - Fixed along the way: the scale line no longer offers a change that rounds to 0.0% ("a 0.0% drop … is 1 fewer assaults"), and the signal-board receipt no longer says murder and rape are unwidened on pages where they are (precincts, and rape in boroughs); receipts show dispersion to two decimals.
 
+## Version switch (Oct. 14)
+
+Josh asked for the two versions to link to each other so readers can pick one, then renamed them: the classic page (formerly "NYPD CompStat Ledger") is now **CompStat in Context: A** and this one (formerly "CompStat, read closely") is **CompStat in Context: B**, in the mastheads, page titles and footer. Both pages open with a "Two versions" switch: Version A | Version B. Code comments, file names and the Pages URL still say "read closely."
+
+- Here, "Version A" and the two older classic links point to the live classic site, https://compstat-ledger.vercel.app/, not `?classic=1` (this branch's copy of the classic view lacks main's corrected annual figures from PR #3). `?classic=1` still works if typed.
+- On `main`, the classic page links to the Pages copy above. That is a small change to `main`'s `src/App.js` (a constant, the switch and a link builder); nothing from this branch was merged.
+- The switch carries the place and period across: `geo` maps directly (both read the same keys), except whole boroughs, which the classic view doesn't have; `period=wtd` ↔ `tab=wtd`; 28 days has no classic equivalent and lands on year to date.
+- The Pages copy is still noindexed.
+
 ## How it's built
 
 | Path | What it does |

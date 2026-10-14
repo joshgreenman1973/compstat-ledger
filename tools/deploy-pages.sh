@@ -23,7 +23,7 @@ done
 printf 'User-agent: *\nDisallow: /\n' > "$WORK/site/robots.txt"
 touch "$WORK/site/.nojekyll"
 cat > "$WORK/site/README.md" <<EOF
-# CompStat, read closely (prototype)
+# CompStat in Context: B (prototype)
 
 Build output only, published for testing. An independent prototype, not an official Vital City
 product. Source: branch claude/compstat-bold-reimagining-vediu3 of joshgreenman1973/compstat-ledger,

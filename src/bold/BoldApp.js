@@ -18,6 +18,8 @@ const popPct = (ratio) => `${Math.abs((ratio - 1) * 100).toFixed(1)}%`;
 const DATA_BASE = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/`;
 const COMPSTAT_URL = `${DATA_BASE}latest_compstat.json`;
 const VC_REVISIONS_URL = 'https://www.vitalcitynyc.org/real-crime-numbers-nyc-nypd/';
+// Version A, the classic ledger, live from main. The version switch carries the place and period across.
+const CLASSIC_URL = 'https://compstat-ledger.vercel.app/';
 
 // Used only if the RTCI feed can't be reached: full-year 2025 murders and RTCI populations from
 // the scorecard last updated 2026-06-16.
@@ -512,7 +514,7 @@ export default function BoldApp() {
   const P = useMemo(() => periodText(period, geoData), [period, geoData]);
 
   useEffect(() => {
-    if (weekEnd) document.title = `CompStat, read closely · Through ${S.apDate(weekEnd)}`;
+    if (weekEnd) document.title = `CompStat in Context: B · Through ${S.apDate(weekEnd)}`;
   }, [weekEnd]);
 
   const fragileWeeks = S.fragileThreshold(period);
@@ -654,12 +656,28 @@ export default function BoldApp() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
+  // The classic view has precincts and patrol boroughs but not whole boroughs, and no 28-day period.
+  const classicHref = (() => {
+    const p = new URLSearchParams();
+    if (activeGeo !== 'citywide' && !S.isBorough(activeGeo)) p.set('geo', activeGeo);
+    if (period === 'wtd') p.set('tab', 'wtd');
+    const qs = p.toString();
+    return CLASSIC_URL + (qs ? `?${qs}` : '');
+  })();
+
   /* ---------------- render ---------------- */
   const masthead = (
     <header className="bg-[#050507] text-white vc-noprint">
-      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-5 pb-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-3 flex items-center gap-3">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">Two versions</span>
+        <nav aria-label="Versions of this page" className="inline-flex rounded-full p-0.5 border border-white/25 bg-white/5">
+          <a href={classicHref} className="rounded-full font-bold uppercase tracking-wider whitespace-nowrap text-[10px] px-2.5 py-1 text-white/70 hover:text-white">Version A</a>
+          <span aria-current="page" className="rounded-full font-bold uppercase tracking-wider whitespace-nowrap text-[10px] px-2.5 py-1 bg-[#dde44c] text-[#050507]">Version B</span>
+        </nav>
+      </div>
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-4 pb-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, read closely</span>
+          <span className="text-[13px] font-black uppercase tracking-[0.2em] text-white whitespace-nowrap">CompStat in Context: B</span>
           <span className="rounded-full border border-white/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-white/70">Prototype</span>
         </div>
         {raw && (
@@ -1139,7 +1157,7 @@ export default function BoldApp() {
               </Receipt>
             )}
             <SourceLine>
-              Source: NYPD's Seven Major Felony Offenses table for 2000-{lastHist?.y}. Figures for 1993-1999, and for shooting incidents, come from the original CompStat Ledger's compilation: its 1993 and 1998 totals match NYPD CompStat's historical columns, and its shootings from 2006 on match NYC Open Data, but the other 1990s years couldn't be matched to a published NYPD table. This year's counts are from the NYPD CompStat report for the week ending {S.apDate(cityWeekEnd)}. Year-end figures are subject to NYPD revision.
+              Source: NYPD's Seven Major Felony Offenses table for 2000-{lastHist?.y}. Figures for 1993-1999, and for shooting incidents, come from version A's compilation: its 1993 and 1998 totals match NYPD CompStat's historical columns, and its shootings from 2006 on match NYC Open Data, but the other 1990s years couldn't be matched to a published NYPD table. This year's counts are from the NYPD CompStat report for the week ending {S.apDate(cityWeekEnd)}. Year-end figures are subject to NYPD revision.
             </SourceLine>
           </section>
         )}
@@ -1508,7 +1526,7 @@ export default function BoldApp() {
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Small numbers</h3>
-              <p>When last year's count was under {S.SMALL_BASE}, a percent change swings on a handful of crimes: two to six is "+200%." As in the original CompStat Ledger, those percentages are grayed out and starred wherever they appear, and headlines and sentences give the counts instead. The chance test handles small counts on its own, so a big percentage on a tiny base rarely clears it anyway.</p>
+              <p>When last year's count was under {S.SMALL_BASE}, a percent change swings on a handful of crimes: two to six is "+200%." As in version A, those percentages are grayed out and starred wherever they appear, and headlines and sentences give the counts instead. The chance test handles small counts on its own, so a big percentage on a tiny base rarely clears it anyway.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Population</h3>
@@ -1536,7 +1554,7 @@ export default function BoldApp() {
             </div>
           </div>
           <p className="mt-10 text-[14px] text-[#555]">
-            Want the original dashboard? <a href="?classic=1" className="underline font-bold text-[#050507]">Open the classic CompStat Ledger</a>.
+            Want the original dashboard? <a href={classicHref} className="underline font-bold text-[#050507]">Open version A</a>.
           </p>
         </section>
       </main>
@@ -1544,12 +1562,12 @@ export default function BoldApp() {
       <footer className="bg-[#050507] text-white/80">
         <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-10 flex flex-col md:flex-row md:items-end md:justify-between gap-6">
           <div>
-            <div className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat, read closely</div>
+            <div className="text-[13px] font-black uppercase tracking-[0.2em] text-white">CompStat in Context: B</div>
             <p className="mt-3 max-w-xl text-[14px] leading-snug">An independent prototype, not an official Vital City product. Data refreshes after NYPD posts each weekly CompStat report.</p>
           </div>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-[12px] font-bold uppercase tracking-[0.14em]">
             <a className="hover:underline" href="https://compstat.nypdonline.org/" target="_blank" rel="noopener noreferrer">NYPD CompStat</a>
-            <a className="hover:underline" href="?classic=1">Classic view</a>
+            <a className="hover:underline" href={classicHref}>Version A</a>
           </div>
         </div>
       </footer>
