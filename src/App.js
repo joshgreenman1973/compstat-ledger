@@ -149,6 +149,8 @@ const BL = {Bx:'Bronx',Bk:'Brooklyn',Mn:'Manhattan',Qn:'Queens',SI:'Staten Islan
 
 const GITHUB_USER = "joshgreenman1973";
 const REPO_NAME = "nypd-compstat-scraper";
+// Version B, a reimagining built from the same NYPD data (branch claude/compstat-bold-reimagining-vediu3).
+const READ_CLOSELY_URL = 'https://joshgreenman1973.github.io/compstat-read-closely/';
 const CITYWIDE_POPULATION = 8804190; // 2020 Census
 const VOLATILITY_THRESHOLD = 30;
 
@@ -1807,7 +1809,7 @@ export default function App() {
       };
       const start = parsedData.period.week_start ? fmt(parsedData.period.week_start) : null;
       const end = fmt(parsedData.period.week_end);
-      document.title = start ? `CompStat in Context · Week of ${start}–${end}` : `CompStat in Context · Through ${end}`;
+      document.title = start ? `CompStat in Context: A · Week of ${start}–${end}` : `CompStat in Context: A · Through ${end}`;
     }
   }, [parsedData.period?.week_end, parsedData.period?.week_start]);
 
@@ -2156,6 +2158,12 @@ export default function App() {
     );
   }
 
+  // Link to version B, carrying the place and period across.
+  const readCloselyParams = new URLSearchParams();
+  if (activeGeo !== 'citywide') readCloselyParams.set('geo', activeGeo);
+  if (activeTab === 'wtd') readCloselyParams.set('period', 'wtd');
+  const readCloselyHref = READ_CLOSELY_URL + (readCloselyParams.toString() ? '?' + readCloselyParams.toString() : '');
+
   // ==========================================
   // LIVE COMPSTAT DASHBOARD RENDER
   // ==========================================
@@ -2163,9 +2171,17 @@ export default function App() {
     <div className="min-h-screen pb-12 font-sans bg-white text-black text-[15px]">
       <div className="max-w-[1100px] mx-auto px-5 sm:px-8">
 
-        <header className="pt-6 pb-3 mb-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative">
+        <nav aria-label="Versions of this page" className="pt-4 flex items-center gap-3 whitespace-nowrap">
+          <span className="text-[10px] font-black uppercase tracking-wider text-gray-500">Two versions</span>
+          <div className="flex border border-gray-400 rounded overflow-hidden">
+            <span aria-current="page" className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-gray-900 text-white">Version A</span>
+            <a href={readCloselyHref} className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-white text-gray-700 hover:bg-gray-50">Version B</a>
+          </div>
+        </nav>
+
+        <header className="pt-3 pb-3 mb-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative">
           <div className="flex items-center gap-3">
-            <span className="text-[11px] font-black uppercase tracking-widest text-black">NYPD CompStat Ledger</span>
+            <span className="text-[11px] font-black uppercase tracking-widest text-black whitespace-nowrap">CompStat in Context: A</span>
             <span className="text-gray-300">•</span>
             <span className="text-[12px] font-medium text-gray-500 tabular-nums">{parsedData.period?.week_start || 'N/A'} – {parsedData.period?.week_end || 'N/A'}</span>
             <button onClick={loadReport} title="Refresh data from NYPD" aria-label="Refresh data" className="ml-2 text-gray-400 hover:text-black transition-colors"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
