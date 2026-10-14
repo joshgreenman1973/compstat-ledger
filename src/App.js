@@ -150,7 +150,7 @@ const BL = {Bx:'Bronx',Bk:'Brooklyn',Mn:'Manhattan',Qn:'Queens',SI:'Staten Islan
 const GITHUB_USER = "joshgreenman1973";
 const REPO_NAME = "nypd-compstat-scraper";
 // Version B, a reimagining built from the same NYPD data (branch claude/compstat-bold-reimagining-vediu3).
-const READ_CLOSELY_URL = 'https://joshgreenman1973.github.io/compstat-read-closely/';
+const READ_CLOSELY_URL = 'https://compstat-in-context-b.vercel.app/';
 const CITYWIDE_POPULATION = 8804190; // 2020 Census
 const VOLATILITY_THRESHOLD = 30;
 
