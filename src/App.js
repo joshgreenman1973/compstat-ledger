@@ -2412,7 +2412,7 @@ export default function App() {
                       <button key={val} onClick={() => setMapMode(val)} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-sm transition-colors ${mapMode === val ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}>{label}</button>
                     ))}
                   </div>
-                  <div className="flex gap-1 bg-gray-100 p-1 rounded border border-gray-200">
+                  <div className="flex flex-wrap gap-1 bg-gray-100 p-1 rounded border border-gray-200">
                     {[['all', 'All Major'], ['violent', 'Violent'], ['property', 'Property']].map(([val, label]) => (
                       <button key={val} onClick={() => setMapCrime(val)} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-sm transition-colors ${mapCrime === val ? 'bg-white shadow-sm text-black' : 'text-gray-500 hover:text-black'}`}>{label}</button>
                     ))}
