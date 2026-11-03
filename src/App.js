@@ -1883,7 +1883,7 @@ export default function App() {
       if (driver) {
         const dName = expandCrimeTitle(driver.name);
         const driverShareText = driver.diff > 0
-          ? `The overall surge was largely driven by **${dName}** index offenses, which account for **${Math.round(driver.share)}%** of the total citywide upward shift.`
+          ? `The overall rise was largely driven by **${dName}** index offenses, which account for **${Math.round(driver.share)}%** of the total citywide upward shift.`
           : `Nearly **${Math.round(driver.share)}%** of the total citywide drop in major index offenses can be attributed to **${dName}**, which saw **${Math.abs(driver.diff).toLocaleString()} fewer cases** than last year.`;
         const shareW = Math.min(100, driver.share);
         cards.push({ id: 'driver', icon: Target, title: 'Primary Driver', content: driverShareText,
