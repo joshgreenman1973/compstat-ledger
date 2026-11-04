@@ -116,11 +116,21 @@ Every change on the page compares a stretch of this year with the same dates a y
 - **Hover cards** on every map: the small multiples and the hero locator show a card like the main precinct map's.
 - Fixed along the way: the scale line no longer offers a change that rounds to 0.0% ("a 0.0% drop … is 1 fewer assaults"), and the signal-board receipt no longer says murder and rape are unwidened on pages where they are (precincts, and rape in boroughs); receipts show dispersion to two decimals.
 
+## Fact-check fixes (Nov. 4)
+
+An outside review (Nov. 4, 2026) found the weekly counts correct but the statistical language too strong. Changes:
+
+- Verdicts say "unusual under this model" and "doesn't clear this model's threshold" (chips: "Unusual," "Below threshold"), never "beyond chance," "within chance" or "a real change." The signal dek carries the standard line: "We flag changes that would be unusual if underlying rates were unchanged under our statistical assumptions. Reporting changes and model limitations can also produce a flag."
+- The test is described as exploratory, with the dispersion's basis (29 adjacent-week report pairs, March 1 to Sept. 20, 2026, floored at 1, blind to multiweek clustering) and a sensitivity line (how many changes clear with every dispersion factor 1.5 and 2 times as large).
+- "Fragile" is "fragile under an eight-week revision scenario," a stress test, not a confidence interval; each receipt says whether a change would be fragile under four- and 12-week scenarios.
+- Pace ranges are "illustrative ... not a 95% prediction interval." Record claims reaching before 2000 (or any shootings claim) say "in this series" and carry a provenance caveat.
+- Deferred: held-out validation and backtests of the test, the revision scenario and the pace range.
+
 ## Version switch (Oct. 14)
 
 Josh asked for the two versions to link to each other so readers can pick one, then renamed them: the classic page (formerly "NYPD CompStat Ledger") is now **CompStat in Context: A** and this one (formerly "CompStat, read closely") is **CompStat in Context: B**, in the mastheads, page titles and footer. Both pages open with a "Two versions" switch: Version A | Version B. Code comments, file names and the Pages URL still say "read closely."
 
-- Here, "Version A" and the two older classic links point to the live classic site, https://compstat-ledger.vercel.app/, not `?classic=1` (this branch's copy of the classic view lacks main's corrected annual figures from PR #3). `?classic=1` still works if typed.
+- Here, "Version A" and the two older classic links point to the live classic site, https://compstat-ledger.vercel.app/, not `?classic=1` (this branch's copy of the classic view lacks main's corrected annual figures from PR #3). `?classic=1` used to render that stale copy (a Nov. 4 fact-checker quoted its wrong 2008 robbery figure as version A's); since Nov. 4 it forwards to the live classic site instead.
 - On `main`, the classic page links to the Pages copy above. That is a small change to `main`'s `src/App.js` (a constant, the switch and a link builder); nothing from this branch was merged.
 - The switch carries the place and period across: `geo` maps directly (both read the same keys), except whole boroughs, which the classic view doesn't have; `period=wtd` ↔ `tab=wtd`; 28 days has no classic equivalent and lands on year to date.
 - B moved from GitHub Pages to Vercel the same day (https://compstat-in-context-b.vercel.app/), and A links there. The old Pages address forwards, keeping the query string and #section. B is still noindexed.

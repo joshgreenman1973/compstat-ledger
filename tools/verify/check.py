@@ -205,6 +205,8 @@ for fname, geo, per in [('cw.txt', 'citywide', 'year_to_date'), ('cw75.txt', '75
             v = h[key]
             expect(t, f'{round(abs(v))}% {"below" if v < 0 else "above"} {yr}', f'{fname} long view {yr}')
     absent(t.upper(), 'REAL DROP', f'{fname} old verdict labels gone')
+    absent(t.upper(), 'BEYOND CHANCE', f'{fname} no "beyond chance" verdicts')
+    absent(t.upper(), 'CHANCE ALONE WOULD EXPLAIN', f'{fname} no "chance alone" headline')
     absent(t.upper(), 'PRESS REPORTS', f'{fname} press layer removed')
 
 t = open(f'{SP}/cw.txt').read().replace('−', '-')
@@ -231,7 +233,7 @@ names = [n for g in ('seven_major_felonies', 'additional_stats') for n in d['cit
 tested = [n for n in names if sum(row('citywide', n)) > 0]
 real = [n for n in tested if abs(z(*row('citywide', n), phi(n))) >= 1.96]
 print('beyond chance, citywide YTD:', real)
-expect(t, f'{nw(len(real)).capitalize()} of {len(tested)} changes this year are bigger than chance', 'board title')
+expect(t, f'{nw(len(real)).capitalize()} of {len(tested)} changes this year are unusual under this model', 'board title')
 for n in ('Shooting Vic.', 'Hate Crimes', 'Misd. Assault'):
     check(n not in real, f'{n} within chance once dispersion is allowed for')
 # unit chart
@@ -283,7 +285,7 @@ for n in ['Murder', 'Shooting Vic.', 'Robbery', 'Fel. Assault', 'Rape', 'Burglar
             if zz < 0: drops += 1
             else: rises += 1
 print('crime by crime:', drops, 'drops,', rises, 'rises')
-expect(t, f'{nw(drops)} {"drop" if drops == 1 else "drops"} and {nw(rises)} {"rise" if rises == 1 else "rises"} stand out from chance so far this year', 'crime-by-crime tally')
+expect(t, f'{nw(drops)} {"drop" if drops == 1 else "drops"} and {nw(rises)} {"rise" if rises == 1 else "rises"} are unusual under this model so far this year', 'crime-by-crime tally')
 # then and now vs. 2010, redrawn precincts left out
 redrawn = SPLIT + ['120th Precinct', '121st Precinct', '122nd Precinct']
 vals = [d[k]['total_seven_major']['historical']['14_yr_pct'] for k in d if 'Precinct' in k and k not in redrawn and d[k]['total_seven_major']['historical']['14_yr_pct'] is not None]
@@ -355,10 +357,10 @@ expect(t, f'{fmt(CITY25)} New Yorkers, {(1 - CITY25 / 8804190) * 100:.1f}% fewer
 expect(t, f'from {(1 - V25["Bronx"] / C20["Bronx"]) * 100:.1f}% fewer residents in the Bronx to {(V25["Staten Island"] / C20["Staten Island"] - 1) * 100:.1f}% more on Staten Island', 'population note: range')
 absent(t, '2020 Census population:', 'no stale population label')
 # which lines go unwidened depends on the level: murder and rape citywide; neither in a precinct
-expect(t, 'Murder and rape vary no more than chance citywide', 'unwidened lines, citywide')
+expect(t, 'Murder and rape vary no more than a plain random count citywide', 'unwidened lines, citywide')
 check(phi('Murder', 'precinct') > 1 and phi('Rape', 'precinct') > 1, 'murder and rape are widened in precincts')
-absent(open(f'{SP}/cw75.txt').read(), 'vary no more than chance', 'no unwidened claim on a precinct page')
-expect(open(f'{SP}/bk.txt').read(), 'Murder varies no more than chance at this level', 'unwidened lines, borough')
+absent(open(f'{SP}/cw75.txt').read(), 'vary no more than a plain random count', 'no unwidened claim on a precinct page')
+expect(open(f'{SP}/bk.txt').read(), 'Murder varies no more than a plain random count at this level', 'unwidened lines, borough')
 # borough pages: wording, the sum note and per-resident rates on the borough's precincts' residents
 for fname, boro, phrase in (('bk.txt', 'Brooklyn', 'in Brooklyn'), ('bx.txt', 'Bronx', 'in the Bronx')):
     tb = open(f'{SP}/{fname}').read()

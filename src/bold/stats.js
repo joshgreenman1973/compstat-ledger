@@ -80,7 +80,9 @@ export function dayOfYear({ y, m, d }) {
 // people and violence clusters. So the variance is scaled by the line's measured "dispersion"
 // (variance ÷ mean of weekly counts in NYPD's archived reports, never taken below 1; see
 // dispersion.json and tools/dispersion/build_dispersion.py): z = (|c − p| − 1) ÷ √(φ(c + p)).
-// |z| ≥ 1.96 means a gap that large would show up less than 5% of the time if nothing had changed.
+// |z| ≥ 1.96 means a gap that large would show up less than 5% of the time if nothing had changed AND
+// the model's assumptions held. The page calls such a change "unusual under this model," never "real":
+// reporting changes and model limits (e.g., clustering across weeks) can also produce a flag.
 // The −1 is a continuity correction: without it, small counts get over-called (4 vs. 0 would score
 // z = 2.0 although the exact binomial test gives p = 0.125). With it, the verdict never calls a
 // change beyond chance that the exact test calls chance (checked for every pair of counts up to 150
@@ -263,7 +265,7 @@ export function revisionFlows(snapshots) {
 }
 
 // Smallest change to this year's count — in the direction that weakens the finding — that turns a
-// real change into noise. (A drop weakens as this year's count is revised up; a rise, as it's revised down.)
+// flagged change into one below the threshold. (A drop weakens as this year's count is revised up; a rise, as it's revised down.)
 export function breakEven(row) {
   if (!row || (row.verdict !== 'drop' && row.verdict !== 'rise')) return null;
   const dir = row.verdict === 'drop' ? 1 : -1;
@@ -275,8 +277,9 @@ export function breakEven(row) {
   return lo;
 }
 
-// How many weeks of revisions at the recent pace would erase a real change. "Fragile" if fewer than
+// How many weeks of revisions at the recent pace would erase a flagged change. "Fragile" if fewer than
 // REVISION_WEEKS — i.e., if the next two months of revisions looked like the last two, it could vanish.
+// Eight weeks is a chosen stress test, not a calibrated interval; the page says so and shows 4 and 12.
 // The threshold never exceeds the window's own length: a single week's count can only absorb about one
 // week's worth of revisions, a 28-day count about four.
 export function revisionRisk(row, flow, thresholdWeeks = REVISION_WEEKS) {
@@ -306,7 +309,7 @@ export function withRevisions(rows, flowsForGeo, weeks, thresholdWeeks = REVISIO
 }
 
 /* ------------------------------ verdict ----------------------------- */
-// Ordered by seriousness: the headline leads with the gravest crime that moved beyond chance.
+// Ordered by seriousness: the headline leads with the gravest crime whose change clears the threshold.
 export const HEADLINE_ORDER = ['Murder', 'Shooting Vic.', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'G.L.A.', 'Gr. Larceny'];
 // Counterpoint candidates: the high-volume violent lines a reader should not lose sight of.
 const STUCK_ORDER = ['Fel. Assault', 'Robbery', 'Rape', 'Shooting Vic.', 'Murder'];
@@ -360,8 +363,8 @@ export function buildHeadline(rows) {
     const text = cleared.length
       ? 'No major crime moved by a clear margin.'
       : fragileOnes.length
-        ? "No major crime moved by enough to outlast both chance and NYPD's revisions."
-        : 'No major crime moved more than chance alone would explain.';
+        ? 'No major crime’s change clears this model’s threshold and holds up under the revision scenario.'
+        : 'No major crime’s change clears this model’s threshold.';
     return { kind: 'noise', lead: null, counter: null, cleared, fragileOnes, sentences: [text] };
   }
   const others = eligible.filter((r) => r !== lead);
@@ -624,7 +627,7 @@ export function annualRun(series) {
 //   seasonal: this YTD ÷ (last year's same-date YTD ÷ last year's full-year total) — assumes this
 //             year's calendar shape matches last year's (the method the classic view uses);
 //   linear:   this YTD ÷ share of the calendar elapsed — assumes crime is spread evenly.
-// Neither is a forecast. Too early in the year (< 25% elapsed) we don't project at all.
+// The result is an illustrative range, not a calibrated prediction interval. Too early in the year (< 25% elapsed) we don't project at all.
 export function paceRange({ cur, priorYtd, priorFull, weekEnd, minElapsed = 0.25 }) {
   const end = parseMDY(weekEnd);
   if (!end || !Number.isFinite(cur)) return null;

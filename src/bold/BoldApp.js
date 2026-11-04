@@ -7,7 +7,7 @@ import {
 } from '../App';
 import * as S from './stats';
 import { currentPopulations, CITY_POPULATION, CITY_CENSUS_2020, ESTIMATE_DATE, boroughChange } from './population';
-import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag, Reveal, CountUp, Pct } from './ui';
+import { Chip, FragileTag, Receipt, Kicker, SectionHead, Segmented, SourceLine, Tag, Reveal, CountUp, Pct, scenarioPhrase } from './ui';
 import { SignalBoard, UnitChart, LongArc, PrecinctMap, MapLegend, PeerBars, MiniMap, SIGNAL_RAMP, PairBars, ShareBar, Spark } from './charts';
 import './bold.css';
 
@@ -132,18 +132,18 @@ function MoveItem({ x: raw, onPick, showPlace = true, status = false, max = 60, 
   const tags = [];
   if (x.notable && x.rank === 1) tags.push(<Tag key="rank" tone="accent" title={`The biggest ${lc(x.label)} ${up ? 'rise' : 'drop'} against the citywide trend of any precinct.`}>Biggest in city</Tag>);
   if (status) {
-    if (x.notable) tags.push(<Tag key="st" tone="ink" title="Clears the chance test, differs from the citywide trend and survives the correction for testing every precinct and crime.">Stands out</Tag>);
-    else if (!beyond) tags.push(<Tag key="st" tone="line" title="A change this size shows up routinely by chance.">Within chance</Tag>);
-    else if (x.fragile) tags.push(<Tag key="st" tone="line" title="Beyond chance on today's counts, but recent NYPD revisions could erase it.">Fragile</Tag>);
-    else if (Math.abs(x.zRel || 0) >= S.Z_CRIT) tags.push(<Tag key="st" tone="line" title="Beyond chance and unusual next to the city, but not once you allow for how many precincts and crimes were tested.">Close call</Tag>);
-    else tags.push(<Tag key="st" tone="soft" title="Beyond chance, but moving about as the city is.">In step with city</Tag>);
+    if (x.notable) tags.push(<Tag key="st" tone="ink" title="Unusual under this model, differs from the citywide trend and survives the correction for testing every precinct and crime.">Stands out</Tag>);
+    else if (!beyond) tags.push(<Tag key="st" tone="line" title="A change this size is common under this page’s model, even if the underlying rate hadn’t changed.">Below threshold</Tag>);
+    else if (x.fragile) tags.push(<Tag key="st" tone="line" title="Unusual under this model on today’s counts, but fragile under the revision scenario: recent NYPD revisions, continued, could erase it.">Fragile</Tag>);
+    else if (Math.abs(x.zRel || 0) >= S.Z_CRIT) tags.push(<Tag key="st" tone="line" title="Unusual under this model and next to the city, but not once you allow for how many precincts and crimes were tested.">Close call</Tag>);
+    else tags.push(<Tag key="st" tone="soft" title="Unusual under this model, but moving about as the city is.">In step with city</Tag>);
   }
   // The three-year pattern, in words a reader can check against the counts shown under the bars.
   if (x.shape && beyond) {
     const way = up ? 'Up' : 'Down';
-    if (x.shape.kind === 'again') tags.push(<Tag key="sh" tone="soft" title="The count also moved this way from 2024 to 2025, by more than chance would explain.">{way} two years running</Tag>);
-    else if (x.shape.kind === 'rebound') tags.push(<Tag key="sh" tone="warn" title={`The count ${x.shape.last === 'rise' ? 'jumped' : 'dipped'} from 2024 to 2025 by more than chance would explain. When a count swings unusually one year, it tends to swing back, so part of this year's change may be a return to normal (regression to the mean).`}>{way} after a 2025 {x.shape.last === 'rise' ? 'spike' : 'dip'}</Tag>);
-    else tags.push(<Tag key="sh" tone="soft" title="The change from 2024 to 2025 was within what chance alone produces; this year's move is the first clear one.">{way} after a flat 2025</Tag>);
+    if (x.shape.kind === 'again') tags.push(<Tag key="sh" tone="soft" title="The count also moved this way from 2024 to 2025, by enough to be unusual under this model.">{way} two years running</Tag>);
+    else if (x.shape.kind === 'rebound') tags.push(<Tag key="sh" tone="warn" title={`The count ${x.shape.last === 'rise' ? 'jumped' : 'dipped'} from 2024 to 2025 by enough to be unusual under this model. When a count swings unusually one year, it tends to swing back, so part of this year's change may be a return to normal (regression to the mean).`}>{way} after a 2025 {x.shape.last === 'rise' ? 'spike' : 'dip'}</Tag>);
+    else tags.push(<Tag key="sh" tone="soft" title="The change from 2024 to 2025 didn’t clear this model’s threshold; this year’s move is the first that does.">{way} after a flat 2025</Tag>);
   }
   const years = x.shape?.twoBack != null
     ? [[x.yearNow - 2, x.shape.twoBack], [x.yearNow - 1, x.prior], [x.yearNow, x.cur]]
@@ -196,6 +196,15 @@ const pctWord = (v) => `${Math.round(Math.abs(v))}%`;
 const joinAnd = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 // "added 8 murders" / "removed 131" / "made no net change to"
 const weeksWord = (n) => `${nw(n)} ${n === 1 ? 'week' : 'weeks'}`;
+// The span of weekly reports the dispersion estimate comes from, in AP style ("March 1 to Sept. 20, 2026").
+const dispersionSpan = (() => {
+  const m = String(S.DISPERSION_INFO.weeks || '').match(/(\d{4})-(\d{2})-(\d{2}) to (\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return 'this year';
+  const a = S.apDate(`${+m[2]}/${+m[3]}/${m[1]}`, { year: m[1] !== m[4] });
+  return `${a} to ${S.apDate(`${+m[5]}/${+m[6]}/${m[4]}`)}`;
+})();
+// Years before 2000 (and every shooting count) come from an older compilation, not NYPD's annual table.
+const EARLY_BEFORE = 2000;
 
 // The revision half of a receipt: what NYPD has been doing to this line, and what it would take to erase the verdict.
 function revisionSentence(r) {
@@ -210,8 +219,12 @@ function revisionSentence(r) {
   if (risk.direction === 'none') return `${base} ${need}, and NYPD hasn't revised this line on net in that time.`;
   if (!Number.isFinite(risk.weeksToErase)) return `${base} ${need}, and recent revisions have run the other way.`;
   const wk = risk.weeksToErase;
-  const bar = `${nw(risk.thresholdWeeks)}-week bar`;
-  return `${base} ${need}: about ${wk < 10 ? wk.toFixed(1) : Math.round(wk)} weeks at the recent pace, ${risk.fragile ? `under our ${bar}, so it's marked fragile` : `beyond our ${bar}`}.`;
+  const scen = scenarioPhrase(risk.thresholdWeeks);
+  // Other horizons, so a reader can see how much the verdict leans on the eight-week choice.
+  const alt = risk.thresholdWeeks === S.REVISION_WEEKS
+    ? ` Under a four-week scenario it ${wk < 4 ? 'would' : 'wouldn’t'} be fragile; under a 12-week one it ${wk < 12 ? 'would' : 'wouldn’t'}.`
+    : '';
+  return `${base} ${need}: about ${wk < 10 ? wk.toFixed(1) : Math.round(wk)} weeks at the recent pace, ${risk.fragile ? `so it’s fragile under ${scen}` : `so it holds up under ${scen}`}.${alt}`;
 }
 
 // Every change on the page compares a stretch of this year with the SAME dates a year earlier (CompStat's
@@ -591,6 +604,11 @@ export default function BoldApp() {
   }, [ytdCityRows, reportYear, cityWeekEnd, revs]);
   const pace = useMemo(() => (arcFlagged ? null : paceFor(arcKey)), [arcFlagged, paceFor, arcKey]);
   const claim = S.arcClaim(arcSeries, pace);
+  const earlyYear = (y) => arcKey === 'Shooting Inc.' || y < EARLY_BEFORE;
+  const earlyClaim = claim && ['record-low', 'record-high', 'low-since', 'high-since'].includes(claim.kind) && earlyYear(claim.since);
+  const earlyNote = arcKey === 'Shooting Inc.'
+    ? 'Every shooting count here comes from an older compilation, and the years before 2006 haven’t been matched to a primary NYPD source, so treat this comparison as approximate.'
+    : 'Figures before 2000 come from an older compilation, and some of those years haven’t been matched to a primary NYPD table, so treat this comparison as approximate.';
 
   /* ---------------- notable trends ---------------- */
   const isPrecinct = activeGeo.includes('Precinct');
@@ -733,7 +751,7 @@ export default function BoldApp() {
     <p key={`z-${r.name}`}>
       <strong>{r.label}:</strong> {S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} = {S.fmtSigned(r.diff)} ({S.fmtPct(r.pct)}). Chance test: (gap of {S.fmtInt(Math.abs(r.diff))}, minus 1) ÷ √({r.phi > 1 ? `${r.phi.toFixed(2)} × (` : ''}{S.fmtInt(r.cur)} + {S.fmtInt(r.prior)}{r.phi > 1 ? ')' : ''}) = <strong>z = {r.z < 0 ? '−' : ''}{Math.abs(r.z).toFixed(2)}</strong>.{' '}
       {r.phi > 1 && `The ${r.phi.toFixed(2)} allows for how much this line varies from week to week beyond a plain random count, measured from NYPD's weekly reports. `}
-      {Math.abs(r.z) >= S.Z_CRIT ? "Beyond ±1.96: if the underlying rate hadn't changed, a gap this big would show up less than 5% of the time." : "Inside ±1.96: a gap this size shows up routinely even when the underlying rate hasn't changed, so the counts can't show whether it did."}
+      {Math.abs(r.z) >= S.Z_CRIT ? 'Beyond ±1.96: unusual under this model. If the underlying rate hadn’t changed and the model’s assumptions held, a gap this big would show up less than 5% of the time.' : 'Inside ±1.96: doesn’t clear this model’s threshold. A gap this size shows up routinely even when the underlying rate hasn’t changed, so the counts can’t settle whether it did.'}
       {r.rev && <>{' '}{revisionSentence(r)}</>}
     </p>
   ));
@@ -752,7 +770,7 @@ export default function BoldApp() {
       : tr.cur > 0 ? 'Because they mostly add crimes, revisions tilt these comparisons toward decline.'
         : `On net, revisions here removed ${S.fmtInt(-tr.cur)}; if that continues, it tilts these comparisons toward increase.`;
     const priorMoved = Math.round(tr.prior) === 0 ? "didn't move" : `moved ${S.fmtSigned(tr.prior)}`;
-    return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against ${priorMoved}. ${tilt} A real change that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile and kept out of the headline.`.replace(/ {2,}/g, ' ');
+    return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against ${priorMoved}. ${tilt} A change that’s unusual under this model but that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile (a stress test, not a confidence interval) and kept out of the headline.`.replace(/ {2,}/g, ' ');
   })();
 
   // One line in the hero pointing to what stands out locally.
@@ -775,13 +793,13 @@ export default function BoldApp() {
       const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
       return x
         ? `In the ${activeGeo}, ${lc(x.label)} stands out: ${pctProse(x.pct)}, while citywide it's ${pctProse(x.cityPct)}.`
-        : `Nothing in the ${activeGeo} stands out from both chance and the citywide trend ${P.since}.`;
+        : `Nothing in the ${activeGeo} clears this model’s threshold and stands out from the citywide trend ${P.since}.`;
     }
     const r0 = scoped.rises[0]; const d0 = scoped.drops[0];
     if (r0 && d0 && r0.name === d0.name) return `${r0.label} is ${pctProse(r0.pct)} in the ${r0.geo} and ${pctProse(d0.pct)} in the ${shortName(d0.geo)}; citywide, it's ${pctProse(r0.cityPct)}.`;
     if (r0 && d0) return `${r0.label} is ${pctProse(r0.pct)} in the ${r0.geo}; ${lc(d0.label)} is ${pctProse(d0.pct)} in the ${shortName(d0.geo)}.`;
     if (r0 || d0) return moveSentence(r0 || d0);
-    return `No precinct's change in a major crime${isCity ? '' : ` ${here}`} stands out from both chance and the citywide trend ${P.since}.`;
+    return `No precinct's change in a major crime${isCity ? '' : ` ${here}`} clears this model’s threshold and stands out from the citywide trend ${P.since}.`;
   })();
 
   // Borough and patrol-borough pages highlight their precincts on the locator map (the 116th has no
@@ -803,11 +821,16 @@ export default function BoldApp() {
   const noiseCount = tested.length - realCount;
   const periodWord = period === 'ytd' ? 'this year' : period === 'd28' ? 'over 28 days' : 'this week';
   const boardTitle = realCount === 0
-    ? `None of the ${nw(tested.length)} changes ${periodWord} is bigger than chance would produce.`
+    ? `None of the ${nw(tested.length)} changes ${periodWord} clears this model’s threshold.`
     : realCount === tested.length
-      ? `All ${nw(tested.length)} changes ${periodWord} are bigger than chance would produce.`
-      : `${capFirst(nw(realCount))} of ${nw(tested.length)} changes ${periodWord} ${realCount === 1 ? 'is' : 'are'} bigger than chance would produce.`;
+      ? `All ${nw(tested.length)} changes ${periodWord} are unusual under this model.`
+      : `${capFirst(nw(realCount))} of ${nw(tested.length)} changes ${periodWord} ${realCount === 1 ? 'is' : 'are'} unusual under this model.`;
   const lumpy = tested.filter((r) => r.phi >= 1.5).sort((a, b) => b.phi - a.phi);
+  // Sensitivity: how many changes would still clear the threshold with every dispersion factor scaled up.
+  const sensitivity = tested.length ? {
+    x15: tested.filter((r) => ['drop', 'rise'].includes(S.verdictFor(S.poissonZ(r.cur, r.prior, (r.phi || 1) * 1.5)))).length,
+    x2: tested.filter((r) => ['drop', 'rise'].includes(S.verdictFor(S.poissonZ(r.cur, r.prior, (r.phi || 1) * 2)))).length,
+  } : null;
   // Some lines are hundreds of times as common as others, so one percent means very different numbers.
   const scaleNote = (() => {
     // Only lines with a real base: a 1% change on a count of two is a meaningless fraction of a crime.
@@ -820,7 +843,7 @@ export default function BoldApp() {
   })();
   const fragileRows = boardRows.filter((r) => r.fragile);
   const fragileDek = fragileRows.length
-    ? ` ${capFirst(joinAnd(fragileRows.map((r) => r.label.charAt(0).toLowerCase() + r.label.slice(1))))} ${fragileRows.length === 1 ? 'clears' : 'clear'} it today but ${fragileRows.length === 1 ? 'is' : 'are'} fragile: ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase ${fragileRows.length === 1 ? 'it' : 'them'}.`
+    ? ` ${capFirst(joinAnd(fragileRows.map((r) => r.label.charAt(0).toLowerCase() + r.label.slice(1))))} ${fragileRows.length === 1 ? 'clears' : 'clear'} the threshold today but ${fragileRows.length === 1 ? 'is' : 'are'} fragile under ${scenarioPhrase(fragileWeeks)}: ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase ${fragileRows.length === 1 ? 'it' : 'them'}.`
     : '';
 
   const navItems = [
@@ -901,7 +924,7 @@ export default function BoldApp() {
               if (headline.cleared.length) {
                 return (
                   <>
-                    <p>{capFirst(names(headline.cleared))} cleared the ordinary chance bar (|z| ≥ 1.96) but not the stricter one a headline has to clear (|z| ≥ {S.Z_HEAD.toFixed(2)}): the headline picks from eight crimes, and at 1.96 one of eight would clear by chance alone about a third of the time.</p>
+                    <p>{capFirst(names(headline.cleared))} cleared the model’s ordinary threshold (|z| ≥ 1.96) but not the stricter one a headline has to clear (|z| ≥ {S.Z_HEAD.toFixed(2)}): the headline picks from eight crimes, and at 1.96, even if no rate had changed, one of eight would clear it about a third of the time under the model.</p>
                     {headline.cleared.map(zLine)}
                   </>
                 );
@@ -909,7 +932,7 @@ export default function BoldApp() {
               if (headline.fragileOnes.length) {
                 return (
                   <>
-                    <p>{capFirst(names(headline.fragileOnes))} cleared the chance test on today's counts but {headline.fragileOnes.length === 1 ? 'is' : 'are'} fragile: {nw(fragileWeeks)} more {plural(fragileWeeks, 'week', 'weeks')} of NYPD revisions at the recent pace could erase {headline.fragileOnes.length === 1 ? 'it' : 'them'}.</p>
+                    <p>{capFirst(names(headline.fragileOnes))} cleared the model’s threshold on today’s counts but {headline.fragileOnes.length === 1 ? 'is' : 'are'} fragile under {scenarioPhrase(fragileWeeks)}: {nw(fragileWeeks)} more {plural(fragileWeeks, 'week', 'weeks')} of NYPD revisions at the recent pace could erase {headline.fragileOnes.length === 1 ? 'it' : 'them'}.</p>
                     {headline.fragileOnes.map(zLine)}
                   </>
                 );
@@ -947,7 +970,7 @@ export default function BoldApp() {
               id="trends"
               kicker={`Notable trends · ${P.tag}`}
               title={trendsTitle}
-              dek={`Every change here compares ${P.compares}. A move makes this list only if it clears the chance test, stands out from the citywide trend for that crime and holds up after correcting for the ${S.fmtInt(notable.tested)} precinct-and-crime pairs tested at once. A precinct whose robbery fell as fast as the city's isn't a local story.${period !== 'ytd' ? ' Over 28 days or a week, counts are usually too small for any precinct to clear all three; the year-to-date view has more to show.' : ''}`}
+              dek={`Every change here compares ${P.compares}. A move makes this list only if it clears this model’s threshold, stands out from the citywide trend for that crime and holds up after correcting for the ${S.fmtInt(notable.tested)} precinct-and-crime pairs tested at once. A precinct whose robbery fell as fast as the city's isn't a local story.${period !== 'ytd' ? ' Over 28 days or a week, counts are usually too small for any precinct to clear all three; the year-to-date view has more to show.' : ''}`}
             />
             {isPrecinct ? (
               <div className="max-w-3xl">
@@ -1024,7 +1047,7 @@ export default function BoldApp() {
                       const falling = cl && ['record-low', 'low-since', 'below-last'].includes(cl.kind);
                       const rising = cl && ['record-high', 'high-since', 'above-last'].includes(cl.kind);
                       const runTitle = `${run.dir < 0 ? 'Down' : 'Up'} ${nw(run.years)} ${run.years === 1 ? 'year' : 'years in a row'} through ${run.to.y}: ${S.fmtInt(run.from.val)} in ${run.from.y} to ${S.fmtInt(run.to.val)}.`;
-                      const paceTitle = pc && !pc.tooEarly ? `${reportYear} pace: ${S.fmtInt(pc.low)} to ${S.fmtInt(pc.high)}, including revisions and chance, against ${S.fmtInt(run.to.val)} in ${run.to.y}.` : '';
+                      const paceTitle = pc && !pc.tooEarly ? `${reportYear} illustrative pace range: ${S.fmtInt(pc.low)} to ${S.fmtInt(pc.high)} (two extrapolation methods and a revision scenario; not a 95% prediction interval), against ${S.fmtInt(run.to.val)} in ${run.to.y}.` : '';
                       return (
                         <Reveal as="li" key={k} className="grid grid-cols-[96px_150px] sm:grid-cols-[110px_150px_1fr] items-center gap-x-3 gap-y-1 py-2 border-b border-[#eee]">
                           <span className="text-[14px] font-bold leading-tight">{lbl}</span>
@@ -1037,14 +1060,14 @@ export default function BoldApp() {
                       );
                     })}
                   </ul>
-                  <p className="mt-2 text-[12px] text-[#707175]">Full-year NYPD totals for the last 12 years; the orange mark is this year's pace range (revisions and chance included), which has to clear {lastHist?.y ?? 'last year'} for "lower" or "higher." Rape is left out: its definition changed in 2024.</p>
+                  <p className="mt-2 text-[12px] text-[#707175]">Full-year NYPD totals for the last 12 years; the orange mark is this year’s illustrative pace range (two extrapolation methods and a revision scenario; not a 95% prediction interval), which has to clear {lastHist?.y ?? 'last year'} for "lower" or "higher." Rape is left out: its definition changed in 2024.</p>
                 </div>
               </div>
             )}
             <Receipt>
-              <p>Three bars, all required. <strong>Chance:</strong> the precinct's own change clears the chance test (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes that recent NYPD revisions could erase are left out.</p>
+              <p>Three bars, all required. <strong>The model:</strong> the precinct’s own change clears this model’s threshold (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes fragile under the revision scenario are left out.</p>
               <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them are ${here}.` : ''}</p>
-              {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the 2024 count shown. "Two years running" means the count also moved the same way from 2024 to 2025, beyond chance. "After a flat 2025" means the 2024-to-2025 change was within chance, so this year's move is the first clear one. "After a 2025 spike (or dip)" means the count swung the other way from 2024 to 2025, beyond chance; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
+              {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the 2024 count shown. “Two years running” means the count also moved the same way from 2024 to 2025, by enough to be unusual under the model. “After a flat 2025” means the 2024-to-2025 change didn’t clear the model’s threshold, so this year’s move is the first that does. “After a 2025 spike (or dip)” means the count swung the other way from 2024 to 2025, by enough to be unusual under the model; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
             </Receipt>
           </section>
         )}
@@ -1055,7 +1078,7 @@ export default function BoldApp() {
             id="signal"
             kicker="Signal or noise"
             title={boardTitle}
-            dek={`Each line compares ${P.compares}. ${scaleNote}CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them are within chance.' : 'Not all of them mean something.'} The gray band shows how big a swing chance alone could produce, given how many incidents there are and how much each line varies week to week. Dots outside it are changes too big to put down to chance. Dots inside it may still reflect a real change, but the counts can't show it.${fragileDek}`}
+            dek={`Each line compares ${P.compares}. ${scaleNote}CompStat prints a percent change next to everything. ${noiseCount > tested.length / 2 ? 'Most of them don’t clear this model’s threshold.' : 'Not all of them mean something.'} We flag changes that would be unusual if underlying rates were unchanged under our statistical assumptions. Reporting changes and model limitations can also produce a flag. The gray band shows the swings the model expects from steady rates, given how many incidents there are and how much each line varies week to week. A dot inside it may still reflect a change; the counts can’t settle it. The test is exploratory.${fragileDek}`}
             right={(
               <div className="flex flex-col items-start md:items-end gap-2">
                 <Segmented label="Show changes as" size="sm" value={boardMode} onChange={setBoardMode} options={[['pct', 'Percent'], ['count', 'Number of crimes']]} />
@@ -1066,16 +1089,17 @@ export default function BoldApp() {
           <SignalBoard rows={boardRows} fragileWeeks={fragileWeeks} mode={boardMode} />
           <Receipt>
             <p>For each line, NYPD gives two counts from windows of equal length: {P.since} and {P.cmp}. If nothing had changed, and the counts were plain random counts, z = (the gap between them, minus 1) ÷ √(this year + last year) would fall within ±1.96 about 95% of the time. The minus 1 is a standard correction that keeps small counts from being over-called.</p>
-            <p>Crime counts vary more than plain random counts: one shooting can wound several people, and violence clusters. So each line's test is widened by how much that line has actually varied from week to week in NYPD's weekly reports ({S.DISPERSION_INFO.pairs} pairs of consecutive weeks, this year and last). {lumpy.length > 0 && `Here that matters most for ${joinAnd(lumpy.slice(0, 4).map((r) => `${r.label.charAt(0).toLowerCase() + r.label.slice(1)} (${r.phi.toFixed(1)} times as variable)`))}. `}{(() => {
+            <p>Crime counts vary more than plain random counts: one shooting can wound several people, and violence clusters. So each line's test is widened by how much that line has actually varied from week to week in NYPD’s weekly reports, estimated from {S.DISPERSION_INFO.pairs} pairs of adjacent weekly reports ({dispersionSpan}), pooled by level and never set below 1. Adjacent weeks don’t capture clustering that spans several weeks, so the widening may be too small for long windows. {lumpy.length > 0 && `Here that matters most for ${joinAnd(lumpy.slice(0, 4).map((r) => `${r.label.charAt(0).toLowerCase() + r.label.slice(1)} (${r.phi.toFixed(1)} times as variable)`))}. `}{(() => {
               // Only the lines whose measured variation doesn't exceed a plain random count go unwidened; that differs by level.
               const plain = rows.filter((r) => (r.name === 'Murder' || r.name === 'Rape') && r.phi <= 1).map((r) => r.label);
-              return plain.length === 2 ? `${plain[0]} and ${plain[1].toLowerCase()} vary no more than chance ${isCity ? 'citywide' : 'at this level'}, so their tests aren't widened.`
-                : plain.length === 1 ? `${plain[0]} varies no more than chance ${isCity ? 'citywide' : 'at this level'}, so its test isn't widened.` : '';
+              return plain.length === 2 ? `${plain[0]} and ${plain[1].toLowerCase()} vary no more than a plain random count ${isCity ? 'citywide' : 'at this level'}, so their tests aren't widened.`
+                : plain.length === 1 ? `${plain[0]} varies no more than a plain random count ${isCity ? 'citywide' : 'at this level'}, so its test isn't widened.` : '';
             })()}</p>
+            {sensitivity && <p>How much the verdicts lean on that estimate: with every line’s dispersion half again as large, {nw(sensitivity.x15)} of the {nw(tested.length)} changes would clear the threshold; with it doubled, {nw(sensitivity.x2)}.</p>}
             {m && zLine(m)}
             {sv && zLine(sv)}
             {fa && zLine(fa)}
-            <p>With {nw(tested.length)} lines tested at once, about {nw(Math.max(1, Math.round(tested.length * 0.05)))} could clear the bar by chance alone, and several overlap (transit and public-housing crimes are part of the seven majors; shooting victims and shooting incidents count the same events), so these aren't {nw(tested.length)} separate findings. Weekly counts are small, which is why the weekly view is mostly within chance.</p>
+            <p>With {nw(tested.length)} lines tested at once, about {nw(Math.max(1, Math.round(tested.length * 0.05)))} could clear the bar even if no rate had changed, and several overlap (transit and public-housing crimes are part of the seven majors; shooting victims and shooting incidents count the same events), so these aren't {nw(tested.length)} separate findings. Weekly counts are small, which is why the weekly view is mostly below the threshold.</p>
             {!rapeOK && <p>Rape is marked not comparable: New York broadened the legal definition of rape on Sept. 1, 2024, and part of the prior-year window falls before that date.</p>}
           </Receipt>
         </section>
@@ -1120,17 +1144,17 @@ export default function BoldApp() {
                 if (pace.tooEarly) return `Too early in ${reportYear} to project ${noun}.`;
                 switch (claim?.kind) {
                   case 'record-low': return `At this pace, ${reportYear} would have the fewest ${noun} since at least ${claim.since}, where this series begins.`;
-                  case 'low-since': return `At this pace, ${reportYear} would have the fewest ${noun} since ${claim.since}.`;
+                  case 'low-since': return `At this pace, ${reportYear} would have the fewest ${noun} since ${claim.since}${earlyYear(claim.since) ? ' in this series' : ''}.`;
                   case 'below-last': return `${lbl} ${is} on pace to finish below ${claim.last.y}.`;
                   case 'above-last': return `${lbl} ${is} on pace to finish above ${claim.last.y}.`;
-                  case 'high-since': return `At this pace, ${reportYear} would have the most ${noun} since ${claim.since}.`;
+                  case 'high-since': return `At this pace, ${reportYear} would have the most ${noun} since ${claim.since}${earlyYear(claim.since) ? ' in this series' : ''}.`;
                   case 'record-high': return `At this pace, ${reportYear} would have the most ${noun} since at least ${claim.since}, where this series begins.`;
                   default: return `${lbl} ${is} on pace to land about where ${claim?.last?.y ?? 'last year'} did.`;
                 }
               })()}
               dek={arcFlagged
                 ? 'New York broadened its legal definition of rape on Sept. 1, 2024, to cover nonconsensual oral and anal sexual contact. NYPD has attributed part of the rise in reported rapes since then to the change.'
-                : `NYPD's annual citywide totals since 1993. The orange bar is ${reportYear}'s full-year pace, as a range that spans two ways of projecting it, NYPD's recent revisions and ordinary chance in the months left. It isn't a forecast.`}
+                : `Annual citywide totals since 1993: NYPD’s official table from 2000 and an older compilation before that. The orange bar is an illustrative full-year pace range for ${reportYear} under two extrapolation methods and a revision scenario, widened for chance in the months left; it isn’t a 95% prediction interval.${earlyClaim ? ` ${earlyNote}` : ''}`}
             />
             <div className="flex flex-wrap gap-1.5 mb-6" role="group" aria-label="Offense">
               {ARC_OPTIONS.map(([k, lbl]) => (
@@ -1157,7 +1181,7 @@ export default function BoldApp() {
               </Receipt>
             )}
             <SourceLine>
-              Source: NYPD's Seven Major Felony Offenses table for 2000-{lastHist?.y}. Figures for 1993-1999, and for shooting incidents, come from version A's compilation: its 1993 and 1998 totals match NYPD CompStat's historical columns, and its shootings from 2006 on match NYC Open Data, but the other 1990s years couldn't be matched to a published NYPD table. This year's counts are from the NYPD CompStat report for the week ending {S.apDate(cityWeekEnd)}. Year-end figures are subject to NYPD revision.
+              Source: NYPD's Seven Major Felony Offenses table for 2000-{lastHist?.y}. Figures for 1993-1999, and for shooting incidents, come from version A's compilation: its 1993 and 1998 totals match NYPD CompStat's historical columns, and its shootings from 2006 on match NYC Open Data, but 1994-1997 and 1999, and shootings before 2006, haven’t been matched to a primary NYPD source, so comparisons with those years are approximate. This year's counts are from the NYPD CompStat report for the week ending {S.apDate(cityWeekEnd)}. Year-end figures are subject to NYPD revision.
             </SourceLine>
           </section>
         )}
@@ -1174,7 +1198,7 @@ export default function BoldApp() {
                 const own = precinctList.find((x) => x.geoKey === activeGeo) || u;
                 const counted = `${measureCount(own.count)} ${P.since}`;
                 if (u.tourist || u.merged || u.rate == null || cityRate == null) {
-                  const tail = own.verdict === 'noise' ? ', within the range of chance' : own.verdict === 'rise' ? ', a rise beyond chance' : own.verdict === 'drop' ? ', a drop beyond chance' : '';
+                  const tail = own.verdict === 'noise' ? ', below this model’s threshold' : own.verdict === 'rise' ? ', a rise unusual under this model' : own.verdict === 'drop' ? ', a drop unusual under this model' : '';
                   const cmp = own.prior === 0
                     ? (own.count === 0 ? `, and none ${P.short}` : `, up from none ${P.short}`)
                     : S.smallBase(own.prior)
@@ -1197,7 +1221,7 @@ export default function BoldApp() {
               if (mapMode === 'signal') {
                 const up = precinctList.filter((u) => u.real === 'rise').length;
                 const down = precinctList.filter((u) => u.real === 'drop').length;
-                return `${capFirst(nw(up))} ${up === 1 ? 'precinct shows' : 'precincts show'} a rise in ${measureNoun} beyond chance ${P.since}, and ${nw(down)} ${down === 1 ? 'shows' : 'show'} a drop, after allowing for testing every precinct at once.`;
+                return `${capFirst(nw(up))} ${up === 1 ? 'precinct shows' : 'precincts show'} a rise in ${measureNoun} unusual under this model ${P.since}, and ${nw(down)} ${down === 1 ? 'shows' : 'show'} a drop, after allowing for testing every precinct at once.`;
               }
               if (!conc || conc.total < 20) return `${capFirst(measureNoun)} by precinct ${P.since}.`;
               const verb = measure === 'shootvic' ? 'were shot' : 'occurred';
@@ -1207,12 +1231,12 @@ export default function BoldApp() {
               ? (() => {
                 const fr = precinctList.filter((u) => u.fragile && u.sig).length;
                 const lone = precinctList.filter((u) => (u.verdict === 'drop' || u.verdict === 'rise') && !u.sig).length;
-                return `Each precinct's change compares ${P.compares}, with the same chance test used above. Because the map runs it in all ${precinctList.length} precincts at once, a precinct is colored only if it also survives a correction for that (holding false discoveries to about 5% of the precincts colored).${lone ? ` ${capFirst(nw(lone))} more ${lone === 1 ? 'clears' : 'clear'} the test on ${lone === 1 ? 'its' : 'their'} own but not after the correction.` : ''}${fr ? ` ${capFirst(nw(fr))} ${fr === 1 ? 'is' : 'are'} fragile (recent revisions could erase ${fr === 1 ? 'it' : 'them'}) and shaded as within chance.` : ''} Click a precinct to open it.`;
+                return `Each precinct's change compares ${P.compares}, with the same model test used above. Because the map runs it in all ${precinctList.length} precincts at once, a precinct is colored only if it also survives a correction for that (holding false discoveries to about 5% of the precincts colored).${lone ? ` ${capFirst(nw(lone))} more ${lone === 1 ? 'clears' : 'clear'} the test on ${lone === 1 ? 'its' : 'their'} own but not after the correction.` : ''}${fr ? ` ${capFirst(nw(fr))} ${fr === 1 ? 'is' : 'are'} fragile (recent revisions could erase ${fr === 1 ? 'it' : 'them'}) and shaded as below the threshold.` : ''} Click a precinct to open it.`;
               })()
               : 'Shaded by rate per 100,000 residents, in fifths of the precincts that recorded any. Click a precinct to open it.'}
           />
           <div className="flex flex-wrap items-center gap-3 mb-6">
-            <Segmented label="Map shading" size="sm" value={mapMode} onChange={setMapMode} options={[['rate', 'Rate per resident'], ['signal', 'Real change?']]} />
+            <Segmented label="Map shading" size="sm" value={mapMode} onChange={setMapMode} options={[['rate', 'Rate per resident'], ['signal', 'Unusual changes']]} />
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Measure">
               {Object.entries(MEASURES).map(([k, d]) => (
                 <button key={k} type="button" aria-pressed={measure === k} onClick={() => setMeasure(k)}
@@ -1228,8 +1252,8 @@ export default function BoldApp() {
             <div className="lg:col-span-2 space-y-8">
               {(mapMode === 'signal'
                 ? [
-                  ['Rises beyond chance', precinctList.filter((u) => u.real === 'rise').sort((a, b) => b.z - a.z), 'None'],
-                  ['Drops beyond chance', precinctList.filter((u) => u.real === 'drop').sort((a, b) => a.z - b.z), 'None'],
+                  ['Rises unusual under the model', precinctList.filter((u) => u.real === 'rise').sort((a, b) => b.z - a.z), 'None'],
+                  ['Drops unusual under the model', precinctList.filter((u) => u.real === 'drop').sort((a, b) => a.z - b.z), 'None'],
                 ]
                 : [
                   ['Highest rates', rateUnits.filter((u) => u.count > 0).sort((a, b) => b.rate - a.rate).slice(0, 8), '—'],
@@ -1287,12 +1311,12 @@ export default function BoldApp() {
               kicker="Crime by crime"
               title={(() => {
                 const d = smalls.reduce((n, x) => n + x.drops, 0); const r = smalls.reduce((n, x) => n + x.rises, 0);
-                return `Across ${nw(smalls.length)} crimes in ${smalls[0].n} precincts, ${nw(d)} ${plural(d, 'drop', 'drops')} and ${nw(r)} ${plural(r, 'rise', 'rises')} stand out from chance ${P.since}.`;
+                return `Across ${nw(smalls.length)} crimes in ${smalls[0].n} precincts, ${nw(d)} ${plural(d, 'drop', 'drops')} and ${nw(r)} ${plural(r, 'rise', 'rises')} are unusual under this model ${P.since}.`;
               })()}
               dek={(() => {
                 const tests = smalls.reduce((n, x) => n + x.testable, 0);
                 const lone = smalls.reduce((n, x) => n + x.raw95, 0) - smalls.reduce((n, x) => n + x.drops + x.rises, 0);
-                return `Each map compares ${P.compares}, precinct by precinct: ${S.fmtInt(tests)} tests in all. At the ordinary bar, chance alone could color up to about ${S.fmtInt(Math.round(tests * 0.05))} precincts across the maps, so a precinct is colored only if it also survives a correction for testing every precinct on its map (holding false discoveries to about 5% of the precincts colored).${lone > 0 ? ` That leaves out ${nw(lone)} ${plural(lone, 'change', 'changes')} that clear the test on ${plural(lone, 'its', 'their')} own.` : ''} Fragile changes count as within chance. Blue is a drop, red a rise, gray within chance. Click a precinct to open it.${!rapeOK ? ' Rape is left out because its legal definition changed within the comparison window.' : ''}`;
+                return `Each map compares ${P.compares}, precinct by precinct: ${S.fmtInt(tests)} tests in all. At the ordinary bar, about ${S.fmtInt(Math.round(tests * 0.05))} precincts could be colored across the maps even if no rate had changed, so a precinct is colored only if it also survives a correction for testing every precinct on its map (holding false discoveries to about 5% of the precincts colored).${lone > 0 ? ` That leaves out ${nw(lone)} ${plural(lone, 'change', 'changes')} that clear the test on ${plural(lone, 'its', 'their')} own.` : ''} Fragile changes count as below the threshold. Blue is a drop, red a rise, gray below the threshold. Click a precinct to open it.${!rapeOK ? ' Rape is left out because its legal definition changed within the comparison window.' : ''}`;
               })()}
             />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-x-5 gap-y-8">
@@ -1301,7 +1325,7 @@ export default function BoldApp() {
                 Object.values(m.units).forEach((u) => {
                   const b = u.z == null ? null : S.zBin(u.real ? u.z : 0);
                   if (b != null) fills[u.num] = SIGNAL_RAMP[b];
-                  titles[u.num] = `${u.label}: ${S.fmtInt(u.count)} vs. ${S.fmtInt(u.prior)}${u.pct != null ? ` (${S.fmtPct(u.pct, 0)})` : ''}, ${u.real ? `${u.real} beyond chance` : u.fragile && u.sig ? 'fragile' : u.verdict === 'drop' || u.verdict === 'rise' ? 'clears the test on its own, not after correcting for many precincts' : u.verdict === 'none' ? 'none either year' : 'within chance'}`;
+                  titles[u.num] = `${u.label}: ${S.fmtInt(u.count)} vs. ${S.fmtInt(u.prior)}${u.pct != null ? ` (${S.fmtPct(u.pct, 0)})` : ''}, ${u.real ? `${u.real} unusual under this model` : u.fragile && u.sig ? 'fragile' : u.verdict === 'drop' || u.verdict === 'rise' ? 'clears the test on its own, not after correcting for many precincts' : u.verdict === 'none' ? 'none either year' : 'below threshold'}`;
                 });
                 return (
                   <div key={m.name}>
@@ -1311,7 +1335,7 @@ export default function BoldApp() {
                         <span style={{ color: SIGNAL_RAMP['-2'] }} aria-hidden="true">▼</span> {m.drops} {plural(m.drops, 'drop', 'drops')} · <span style={{ color: SIGNAL_RAMP['2'] }} aria-hidden="true">▲</span> {m.rises} {plural(m.rises, 'rise', 'rises')}
                       </div>
                     </div>
-                    <MiniMap fills={fills} titles={titles} selectedNum={selectedNum} onSelect={(num) => m.units[num] && selectGeo(m.units[num].geoKey)} label={`${m.label}: ${m.drops} precincts with a drop and ${m.rises} with a rise beyond chance ${P.since}.`} />
+                    <MiniMap fills={fills} titles={titles} selectedNum={selectedNum} onSelect={(num) => m.units[num] && selectGeo(m.units[num].geoKey)} label={`${m.label}: ${m.drops} precincts with a drop and ${m.rises} with a rise unusual under this model ${P.since}.`} />
                   </div>
                 );
               })}
@@ -1402,7 +1426,7 @@ export default function BoldApp() {
             <div className="max-w-3xl"><PeerBars list={peers.list} /></div>
             <Receipt>
               {peers.list.map((c) => <p key={c.agency}>{c.isNYC ? 'New York' : `${c.agency}, ${c.state}`}: {S.fmtInt(c.murderFull)} murders ÷ {S.fmtInt(c.pop)} residents × 100,000 = {c.rate.toFixed(2)}</p>)}
-              <p>"Lower" and "about the same" use the same chance test as the rest of the page, applied to rates: a city counts as higher or lower only if the gap from New York is beyond chance, given how few murders a smaller city has.{peers.others.filter((c) => c.vsNYC === 'same').map((c) => ` ${c.agency}: z = ${c.zVsNYC.toFixed(2)}.`).join('')}</p>
+              <p>“Lower” and “about the same” use the same model test as the rest of the page, applied to rates: a city counts as higher or lower only if the gap from New York would be unusual under the model, given how few murders a smaller city has.{peers.others.filter((c) => c.vsNYC === 'same').map((c) => ` ${c.agency}: z = ${c.zVsNYC.toFixed(2)}.`).join('')}</p>
               <p>Populations are the index's own, the same source for every city; its figure for New York differs slightly from the Census Bureau estimate used elsewhere on this page.</p>
               <p>We use the full calendar year because the index's year-to-date windows differ by city (some agencies report through January, others through April), which makes year-to-date counts incomparable.</p>
             </Receipt>
@@ -1429,7 +1453,7 @@ export default function BoldApp() {
           <SectionHead
             id="ledger"
             kicker="The ledger"
-            title="Every CompStat line, with the chance test attached."
+            title="Every CompStat line, with the model test attached."
             dek={`${isCity ? 'Citywide' : placeLabel(activeGeo)}: ${P.compares}. Download it and check our work.`}
             right={(
               <button
@@ -1439,7 +1463,7 @@ export default function BoldApp() {
                   const header = ['Offense (NYPD)', 'Label', 'Current', 'Prior year', 'Change', '% change', 'z (adjusted for dispersion)', 'Dispersion', 'Verdict', 'Fragile', `Net revisions, last ${revs?.weeks ?? 0} weeks`, 'Revision break-even', 'Weeks of revisions to erase', 'Per 100k (this area)', 'Per 100k (citywide)', ...hc.map((c) => `YTD % vs ${c.year} (NYPD)`)];
                   const data = rows.map((r) => {
                     const cw = cityRows.find((x) => x.name === r.name);
-                    return [r.name, r.label, r.cur, r.prior, r.diff, r.pct == null ? '' : r.pct.toFixed(2), r.z == null ? '' : r.z.toFixed(3), r.phi?.toFixed(2) ?? '', r.verdict === 'drop' || r.verdict === 'rise' ? `${r.verdict} beyond chance` : r.verdict === 'noise' ? 'within chance' : r.verdict,
+                    return [r.name, r.label, r.cur, r.prior, r.diff, r.pct == null ? '' : r.pct.toFixed(2), r.z == null ? '' : r.z.toFixed(3), r.phi?.toFixed(2) ?? '', r.verdict === 'drop' || r.verdict === 'rise' ? `${r.verdict} unusual under model` : r.verdict === 'noise' ? 'below threshold' : r.verdict,
                       r.fragile ? 'yes' : '', r.rev ? r.rev.cur : '', r.risk ? r.risk.breakEven : '', r.risk ? (Number.isFinite(r.risk.weeksToErase) ? r.risk.weeksToErase.toFixed(1) : r.risk.direction === 'none' ? 'no recent revisions' : 'never at recent pace') : '',
                       pop && !isTourist ? ((r.cur / pop) * 100000).toFixed(2) : '', cw ? ((cw.cur / CITY_POPULATION) * 100000).toFixed(2) : '',
                       ...hc.map((c) => (longViewBlocked(r, c.year) ? 'not comparable' : Number.isFinite(r.hist?.[c.key]) ? r.hist[c.key].toFixed(2) : ''))];
@@ -1464,7 +1488,7 @@ export default function BoldApp() {
                   <th className="py-2 px-2 text-right">%</th>
                   <th className="py-2 px-2">Chance test</th>
                   {revs && <th className="py-2 px-2 text-right" title={`Net revisions NYPD made in the past ${revs.weeks} weeks to already-reported weeks of this line`}>Revised, {revs.weeks} wks</th>}
-                  {revs && <th className="py-2 px-2 text-right" title="Revisions it would take to bring a change beyond chance back within chance, and how many weeks that is at the recent pace ('opposite' = recent revisions run the other way; 'none' = no net revisions)">Cushion</th>}
+                  {revs && <th className="py-2 px-2 text-right" title="Revisions it would take to bring a flagged change back below the threshold, and how many weeks that is at the recent pace ('opposite' = recent revisions run the other way; 'none' = no net revisions)">Cushion</th>}
                   {pop && !isTourist && <th className="py-2 px-2 text-right">Per 100k</th>}
                   {!isCity && <th className="py-2 px-2 text-right">City per 100k</th>}
                   {period === 'ytd' && histCols.map((c) => <th key={c.key} className="py-2 px-2 text-right">vs. {c.year}</th>)}
@@ -1510,15 +1534,15 @@ export default function BoldApp() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 text-[16px] leading-relaxed text-[#222] max-w-5xl">
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Same numbers, fewer shortcuts</h3>
-              <p>Every count here is NYPD's own, from the weekly CompStat report. We don't adjust or smooth any of them; the only estimates on the page are the full-year pace ranges, labeled as such. What changes is the framing: CompStat puts a percent change next to every line and leaves you to guess which ones matter. This page runs each change through a chance test, draws the full annual history behind CompStat's few long-view percentages, and shows where crime concentrates.</p>
+              <p>Every count here is NYPD's own, from the weekly CompStat report. We don't adjust or smooth any of them; the only estimates on the page are the full-year pace ranges, labeled as such. What changes is the framing: CompStat puts a percent change next to every line and leaves you to guess which ones matter. This page runs each change through an exploratory chance test, draws the full annual history behind CompStat's few long-view percentages, and shows where crime concentrates.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">The chance test</h3>
-              <p>z = (the gap between this year and last, minus 1) ÷ √(dispersion × (this year + last year)). Beyond ±1.96, a change is too big to put down to chance; inside it, the counts can't tell a real change from chance, which isn't the same as no change. The minus 1 keeps small counts honest: four murders against none last year is within chance. The dispersion allows for how much each line varies from week to week beyond a plain random count, measured from NYPD's own weekly reports (shooting victims vary about twice as much, because one shooting can wound several people; murder varies no more than chance). Clusters that span several weeks aren't fully caught, so near the line, treat the verdict as a prompt, not a conclusion.</p>
+              <p>z = (the gap between this year and last, minus 1) ÷ √(dispersion × (this year + last year)). We flag changes that would be unusual if underlying rates were unchanged under our statistical assumptions (|z| ≥ 1.96). Reporting changes and model limitations can also produce a flag, and a change that doesn’t clear the threshold may still reflect a shift in the underlying rate. The minus 1 keeps small counts honest: four murders against none last year doesn’t clear it. The dispersion allows for how much each line varies from week to week beyond a plain random count (shooting victims vary about twice as much, because one shooting can wound several people; murder varies no more than a plain random count). It is estimated from {S.DISPERSION_INFO.pairs} pairs of adjacent weekly reports ({dispersionSpan}), pooled by level and never set below 1. Adjacent weeks don’t capture clustering that spans several weeks, and the test hasn’t been checked against held-out years, so treat it as exploratory: near the line, a flag is a prompt, not a conclusion.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Notable trends</h3>
-              <p>The notable-trends section looks for local stories: a precinct's change in a crime that clears the chance test, differs from the citywide trend for that crime, and survives a correction for testing every precinct and crime at once. Year to date, each move is tagged with its two-year shape. A drop right after last year's spike may be partly a return toward normal, not a new trend (<a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">regression to the mean</a>).</p>
+              <p>The notable-trends section looks for local stories: a precinct’s change in a crime that clears this model’s threshold, differs from the citywide trend for that crime, and survives a correction for testing every precinct and crime at once. Year to date, each move is tagged with its two-year shape. A drop right after last year's spike may be partly a return toward normal, not a new trend (<a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">regression to the mean</a>).</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Many tests at once</h3>
@@ -1533,8 +1557,8 @@ export default function BoldApp() {
               <p>Rates per 100,000 residents use the Census Bureau's latest estimates, for {ESTIMATE_DATE}: {S.fmtInt(CITY_POPULATION)} New Yorkers, {popPct(CITY_POPULATION / CITY_CENSUS_2020)} fewer than the 2020 Census counted. The Bureau estimates only down to boroughs, so each precinct starts from its 2020 Census count (the latest by precinct, from <a className="underline" href="https://github.com/jkeefe/census-by-precincts" target="_blank" rel="noopener noreferrer">John Keefe's crosswalk</a>) and moves by its borough's change, from {popPct(boroughChange('Bronx'))} fewer residents in the Bronx to {popPct(boroughChange('Staten Island'))} more on Staten Island. Source: <a className="underline" href="https://s-media.nyc.gov/agencies/dcp/assets/files/pdf/data-tools/population/population-estimates/new-york-city-population-estimates-and-trends-july-2026.pdf" target="_blank" rel="noopener noreferrer">City Planning's July 2026 population report</a>, Appendix A.</p>
             </div>
             <div>
-              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Pace is a range, not a forecast</h3>
-              <p>Full-year pace is shown two ways: the share of the calendar that has passed, and the share of last year's total NYPD had logged by the same date. The range is then widened for NYPD's recent revisions and for ordinary chance in the count still to come. A superlative ("fewest since…") appears only if it holds at the less flattering end of that range. Before a quarter of the year has passed, we don't project.</p>
+              <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Pace is an illustrative range</h3>
+              <p>Full-year pace is shown two ways: the share of the calendar that has passed, and the share of last year's total NYPD had logged by the same date. The range is then widened by a revision scenario ({nw(S.REVISION_WEEKS)} more weeks at the recent pace) and for ordinary chance in the count still to come. It’s an illustrative range under two extrapolation methods and a revision scenario, not a 95% prediction interval: it hasn’t been backtested on past years and leaves out some sources of uncertainty. A superlative (“fewest since…”) appears only if it holds at the less flattering end of that range, and one that reaches before 2000 rests partly on an older compilation. Before a quarter of the year has passed, we don't project.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">NYPD's base years</h3>
@@ -1546,11 +1570,11 @@ export default function BoldApp() {
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Revisions</h3>
-              <p>NYPD's weekly numbers are first counts. Victims die and assaults become murders; cases get upgraded, downgraded or filed late. <a className="underline" href={VC_REVISIONS_URL} target="_blank" rel="noopener noreferrer">A Vital City analysis by John Hall</a>, a retired police professional, found that every one of 95 monthly major-crime totals from 2018 through November 2025 was later revised upward, by 2.7% on average and 13.5% for murder. That measures how much a single month's first count grows. A year-to-date total mixes months that have already been revised with a few recent weeks that haven't, so it has much less left to grow. Last year's comparison figures have mostly settled, so revisions tilt CompStat's comparisons toward decline. We measure the recent pace from consecutive archived reports (this week's year-to-date total, minus last week's, minus this week's own count) and mark a change fragile if {nw(S.REVISION_WEEKS)} more weeks of revisions at that pace could erase it (fewer for 28-day and weekly counts, which can only absorb a few weeks' worth). Fragile changes never headline, and the full-year pace range is widened by the same allowance.</p>
+              <p>NYPD's weekly numbers are first counts. Victims die and assaults become murders; cases get upgraded, downgraded or filed late. <a className="underline" href={VC_REVISIONS_URL} target="_blank" rel="noopener noreferrer">A Vital City analysis by John Hall</a>, a retired police professional, found that every one of 95 monthly major-crime totals from 2018 through November 2025 was later revised upward, by 2.7% on average and 13.5% for murder. That measures how much a single month's first count grows. A year-to-date total mixes months that have already been revised with a few recent weeks that haven't, so it has much less left to grow. Last year's comparison figures have mostly settled, so revisions tilt CompStat's comparisons toward decline. We measure the recent pace from consecutive archived reports (this week's year-to-date total, minus last week's, minus this week's own count) and mark a change fragile if {nw(S.REVISION_WEEKS)} more weeks of revisions at that pace could erase it (fewer for 28-day and weekly counts, which can only absorb a few weeks' worth). Fragile changes never headline, and the full-year pace range is widened by the same allowance. The {nw(S.REVISION_WEEKS)}-week horizon is a chosen stress test, about two months, not a confidence interval calibrated against how past revisions played out. Revisions also reflect reclassification, not only late reports. Each receipt also says whether a change would be fragile under four- and 12-week scenarios.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">What CompStat can't see</h3>
-              <p>These are crimes reported to and recorded by police. They miss what never gets reported, and they move when reporting, classification or enforcement changes. CompStat figures are preliminary and NYPD revises them. Per-resident rates count residents only (Census Bureau estimates for {ESTIMATE_DATE}), not commuters or visitors, and are withheld where that distortion is severe.</p>
+              <p>These are crimes reported to and recorded by police. They miss what never gets reported, and they move when reporting, classification or enforcement changes. CompStat figures are preliminary and NYPD revises them. Per-resident rates count residents only (Census Bureau estimates for {ESTIMATE_DATE}), not commuters or visitors, and are withheld where that distortion is severe. A rate per resident isn’t any one person’s risk of being a victim.</p>
             </div>
           </div>
           <p className="mt-10 text-[14px] text-[#555]">

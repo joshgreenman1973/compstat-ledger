@@ -10,9 +10,9 @@ export const C = {
   cerulean: '#217ebe', hair: '#e6e6e6', paper: '#f7f7f5',
 };
 export const VERDICT = {
-  drop: { label: 'Beyond chance', title: 'A drop too big to put down to chance', glyph: '▼', color: '#217ebe', onDark: '#4e98cb', tint: '#d2e4f0' },
-  rise: { label: 'Beyond chance', title: 'A rise too big to put down to chance', glyph: '▲', color: '#e03a30', onDark: '#fb693c', tint: '#fadad7' },
-  noise: { label: 'Within chance', title: "Within the range of chance: the counts can't show whether the rate changed", glyph: '~', color: '#9b9fbc', onDark: '#9b9fbc', tint: '#ececf2' },
+  drop: { label: 'Unusual', title: 'A drop that would be unusual if the underlying rate hadn’t changed, under this page’s statistical model. Reporting changes and model limits can also produce a flag.', glyph: '▼', color: '#217ebe', onDark: '#4e98cb', tint: '#d2e4f0' },
+  rise: { label: 'Unusual', title: 'A rise that would be unusual if the underlying rate hadn’t changed, under this page’s statistical model. Reporting changes and model limits can also produce a flag.', glyph: '▲', color: '#e03a30', onDark: '#fb693c', tint: '#fadad7' },
+  noise: { label: 'Below threshold', title: 'Doesn’t clear this model’s threshold. That isn’t evidence of no change: the counts can’t settle it.', glyph: '~', color: '#9b9fbc', onDark: '#9b9fbc', tint: '#ececf2' },
   flagged: { label: 'Not comparable', glyph: '!', color: '#707175', onDark: '#b5b6ba', tint: '#eeeeee' },
   none: { label: 'Zero both years', glyph: '·', color: '#bbbbbb', onDark: '#777777', tint: '#f2f2f2' },
 };
@@ -50,11 +50,12 @@ export function Chip({ verdict, dark = false, small = false, title }) {
   );
 }
 
-// A real change that the recent pace of NYPD revisions could erase.
+// A flagged change that the recent pace of NYPD revisions could erase, under the revision scenario.
+export const scenarioPhrase = (weeks) => `${[8, 11, 18].includes(weeks) ? 'an' : 'a'} ${spell(weeks)}-week revision scenario`;
 export function FragileTag({ weeks, dark = false }) {
   return (
     <span
-      title={`Beyond chance on today's counts, but ${spell(weeks)} more ${weeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it.`}
+      title={`Unusual under this model on today’s counts, but fragile under ${scenarioPhrase(weeks)}: ${spell(weeks)} more ${weeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it. The scenario is a chosen stress test, not a confidence interval.`}
       className={`inline-flex items-center rounded-full border border-dashed px-1.5 py-[1px] text-[10px] font-bold uppercase tracking-wide whitespace-nowrap ${dark ? 'border-white/60 text-white/80' : 'border-[#707175] text-[#444]'}`}
     >
       Fragile

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from '../data/nyc_precincts.json';
-import { C, VERDICT, useWidth, Chip, FragileTag, Reveal } from './ui';
+import { C, VERDICT, useWidth, Chip, FragileTag, Reveal, scenarioPhrase } from './ui';
 import { fmtInt, fmtPct, zBin, binFor, spell, smallBase, SMALL_BASE_NOTE } from './stats';
 
 const Z_CRIT_BAND = 1.96;
@@ -9,8 +9,8 @@ const niceMax = (v) => [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100].find((s) => 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 /* ------------------------------------------------------------------ */
-/* SIGNAL BOARD — % change per offense, against the band chance alone  */
-/* could produce. Dots outside the gray band are beyond chance.        */
+/* SIGNAL BOARD — % change per offense, against the band the model     */
+/* expects if rates were unchanged. Dots outside it are flagged.       */
 /* ------------------------------------------------------------------ */
 // Nice round axis limits for counts.
 const niceCount = (v) => [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000].find((s) => s >= v) || Math.ceil(v / 50000) * 50000;
@@ -56,7 +56,7 @@ export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
           const bandHi = band != null ? pos(band) : null;
           const solid = r.verdict === 'drop' || r.verdict === 'rise';
           const faint = !isCount && smallBase(r.prior); // percent on a tiny base: grayed, as in the original ledger
-          const tip = `${r.label}: ${fmtInt(r.cur)} vs. ${fmtInt(r.prior)}, ${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))} (${fmtPct(r.pct)}).${r.z != null ? ` Chance test z = ${r.z.toFixed(2)}.` : ''}${band != null ? ` Changes within ±${isCount ? fmtInt(band) : `${band.toFixed(1)}%`} could be chance.` : ''}`;
+          const tip = `${r.label}: ${fmtInt(r.cur)} vs. ${fmtInt(r.prior)}, ${r.diff > 0 ? '+' : r.diff < 0 ? '−' : ''}${fmtInt(Math.abs(r.diff))} (${fmtPct(r.pct)}).${r.z != null ? ` Model z = ${r.z.toFixed(2)}.` : ''}${band != null ? ` Changes within ±${isCount ? fmtInt(band) : `${band.toFixed(1)}%`} don’t clear this model’s threshold.` : ''}`;
           return (
             <li key={r.name} title={tip} className="flex flex-wrap sm:flex-nowrap items-center gap-x-4 gap-y-1 py-2.5 border-b border-[#f0f0f0] vc-rise" style={{ '--d': `${i * 35}ms` }}>
               <div className="flex-1 min-w-0 sm:flex-none sm:w-[34%]">
@@ -97,11 +97,11 @@ export function SignalBoard({ rows, fragileWeeks = 8, mode = 'pct' }) {
         })}
       </Reveal>
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-[#444]">
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.drop.color }} />Drop beyond chance</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.rise.color }} />Rise beyond chance</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full border-[2.5px]" style={{ borderColor: VERDICT.noise.color }} />Within chance</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block w-6 h-3 rounded-sm bg-[#e4e4e8]" />Range chance alone could produce (95%)</span>
-        {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Beyond chance today; {spell(fragileWeeks)} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.drop.color }} />Drop, unusual under this model</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full" style={{ background: VERDICT.rise.color }} />Rise, unusual under this model</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-3.5 h-3.5 rounded-full border-[2.5px]" style={{ borderColor: VERDICT.noise.color }} />Doesn’t clear the model’s threshold</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block w-6 h-3 rounded-sm bg-[#e4e4e8]" />Range the model expects if rates were unchanged (95%)</span>
+        {rows.some((r) => r.fragile) && <span className="flex items-center gap-1.5"><FragileTag weeks={fragileWeeks} />Unusual today, but fragile under {scenarioPhrase(fragileWeeks)}: {spell(fragileWeeks)} more {fragileWeeks === 1 ? 'week' : 'weeks'} of NYPD revisions at the recent pace could erase it</span>}
         <span className="text-[#707175]">{isCount ? `Axis: ±${fmtInt(D)} crimes, shared by every line.` : `Axis capped at ±${D}%; ‹ › mark values beyond it.`}</span>
         {!isCount && rows.some((r) => smallBase(r.prior)) && <span className="text-[#707175]">* {SMALL_BASE_NOTE}</span>}
       </div>
@@ -258,8 +258,8 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
   const fillFor = (u) => {
     if (!u) return '#f4f4f4';
     if (mode === 'signal') {
-      // Colored only if the change is beyond chance after the correction for testing every precinct,
-      // and not fragile (u.real); otherwise shaded as within chance.
+      // Colored only if the change clears the model's threshold after the correction for testing every
+      // precinct, and isn't fragile (u.real); otherwise shaded as below the threshold.
       if (u.z == null) return '#f4f4f4';
       return SIGNAL_RAMP[zBin(u.real ? u.z : 0)];
     }
@@ -275,7 +275,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
   });
   return (
     <div ref={ref} className="relative w-full" onMouseMove={(e) => { const r = e.currentTarget.getBoundingClientRect(); setMouse({ x: e.clientX - r.left, y: e.clientY - r.top }); }}>
-      <svg width={w} height={h} role="img" aria-label={`Map of NYPD precincts shaded by ${mode === 'signal' ? 'whether the change in ' + measureNoun + ' is beyond chance' : measureNoun + ' per 100,000 residents'}.`}>
+      <svg width={w} height={h} role="img" aria-label={`Map of NYPD precincts shaded by ${mode === 'signal' ? 'whether the change in ' + measureNoun + ' is unusual under this model' : measureNoun + ' per 100,000 residents'}.`}>
         <defs>
           <pattern id="vc-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <line x1="0" y1="0" x2="0" y2="6" stroke="#707175" strokeOpacity="0.55" strokeWidth="1.2" />
@@ -315,7 +315,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
             {hovered.rate != null && !hovered.tourist && <div className="mt-1">{hovered.rate.toFixed(1)} per 100k residents</div>}
             {hovered.tourist && <div className="mt-1 text-[#707175] italic">Commuter and visitor hub; per-resident rate not meaningful</div>}
             {hovered.merged && <div className="mt-1 text-[#707175] italic">105th, 113th and 116th shown combined (see note)</div>}
-            {hovered.fragile && hovered.sig && <div className="mt-1 text-[#707175] italic">Fragile: recent revisions could erase this change, so the map shades it as within chance</div>}
+            {hovered.fragile && hovered.sig && <div className="mt-1 text-[#707175] italic">Fragile under the revision scenario: recent revisions, continued, could erase this change, so the map shades it as below the threshold</div>}
           </div>
           <div className="mt-1.5 text-[11px] font-bold uppercase tracking-wider text-[#ff7c53]">Click to open</div>
         </div>
@@ -326,11 +326,11 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
 
 export function MapLegend({ mode, cuts, periodNote }) {
   if (mode === 'signal') {
-    const items = [['-2', 'Strong drop'], ['-1', 'Drop'], ['0', 'Within chance'], ['1', 'Rise'], ['2', 'Strong rise']];
+    const items = [['-2', 'Strong drop'], ['-1', 'Drop'], ['0', 'Below threshold'], ['1', 'Rise'], ['2', 'Strong rise']];
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12px] text-[#444]">
         {items.map(([k, l]) => <span key={k} className="flex items-center gap-1.5"><span className="inline-block w-4 h-3 rounded-sm" style={{ background: SIGNAL_RAMP[k] }} />{l}</span>)}
-        <span className="text-[#707175]">"Strong" = beyond 99.9% of chance variation.</span>
+        <span className="text-[#707175]">“Strong” = |z| ≥ 3.29 under the model.</span>
       </div>
     );
   }

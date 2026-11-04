@@ -132,7 +132,7 @@ describe('headline', () => {
   });
   test('says so when nothing clears the bar', () => {
     const flat = ytd.map((r) => ({ ...r, verdict: 'noise' }));
-    expect(buildHeadline(flat).sentences[0]).toMatch(/chance/);
+    expect(buildHeadline(flat).sentences[0]).toBe('No major crime’s change clears this model’s threshold.');
   });
   test('frequency ratio, only on enough murders to mean something', () => {
     const f = frequencyRatio(ytd);
