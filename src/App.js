@@ -7,43 +7,21 @@ import crimeHistory from './data/crime_history.json';
 /* ------------------------------------------------------------------ */
 /* 1. HISTORICAL DATASETS & CONFIG                                    */
 /* ------------------------------------------------------------------ */
-// Citywide seven major felonies. 2000-2025: NYPD's "Seven Major Felony Offenses 2000-2025" table
-// (nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/). 1993-1999: earlier compilation.
-const CW = [
-  {y:1993,BU:100936,FA:41121,GA:111622,GL:85737,MU:1927,RA:3225,RO:85892},
-  {y:1994,BU:90383,FA:39773,GA:94523,GL:75459,MU:1582,RA:3196,RO:72550},
-  {y:1995,BU:75649,FA:35528,GA:71798,GL:65425,MU:1181,RA:3018,RO:59733},
-  {y:1996,BU:61986,FA:30615,GA:59465,GL:58690,MU:984,RA:2888,RO:49324},
-  {y:1997,BU:54866,FA:30259,GA:51312,GL:55686,MU:767,RA:2783,RO:44335},
-  {y:1998,BU:47181,FA:28848,GA:43315,GL:51461,MU:629,RA:2476,RO:39003},
-  {y:1999,BU:41348,FA:25962,GA:38976,GL:50139,MU:667,RA:2089,RO:35654},
-  {y:2000,BU:38352,FA:25924,GA:35442,GL:49631,MU:673,RA:2068,RO:32562},
-  {y:2001,BU:32763,FA:23453,GA:29531,GL:46329,MU:649,RA:1981,RO:28202},
-  {y:2002,BU:31275,FA:21147,GA:26656,GL:45771,MU:587,RA:2144,RO:27229},
-  {y:2003,BU:29110,FA:19139,GA:23413,GL:46751,MU:597,RA:2070,RO:25989},
-  {y:2004,BU:26976,FA:18622,GA:20884,GL:48763,MU:570,RA:1905,RO:24373},
-  {y:2005,BU:24117,FA:17750,GA:18246,GL:48243,MU:539,RA:1858,RO:24722},
-  {y:2006,BU:23143,FA:17309,GA:15745,GL:46625,MU:596,RA:1525,RO:23739},
-  {y:2007,BU:21762,FA:17493,GA:13174,GL:44924,MU:496,RA:1351,RO:21809},
-  {y:2008,BU:20725,FA:16284,GA:12482,GL:44242,MU:523,RA:1299,RO:22401},
-  {y:2009,BU:19430,FA:16773,GA:10670,GL:39580,MU:471,RA:1205,RO:18601},
-  {y:2010,BU:18600,FA:16956,GA:10329,GL:37835,MU:536,RA:1373,RO:19486},
-  {y:2011,BU:18720,FA:18482,GA:9314,GL:38501,MU:515,RA:1420,RO:19717},
-  {y:2012,BU:19168,FA:19381,GA:8093,GL:42497,MU:419,RA:1445,RO:20144},
-  {y:2013,BU:17429,FA:20297,GA:7400,GL:45368,MU:335,RA:1378,RO:19128},
-  {y:2014,BU:16765,FA:20207,GA:7664,GL:43862,MU:333,RA:1352,RO:16539},
-  {y:2015,BU:15125,FA:20270,GA:7332,GL:44005,MU:352,RA:1438,RO:16931},
-  {y:2016,BU:12990,FA:20847,GA:6327,GL:44279,MU:335,RA:1438,RO:15500},
-  {y:2017,BU:12083,FA:20052,GA:5676,GL:43150,MU:292,RA:1449,RO:13956},
-  {y:2018,BU:11687,FA:20208,GA:5428,GL:43558,MU:295,RA:1794,RO:12913},
-  {y:2019,BU:10783,FA:20698,GA:5430,GL:43250,MU:319,RA:1755,RO:13371},
-  {y:2020,BU:15478,FA:20572,GA:9037,GL:35505,MU:468,RA:1427,RO:13106},
-  {y:2021,BU:12811,FA:22835,GA:10415,GL:40870,MU:488,RA:1491,RO:13831},
-  {y:2022,BU:15746,FA:26063,GA:13749,GL:51565,MU:438,RA:1617,RO:17411},
-  {y:2023,BU:13773,FA:27876,GA:15795,GL:50586,MU:391,RA:1455,RO:16910},
-  {y:2024,BU:13070,FA:29461,GA:14199,GL:48450,MU:382,RA:1748,RO:16580},
-  {y:2025,BU:12798,FA:29838,GA:13523,GL:48061,MU:309,RA:2048,RO:15075},
-];
+// Citywide seven major felonies, recorded complaints, one row per year. Read from
+// src/data/crime_history.json so the charts, narrative and trajectory badges share one series.
+// 2000-2025: NYPD's "Seven Major Felony Offenses 2000-2025" table
+// (nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/), matched value
+// for value. 1993-1999 and shooting incidents: an earlier compilation with no matched NYPD table.
+const HISTORY_SOURCE_NOTE = 'Annual citywide totals of recorded complaints. 2000–2025: NYPD, “Seven Major Felony Offenses 2000–2025.” 1993–1999: an earlier compilation of NYPD figures not yet matched to a published NYPD table.';
+const CW = crimeHistory.citywide.map(r => ({
+  y: r.y, BU: r['Burglary'], FA: r['Fel. Assault'], GA: r['G.L.A.'], GL: r['Gr. Larceny'],
+  MU: r['Murder'], RA: r['Rape'], RO: r['Robbery'],
+}));
+const CW_FIRST = CW[0];
+const CW_LAST = CW[CW.length - 1];
+const pctVs = (v, base) => Math.round((v / base - 1) * 100);
+const shareOf = (d, keys) => Math.round(keys.reduce((t, k) => t + d[k], 0) / ['BU', 'FA', 'GA', 'GL', 'MU', 'RA', 'RO'].reduce((t, k) => t + d[k], 0) * 100);
+const FA_LOW = CW.reduce((lo, d) => (d.FA < lo.FA ? d : lo), CW_FIRST);
 
 const MA_CW = {2000:57304,2001:57753,2002:52469,2003:51298,2004:52158,2005:52408,2006:52169,2007:51429,2008:50310,2009:50216,2010:52716,2011:50972,2012:54495,2013:53738,2014:53847,2015:42654,2016:42422,2017:41665,2018:43126,2019:42529,2020:33400,2021:36553,2022:41161,2023:44151,2024:47738};
 
@@ -151,8 +129,14 @@ const GITHUB_USER = "joshgreenman1973";
 const REPO_NAME = "nypd-compstat-scraper";
 // Version B, a reimagining built from the same NYPD data (branch claude/compstat-bold-reimagining-vediu3).
 const READ_CLOSELY_URL = 'https://compstat-in-context-b.vercel.app/';
-const CITYWIDE_POPULATION = 8804190; // 2020 Census
+const CITYWIDE_POPULATION = 8804190; // 2020 Census count (April 1, 2020)
+// Every per-100k rate on this page divides by 2020 Census residents. Shown beside rates.
+const POP_BASIS = '2020 Census residents';
 const VOLATILITY_THRESHOLD = 30;
+// The scraper's long-view field names are legacy labels from 2024, not durations. NYPD's report
+// compares the same dates in 2010 and 1993 (16 and 33 years back in 2026). '2_yr_pct' is vs. two
+// years earlier.
+const HIST_FIELDS = { vs2010: '14_yr_pct', vs1993: '31_yr_pct' };
 
 const VC = {
   black: "#050507", white: "#fff", cloud: "#ddd", orange: "#ff7c53",
@@ -457,28 +441,51 @@ const AnchorLink = ({ id, label, size = 14, className = "" }) => {
 /* Source: realtimecrimeindex.com                                      */
 /* ------------------------------------------------------------------ */
 const RTCI_CSV_URL = 'https://raw.githubusercontent.com/AH-Datalytics/rtci/main/docs/app_data/scorecard.csv';
-const rtciRate = (count, pop) => +((count / pop) * 100000).toFixed(1);
+const rtciRate = (count, pop) => (count == null || !pop ? null : +((count / pop) * 100000).toFixed(1));
 
-// Fallback data in case fetch fails
+// The comparison uses the scorecard's previous_year_full column: the last complete calendar year.
+// Its year-to-date columns cover different months for different cities (some through January,
+// some through April), and a partial year divided by population is not an annual rate.
+// Cities are keyed by agency AND state, because "Jacksonville" matches cities in Florida and North
+// Carolina. A count that is blank, "NA" or zero in every column is missing, not zero.
+const RTCI_NYC_KEY = 'New York City|New York';
+
+// Cached copy, used only for a city the live scorecard can't supply for the same year (or for every
+// city if the scorecard can't be reached). Calendar-year 2025 counts and RTCI populations from the
+// scorecard last updated June 16, 2026. null = not reported.
+const RTCI_FALLBACK_YEAR = 2025;
+const RTCI_FALLBACK_UPDATED = '2026-06-16';
 const RTCI_FALLBACK = [
-  { city: 'New York City', pop: 8184044, murder: 305, violent: 47211, property: 74331, isNYC: true },
-  { city: 'Los Angeles',   pop: 3786018, murder: 225, violent: 25854, property: 86495 },
-  { city: 'Chicago',       pop: 2628298, murder: 424, violent: 21595, property: 72438 },
-  { city: 'Houston',       pop: 2304406, murder: 270, violent: 21219, property: 91409 },
-  { city: 'Philadelphia',  pop: 1550843, murder: 221, violent: 12772, property: 67170 },
-];
-const RTCI_FALLBACK_PERIOD = 'Dec 2025';
-const RTCI_FALLBACK_UPDATED = '2026-02-17';
+  ['New York City', 'New York', 8496850, 305, 47211, 74331],
+  ['Los Angeles', 'California', 3874484, 224, 25903, 86655],
+  ['Chicago', 'Illinois', 2715488, 429, 21605, 72660],
+  ['Houston', 'Texas', 2362928, 272, 21362, 92047],
+  ['Phoenix', 'Arizona', 1688662, 128, 11738, 34374],
+  ['Philadelphia', 'Pennsylvania', 1562379, 224, 12844, 67348],
+  ['San Antonio', 'Texas', 1549295, 105, 8206, 60473],
+  ['San Diego', 'California', 1409432, 32, 5655, 21809],
+  ['Dallas', 'Texas', 1246336, 139, 7660, 40704],
+  ['Jacksonville', 'Florida', 1008920, 80, null, null],
+  ['Baltimore', 'Maryland', 562811, 133, 8390, 23481],
+  ['Boston', 'Massachusetts', 671262, 25, 3916, 12857],
+  ['Pittsburgh', 'Pennsylvania', 306794, 34, 1520, 8830],
+  ['Washington', 'District of Columbia', 693645, 127, 1446, 21664],
+  ['Buffalo', 'New York', 276384, 30, 1925, 9431],
+].map(([city, state, pop, murder, violent, property]) => ({
+  key: `${city}|${state}`, city, state, pop, murder, violent, property,
+  fullYear: RTCI_FALLBACK_YEAR, isNYC: city === 'New York City',
+}));
 
-// Comparison groups — cities must match agency_name in RTCI CSV
+// Comparison groups, as agency|state keys from the RTCI CSV
 const RTCI_GROUPS = [
-  { key: 'largest5', label: '5 Largest', cities: ['New York City', 'Los Angeles', 'Chicago', 'Houston', 'Philadelphia'] },
-  { key: 'largest10', label: '10 Largest', cities: ['New York City', 'Los Angeles', 'Chicago', 'Houston', 'Phoenix', 'Philadelphia', 'San Antonio', 'San Diego', 'Dallas', 'Jacksonville'] },
-  { key: 'northeast', label: 'Northeast', cities: ['New York City', 'Philadelphia', 'Baltimore', 'Boston', 'Pittsburgh', 'Washington', 'Buffalo'] },
+  { key: 'largest5', label: '5 Largest', cities: ['New York City|New York', 'Los Angeles|California', 'Chicago|Illinois', 'Houston|Texas', 'Philadelphia|Pennsylvania'] },
+  { key: 'largest10', label: '10 Largest', cities: ['New York City|New York', 'Los Angeles|California', 'Chicago|Illinois', 'Houston|Texas', 'Phoenix|Arizona', 'Philadelphia|Pennsylvania', 'San Antonio|Texas', 'San Diego|California', 'Dallas|Texas', 'Jacksonville|Florida'] },
+  { key: 'northeast', label: 'Northeast', cities: ['New York City|New York', 'Philadelphia|Pennsylvania', 'Baltimore|Maryland', 'Boston|Massachusetts', 'Pittsburgh|Pennsylvania', 'Washington|District of Columbia', 'Buffalo|New York'] },
 ];
+const RTCI_TYPES = { murder: 'murder', violent_crime: 'violent', property_crime: 'property' };
 
 function parseRTCIcsv(csvText) {
-  const lines = csvText.trim().split('\n');
+  const lines = csvText.trim().split(/\r?\n/);
   if (lines.length < 2) return null;
   const parseRow = (line) => {
     const vals = []; let cur = '', inQuote = false;
@@ -494,28 +501,38 @@ function parseRTCIcsv(csvText) {
   const headers = parseRow(lines[0]);
   const rows = lines.slice(1).map(parseRow);
   const nameI = headers.indexOf('agency_name');
+  const stateI = headers.indexOf('state_name');
   const typeI = headers.indexOf('crime_type');
-  const curI = headers.indexOf('current_year_ytd');
+  const fullI = headers.indexOf('previous_year_full');
   const popI = headers.indexOf('population');
   const updI = headers.indexOf('last_updated');
   const rangeI = headers.indexOf('ytd_month_range');
-  if (nameI < 0 || typeI < 0 || curI < 0 || popI < 0) return null;
+  if ([nameI, stateI, typeI, fullI, popI, rangeI].some(i => i < 0)) return null;
+  const countCols = ['two_years_prior_full', 'previous_year_full', 'two_years_prior_ytd', 'previous_year_ytd', 'current_year_ytd']
+    .map(h => headers.indexOf(h)).filter(i => i >= 0);
 
   const cityMap = {};
-  let period = '', updated = '';
+  let updated = '';
   rows.forEach(r => {
-    const name = r[nameI], type = r[typeI];
-    const count = parseInt(r[curI], 10) || 0;
+    const type = RTCI_TYPES[r[typeI]];
+    if (!type) return;
+    const key = `${r[nameI]}|${r[stateI]}`;
+    // "Jan - Apr 2026" -> the previous full year is 2025
+    const ym = (r[rangeI] || '').match(/(\d{4})\s*$/);
+    const fullYear = ym ? +ym[1] - 1 : null;
+    let count = /^\d+$/.test(r[fullI] || '') ? parseInt(r[fullI], 10) : null;
+    if (count === 0 && countCols.every(i => !(parseFloat(r[i]) > 0))) count = null; // nothing reported
     const pop = parseInt(r[popI], 10) || 0;
-    if (!period && r[rangeI]) period = r[rangeI].replace(/^.*?- /, '').replace('Jan - ', '').trim();
-    if (!updated && r[updI]) updated = r[updI];
-    if (!cityMap[name]) cityMap[name] = { city: name, pop, murder: 0, violent: 0, property: 0, isNYC: name === 'New York City' };
-    if (type === 'murder') cityMap[name].murder = count;
-    else if (type === 'violent_crime') cityMap[name].violent = count;
-    else if (type === 'property_crime') cityMap[name].property = count;
-    if (pop > 0) cityMap[name].pop = pop;
+    if (!cityMap[key]) cityMap[key] = { key, city: r[nameI], state: r[stateI], pop, fullYear, murder: null, violent: null, property: null, isNYC: key === RTCI_NYC_KEY };
+    const c = cityMap[key];
+    if (c.fullYear !== fullYear) c.mixedYears = true;
+    c[type] = count;
+    if (pop > 0) c.pop = pop;
+    if (!updated && updI >= 0 && r[updI]) updated = r[updI].slice(0, 10);
   });
-  return { cities: cityMap, period, updated };
+  // A violent-crime total equal to the murder count means only murders were reported.
+  Object.values(cityMap).forEach(c => { if (c.violent != null && c.violent === c.murder) c.violent = null; });
+  return { cities: cityMap, updated };
 }
 
 // Sequential color scale for choropleth: light neutral → orange → magenta
@@ -758,22 +775,24 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
   const group = RTCI_GROUPS.find(g => g.key === activeGroup) || RTCI_GROUPS[0];
 
   const allCities = rtciData?.cities || {};
-  const period = rtciData?.period || RTCI_FALLBACK_PERIOD;
   const updated = rtciData?.updated || RTCI_FALLBACK_UPDATED;
+  // Every city shown must cover the same calendar year as New York.
+  const year = allCities[RTCI_NYC_KEY]?.fullYear || RTCI_FALLBACK_YEAR;
+  const cityName = (c) => (c.city === 'New York City' ? 'New York' : c.city);
 
-  const citiesForGroup = group.cities.map(name => {
-    if (allCities[name]) return allCities[name];
-    const fb = RTCI_FALLBACK.find(c => c.city === name);
-    return fb || null;
-  }).filter(Boolean);
+  const citiesForGroup = group.cities.map(key => {
+    const live = allCities[key];
+    if (live && live.fullYear === year && !live.mixedYears && live[activeMetric] != null) return live;
+    const fb = RTCI_FALLBACK.find(c => c.key === key);
+    if (fb && fb.fullYear === year && fb[activeMetric] != null) return { ...fb, cached: true };
+    return null;
+  });
+  const notShown = group.cities.filter((key, i) => !citiesForGroup[i]).map(key => key.split('|')[0]);
 
-  if (!citiesForGroup.find(c => c.isNYC)) {
-    const nyc = allCities['New York City'] || RTCI_FALLBACK.find(c => c.isNYC);
-    if (nyc) citiesForGroup.unshift(nyc);
-  }
-
-  const ranked = citiesForGroup.map(c => ({ ...c, rate: rtciRate(c[activeMetric], c.pop) }))
+  const ranked = citiesForGroup.filter(c => c && c.pop > 0)
+    .map(c => ({ ...c, rate: rtciRate(c[activeMetric], c.pop) }))
     .sort((a, b) => a.rate - b.rate);
+  const anyCached = ranked.some(c => c.cached);
   const maxRate = ranked.length > 0 ? ranked[ranked.length - 1].rate : 1;
 
   return (
@@ -781,7 +800,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
           <h3 className="text-[10px] font-black uppercase tracking-[0.15em] text-gray-400 flex items-center gap-2">How NYC Compares <AnchorLink id="national" label="How NYC Compares" size={12} /></h3>
-          <p className="text-[13px] font-serif text-gray-600 mt-0.5">12-month rolling {metric.label.toLowerCase()} rate {metric.unit}</p>
+          <p className="text-[13px] font-serif text-gray-600 mt-0.5">{metric.label} rate {metric.unit} residents, full calendar year {year}</p>
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex bg-white p-1 rounded border border-gray-200">
@@ -809,7 +828,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
           return (
             <div key={c.city} className="flex items-center gap-3">
               <span className={`w-28 text-right text-[12px] ${isNYC ? 'font-black text-gray-900' : 'font-medium text-gray-500'}`}>
-                {c.city === 'New York City' ? 'New York' : c.city}
+                {cityName(c)}{c.cached && <span title={`Cached copy of the scorecard updated ${RTCI_FALLBACK_UPDATED}`}>†</span>}
               </span>
               <div className="flex-1 h-5 bg-gray-200 rounded-sm overflow-hidden relative">
                 <div className={`h-full rounded-sm ${isNYC ? 'bg-gray-900' : 'bg-gray-400'}`}
@@ -829,15 +848,19 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
       )}
       <div className="mt-4 pt-3 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-[10px] text-gray-400">
-          Data through {period} · Updated {updated} · UCR Part I offenses · FBI population estimates
+          Calendar year {year}, the latest complete year in the scorecard. Year-to-date counts aren’t used because cities report through different months. Scorecard updated {updated} · populations as published by the index.
+          {anyCached && <> † Cached copy of the scorecard updated {RTCI_FALLBACK_UPDATED}.</>}
+          {notShown.length > 0 && <> Left out for lack of a {year} {metric.label.toLowerCase()} figure: {notShown.join(', ')}.</>}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           {downloadCSV && (
             <button
               onClick={() => {
-                const header = ['City', 'Population', 'Murder', 'Violent Crime', 'Property Crime', 'Murder per 100k', 'Violent per 100k', 'Property per 100k'];
+                const header = ['City', 'State', 'Year', 'Population', 'Murder', 'Violent Crime', 'Property Crime', 'Murder per 100k', 'Violent per 100k', 'Property per 100k', 'Source'];
                 const data = ranked.map(c => [
                   c.city,
+                  c.state,
+                  c.fullYear,
                   c.pop,
                   c.murder,
                   c.violent,
@@ -845,6 +868,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
                   rtciRate(c.murder, c.pop),
                   rtciRate(c.violent, c.pop),
                   rtciRate(c.property, c.pop),
+                  c.cached ? `cached scorecard ${RTCI_FALLBACK_UPDATED}` : `scorecard ${updated}`,
                 ]);
                 downloadCSV(`city_comparison_${activeMetric}_${activeGroup}.csv`, [header, ...data]);
               }}
@@ -999,6 +1023,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
   const wtd = transit.week_to_date || {};
   const m28 = transit.twenty_eight_day || {};
   const hist = transit.historical || {};
+  const reportYear = parseInt((period.week_end || '').slice(-4), 10) || new Date().getFullYear();
 
   // Sort the offense rows
   const rowsAll = (breakdown?.rows || []).filter(r => r.cur > 0 || r.prior > 0);
@@ -1064,10 +1089,10 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
           <div className="flex flex-col gap-1.5 text-[13px]">
             <span className="text-[11px] font-black uppercase tracking-widest text-gray-500">Long view</span>
             {hist['2_yr_pct'] != null && (
-              <span className="text-gray-600">vs 2 yrs ago <strong className="tabular-nums ml-1" style={{ color: pctColor(hist['2_yr_pct']) }}>{fmtPct(hist['2_yr_pct'])}</strong></span>
+              <span className="text-gray-600">vs. same dates {reportYear - 2} <strong className="tabular-nums ml-1" style={{ color: pctColor(hist['2_yr_pct']) }}>{fmtPct(hist['2_yr_pct'])}</strong></span>
             )}
-            {hist['14_yr_pct'] != null && (
-              <span className="text-gray-600">vs 14 yrs ago <strong className="tabular-nums ml-1" style={{ color: pctColor(hist['14_yr_pct']) }}>{fmtPct(hist['14_yr_pct'])}</strong></span>
+            {hist[HIST_FIELDS.vs2010] != null && (
+              <span className="text-gray-600">vs. same dates 2010 <strong className="tabular-nums ml-1" style={{ color: pctColor(hist[HIST_FIELDS.vs2010]) }}>{fmtPct(hist[HIST_FIELDS.vs2010])}</strong></span>
             )}
           </div>
         </div>
@@ -1326,7 +1351,7 @@ const PrecinctMap = ({ precinctRates, onSelect, activeGeo, mapMode = 'rate', wid
             <div className="font-bold text-black">{hoveredData.count.toLocaleString()} incidents</div>
             {hoveredData.rate != null && (
               <div className="text-gray-600">
-                {hoveredData.rate.toFixed(1)} per 100k
+                {hoveredData.rate.toFixed(1)} per 100k ({POP_BASIS})
                 {hoveredData.isTourist ? <span className="text-gray-400 italic"> (residents only — not comparable)</span> : rankInfo ? ` · Rank ${rankInfo.rank} of ${rankInfo.total}` : ''}
               </div>
             )}
@@ -1669,12 +1694,12 @@ export default function App() {
       .then(r => r.ok ? r.text() : Promise.reject('fetch failed'))
       .then(csv => {
         const parsed = parseRTCIcsv(csv);
-        if (parsed) setRtciData(parsed);
+        if (!parsed) throw new Error('unreadable scorecard');
+        setRtciData(parsed);
       })
       .catch(() => {
-        const fallbackMap = {};
-        RTCI_FALLBACK.forEach(c => { fallbackMap[c.city] = c; });
-        setRtciData({ cities: fallbackMap, period: RTCI_FALLBACK_PERIOD, updated: RTCI_FALLBACK_UPDATED });
+        // Nothing live: the widget falls back to the cached copy, row by row, and marks each one.
+        setRtciData({ cities: {}, updated: RTCI_FALLBACK_UPDATED });
       });
   }, []);
 
@@ -1992,6 +2017,7 @@ export default function App() {
               <button onClick={() => setAppView('live')} className="text-gray-400 hover:text-white uppercase tracking-widest text-[11px] font-bold flex items-center gap-2 mb-8 transition-colors"><ArrowLeft size={14}/> Back to Live Dashboard</button>
               <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4 leading-tight font-serif">The 30-Year Transformation of NYC Crime</h1>
               <p className="text-lg text-gray-400 font-serif max-w-3xl leading-relaxed">Beyond the weekly CompStat fluctuations lies a deeper story. Over three decades, the volume, composition, and geographic distribution of crime in New York City has fundamentally rewritten itself.</p>
+              <p className="text-[12px] text-gray-500 font-serif max-w-3xl leading-relaxed mt-4">{HISTORY_SOURCE_NOTE}</p>
            </div>
         </div>
 
@@ -2035,7 +2061,7 @@ export default function App() {
             <div className="lg:col-span-1 space-y-4 order-1 lg:order-2">
                <div className="text-[#e7466d] text-[10px] font-black uppercase tracking-widest">Composition</div>
                <h2 className="text-2xl font-black leading-snug">The DNA of Crime Has Mutated</h2>
-               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">In 1993, Burglary and Auto Theft made up half of all major crime. Today, they account for barely a fifth. Meanwhile, Grand Larceny and Felony Assault have consumed the chart, now making up 64% of the entire index.</p>
+               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">In {CW_FIRST.y}, burglary and auto theft made up {shareOf(CW_FIRST, ['BU', 'GA'])}% of all major crime. In {CW_LAST.y}, they accounted for {shareOf(CW_LAST, ['BU', 'GA'])}%. Grand larceny and felony assault made up {shareOf(CW_LAST, ['GL', 'FA'])}% of the {CW_LAST.y} index.</p>
                <div className="flex flex-wrap gap-x-3 gap-y-2 mt-4">
                  {K7.map(c=><div key={c} className="flex items-center gap-1.5 text-[10px] text-gray-500 uppercase tracking-wider"><div className="w-2 h-2 rounded-sm" style={{background:CC[c]}}/>{CL[c]}</div>)}
                </div>
@@ -2047,7 +2073,7 @@ export default function App() {
              <div className="max-w-3xl">
                <div className="text-[#394882] text-[10px] font-black uppercase tracking-widest">Divergence</div>
                <h2 className="text-2xl font-black leading-snug mb-3">Seven Crimes, Seven Trajectories</h2>
-               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">If we index all crimes to their 1993 levels (where 1993 = 100), the divergence is stark. Property crimes like auto theft collapsed by nearly 90%. Murder fell 84%. But felony assault dropped only 27% at its lowest point and has since climbed back to become the statistical outlier, plateauing near its pre-decline levels.</p>
+               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">If we index all crimes to their {CW_FIRST.y} levels (where {CW_FIRST.y} = 100), the divergence is stark. From {CW_FIRST.y} to {CW_LAST.y}, recorded auto thefts fell {Math.abs(pctVs(CW_LAST.GA, CW_FIRST.GA))}% and murders {Math.abs(pctVs(CW_LAST.MU, CW_FIRST.MU))}%. Recorded felony assaults fell {Math.abs(pctVs(FA_LOW.FA, CW_FIRST.FA))}% from {CW_FIRST.y} to their {FA_LOW.y} low, then rose substantially. The {CW_LAST.y} total was {Math.abs(pctVs(CW_LAST.FA, CW_FIRST.FA))}% below {CW_FIRST.y}.</p>
              </div>
              <div className="h-[450px] w-full pt-4">
                 <ResponsiveContainer width="100%" height="100%">
@@ -2290,6 +2316,7 @@ export default function App() {
             {activePop && activeGeo !== 'citywide' && !isTouristPrecinct && (
               <div className="pb-1.5 flex flex-col pl-6 border-l border-gray-200">
                 <span className="text-sm font-medium text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Users size={14} /> Per 100k Residents</span>
+                <span className="text-[10px] text-gray-400 -mt-1 mb-1">{POP_BASIS}</span>
                 <span className="text-lg font-bold text-black tabular-nums">{((parsedData.totals.mCur / activePop) * 100000).toFixed(1)} incidents</span>
                 <span className="text-xs font-medium text-gray-500 mt-1">Citywide: {(parsedData.totals.citywideRate || 0).toFixed(1)} per 100k</span>
               </div>
@@ -2404,7 +2431,7 @@ export default function App() {
               <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-5 gap-4">
                 <div>
                   <h2 className="text-[11px] font-black uppercase tracking-[0.15em] text-gray-400 mb-1 flex items-center gap-2">Geographic View <AnchorLink id="geography" label="Geographic View" size={12} /></h2>
-                  <p className="text-sm text-gray-500 font-serif">{mapMode === 'change' ? 'Year-over-year percent change by precinct.' : mapMode === 'volume' ? 'Absolute change in incident count vs prior year — where the raw numbers are growing or shrinking the most.' : 'Crime rates per 100k residents by precinct.'} Click any precinct to drill down.</p>
+                  <p className="text-sm text-gray-500 font-serif">{mapMode === 'change' ? 'Year-over-year percent change by precinct.' : mapMode === 'volume' ? 'Absolute change in incident count vs prior year — where the raw numbers are growing or shrinking the most.' : `Crime rates per 100k residents by precinct (${POP_BASIS}).`} Click any precinct to drill down.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex gap-1 bg-gray-100 p-1 rounded border border-gray-200">
@@ -2451,7 +2478,7 @@ export default function App() {
               <button
                 onClick={() => {
                   const rows = trendFilter === 'all' ? parsedData.all : (trendFilter === 'up' ? risingOffenses : fallingOffenses);
-                  const header = ['Offense', 'Person/Property', 'Current', 'Prior Year', '% Change', activeGeo === 'citywide' ? 'Rate per 100k' : 'Local Rate per 100k', 'Citywide Rate per 100k'];
+                  const header = ['Offense', 'Person/Property', 'Current', 'Prior Year', '% Change', activeGeo === 'citywide' ? `Rate per 100k (${POP_BASIS})` : `Local Rate per 100k (${POP_BASIS})`, `Citywide Rate per 100k (${POP_BASIS})`];
                   const data = rows.map(r => [
                     r.name,
                     offenseClass(r.name) === 'Per' ? 'Person' : offenseClass(r.name) === 'Prop' ? 'Property' : '',
@@ -2569,7 +2596,7 @@ export default function App() {
               <li>NYPD CompStat 2.0 weekly report (scraped from <a href="https://compstat.nypdonline.org/" className="underline hover:text-black" target="_blank" rel="noopener noreferrer">compstat.nypdonline.org</a>)</li>
               <li>NYC Open Data — NYPD Complaint Data Historic (<code className="text-[10px]">qgea-i56i</code>) &amp; Current YTD (<code className="text-[10px]">5uac-w243</code>)</li>
               <li>NYPD historical annual indices, 1993–present (NYPD Historical NYC Crime Data)</li>
-              <li>U.S. Census ACS population estimates for per-100k rate calculations</li>
+              <li>2020 Census counts for per-100k rates: 8,804,190 citywide; precincts via John Keefe’s 2020 census-by-precincts crosswalk. Rates per resident don’t measure any one person’s risk of victimization: visitors, commuters and reporting patterns all shape the counts.</li>
               <li>Real-Time Crime Index by AH Datalytics for peer-city comparison</li>
             </ul>
           </div>
