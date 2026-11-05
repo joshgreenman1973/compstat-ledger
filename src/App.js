@@ -23,7 +23,9 @@ const pctVs = (v, base) => Math.round((v / base - 1) * 100);
 const shareOf = (d, keys) => Math.round(keys.reduce((t, k) => t + d[k], 0) / ['BU', 'FA', 'GA', 'GL', 'MU', 'RA', 'RO'].reduce((t, k) => t + d[k], 0) * 100);
 const FA_LOW = CW.reduce((lo, d) => (d.FA < lo.FA ? d : lo), CW_FIRST);
 
-const MA_CW = {2000:57304,2001:57753,2002:52469,2003:51298,2004:52158,2005:52408,2006:52169,2007:51429,2008:50310,2009:50216,2010:52716,2011:50972,2012:54495,2013:53738,2014:53847,2015:42654,2016:42422,2017:41665,2018:43126,2019:42529,2020:33400,2021:36553,2022:41161,2023:44151,2024:47738};
+// Misdemeanor assault: NYPD, "Misdemeanor Offenses 2000-2025," row ASSAULT 3 & RELATED OFFENSES
+// (2025 data as of Jan. 19, 2026).
+const MA_CW = {2000:57304,2001:57753,2002:52469,2003:51298,2004:52158,2005:52408,2006:52169,2007:51429,2008:50310,2009:50216,2010:52716,2011:50972,2012:54495,2013:53738,2014:53847,2015:42654,2016:42422,2017:41665,2018:43126,2019:42529,2020:33400,2021:36553,2022:41161,2023:44151,2024:47738,2025:45889};
 
 // Multiplied by 10 to shift from /10k to /100k
 const BP = [ // eslint-disable-line no-unused-vars
@@ -2000,7 +2002,7 @@ export default function App() {
   // Historic View Memos
   const vp = useMemo(()=>{const vC=['FA','MU','RA','RO'],pC=['BU','GA','GL'];return CW.map(d=>({y:d.y,violent:vC.reduce((s,c)=>s+d[c],0),property:pC.reduce((s,c)=>s+d[c],0)}));},[]);
   const idx = useMemo(()=>{const b=CW[0];return CW.map(d=>{const o={y:d.y};K7.forEach(c=>{o[c]=d[c]/b[c]*100;});return o;});},[]);
-  const assaultD = useMemo(()=>CW.filter(d=>d.y>=2000&&d.y<=2024).map(d=>{const ma=MA_CW[d.y]||0;return{y:d.y,fa:d.FA,ma,total:d.FA+ma,faPct:d.FA/(d.FA+ma)*100};}),[]);
+  const assaultD = useMemo(()=>CW.filter(d=>d.y>=2000&&MA_CW[d.y]!=null).map(d=>{const ma=MA_CW[d.y];return{y:d.y,fa:d.FA,ma,total:d.FA+ma,faPct:d.FA/(d.FA+ma)*100};}),[]);
   const sd = useMemo(()=>PC.filter(p=>p.n!=='14th').map(p=>({...p,x:p[xM],y:p[yM]})), [xM, yM]);
   const ms = [{k:'pov',l:'Poverty %'},{k:'ta',l:'Total assault'},{k:'fa',l:'Felony assault'},{k:'ma',l:'Misd. assault'},{k:'sh',l:'Shootings'},{k:'ha',l:'Harassment'},{k:'pl',l:'Petit larceny'},{k:'gl',l:'Grand larceny'},{k:'fs',l:'Felony share %'}];
 
@@ -2094,8 +2096,8 @@ export default function App() {
             <div className="space-y-4">
                <div className="text-[#050507] text-[10px] font-black uppercase tracking-widest">Classification Shift</div>
                <h2 className="text-2xl font-black leading-snug">The Assault Anomaly</h2>
-               <p className="text-gray-600 font-serif text-[15px] leading-relaxed mb-4">While felony assault dominates headlines, misdemeanor assault outnumbers it 1.6 to 1. In 2015, misdemeanor assaults dropped 21% overnight while felonies didn't budge—a clear indicator of classification changes rather than behavioral shifts.</p>
-               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">From 2020 to 2024, both categories rose in lockstep for the first time in the dataset, suggesting a genuine increase in violent contact rather than just administrative drift. That parallel rise has since leveled off, with misdemeanor assaults declining in 2025.</p>
+               <p className="text-gray-600 font-serif text-[15px] leading-relaxed mb-4">While felony assault dominates headlines, misdemeanor assault outnumbered it about 1.5 to 1 in 2025. In 2015, misdemeanor assaults dropped 21% overnight while felonies didn't budge—a clear indicator of classification changes rather than behavioral shifts.</p>
+               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">From 2020 to 2024, both categories rose in lockstep for the first time in the dataset, suggesting a genuine increase in violent contact rather than just administrative drift. That parallel rise has since leveled off: in 2025 misdemeanor assaults fell 4% and felony assaults rose 1%.</p>
             </div>
             <div className="h-[350px]">
                <ResponsiveContainer width="100%" height="100%">
@@ -2614,7 +2616,7 @@ export default function App() {
           <div>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">About</h3>
             <p className="leading-snug mb-3">
-              Published by <a href="https://vitalcitynyc.org/" className="underline hover:text-black" target="_blank" rel="noopener noreferrer">Vital City</a>, an independent New York policy journal. The project is open source; data refreshes every Monday after NYPD posts the new CompStat report.
+              An independent project, not an official Vital City product. It is open source; data refreshes every Monday after NYPD posts the new CompStat report.
             </p>
             <p className="leading-snug text-gray-500">
               CompStat data through {parsedData.period?.week_end || '—'}. Page rendered {new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}.
