@@ -253,3 +253,73 @@ describe('A17: headlines never print 0.0% for a non-change or a percent on a sma
     }
   });
 });
+
+// Minor findings, Nov. 18, 2026 audit.
+import { PRECINCT_POPULATIONS_2020 } from './geoPopulations';
+import { parseDay, apDate, apRange, apNow, fmt1, placePhrase, patrolBoroughPopulations, PATROL_BOROUGHS, precinctKey, lineLabel, NYPD_FOOTNOTES, changeCell } from './ledgerRules';
+
+describe('minor: dates read the same in every time zone', () => {
+  test('report dates are calendar days, not instants', () => {
+    expect(parseDay('11/15/2026')).toEqual({ y: 2026, m: 11, d: 15 });
+    expect(apDate('11/15/2026')).toBe('Nov. 15, 2026');
+    expect(apDate('11/15/2026', { year: false })).toBe('Nov. 15');
+    expect(apDate('2026-06-16')).toBe('June 16, 2026');
+    expect(apDate('9/7/2026')).toBe('Sept. 7, 2026');
+  });
+  test('the formatter never goes through a Date, so the zone cannot shift it', () => {
+    const real = global.Date;
+    global.Date = function () { throw new Error('Date used'); };
+    try { expect(apDate('3/8/2026')).toBe('March 8, 2026'); } finally { global.Date = real; }
+  });
+  test('ranges', () => {
+    expect(apRange('11/9/2026', '11/15/2026')).toBe('Nov. 9-15, 2026');
+    expect(apRange('10/27/2026', '11/2/2026')).toBe('Oct. 27-Nov. 2, 2026');
+    expect(apRange('12/29/2026', '1/4/2027')).toBe('Dec. 29, 2026-Jan. 4, 2027');
+  });
+  test('the viewer clock in AP style', () => {
+    expect(apNow(new Date(2026, 10, 18, 15, 5))).toBe('Nov. 18, 2026, 3:05 p.m.');
+    expect(apNow(new Date(2026, 10, 18, 0, 30))).toBe('Nov. 18, 2026, 12:30 a.m.');
+  });
+});
+
+describe('minor: Bronx North and Bronx South get populations', () => {
+  const pb = patrolBoroughPopulations(PRECINCT_POPULATIONS_2020);
+  test('every patrol borough is the sum of its precincts', () => {
+    Object.entries(PATROL_BOROUGHS).forEach(([name, nums]) => {
+      expect(pb[name]).toBe(nums.reduce((s, n) => s + (PRECINCT_POPULATIONS_2020[precinctKey(n)] || 0), 0));
+    });
+    expect(pb['Bronx North']).toBe(759084);
+    expect(pb['Bronx South']).toBe(718388);
+    expect(pb['Bronx North'] + pb['Bronx South']).toBe(1477472); // the pre-split Bronx total
+    expect(pb['Manhattan South']).toBe(684541);
+  });
+  test('every listed precinct but the 116th has a population', () => {
+    Object.values(PATROL_BOROUGHS).flat().filter((n) => n !== 116).forEach((n) => expect(PRECINCT_POPULATIONS_2020[precinctKey(n)]).toBeGreaterThan(0));
+    expect(precinctKey(111)).toBe('111th Precinct');
+    expect(precinctKey(101)).toBe('101st Precinct');
+  });
+});
+
+describe('minor: style', () => {
+  test('places in sentences', () => {
+    expect(placePhrase('7th Precinct')).toBe('in the 7th Precinct');
+    expect(placePhrase('Staten Island')).toBe('on Staten Island');
+    expect(placePhrase('Bronx North')).toBe('in Bronx North');
+    expect(placePhrase('Bronx')).toBe('in the Bronx');
+    expect(placePhrase('citywide')).toBe('citywide');
+  });
+  test('thousands commas on rates', () => {
+    expect(fmt1(1304)).toBe('1,304.0');
+    expect(fmt1(2.75)).toBe('2.8');
+    expect(fmt1(NaN)).toBe('—');
+  });
+  test("NYPD's asterisk becomes a footnote, not a second star", () => {
+    expect(lineLabel('UCR Rape*')).toBe('UCR Rape');
+    expect(NYPD_FOOTNOTES['UCR Rape*']).toMatch(/FBI UCR definition of rape/);
+  });
+  test('rises from zero show as rises', () => {
+    expect(changeCell(10, 0)).toEqual({ dir: 1, text: 'new' });
+    expect(changeCell(0, 0)).toEqual({ dir: 0, text: '—' });
+    expect(changeCell(8, 10)).toEqual({ dir: -1, text: '20.0%' });
+  });
+});

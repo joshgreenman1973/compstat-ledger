@@ -3,7 +3,8 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Cartesia
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from './data/nyc_precincts.json';
 import crimeHistory from './data/crime_history.json';
-import { ratePopulation, REDRAWN_PRECINCTS, describeDriver, LARGEST_CITIES, reportYearOf, RTCI_NYC_KEY, parseRTCIcsv, getHistoricalContext, getPrePandemicRecovery, changePhrase, headlineChange, totalBadge, rateOutliers, timesWord, rateConcentration, povertyQuartiles, SCATTER_EXCLUDED, SMALL_BASE, spell } from './ledgerRules';
+import { ratePopulation, REDRAWN_PRECINCTS, describeDriver, LARGEST_CITIES, reportYearOf, RTCI_NYC_KEY, parseRTCIcsv, getHistoricalContext, getPrePandemicRecovery, changePhrase, headlineChange, totalBadge, rateOutliers, timesWord, rateConcentration, povertyQuartiles, SCATTER_EXCLUDED, SMALL_BASE, spell, apDate, apRange, apNow, fmt1, placePhrase, patrolBoroughPopulations, PATROL_BOROUGHS, NYPD_FOOTNOTES, lineLabel, changeCell } from './ledgerRules';
+import { PRECINCT_POPULATIONS_2020 } from './geoPopulations';
 
 /* ------------------------------------------------------------------ */
 /* 1. HISTORICAL DATASETS & CONFIG                                    */
@@ -173,29 +174,9 @@ const FALLBACK_DATA = {
   }
 };
 
-// 2020 Census populations via John Keefe's census-by-precincts crosswalk
-// (github.com/jkeefe/census-by-precincts). Patrol borough totals = sum of constituent precincts.
-const GEO_POPULATIONS = {
-  "1st Precinct": 84799, "5th Precinct": 50598, "6th Precinct": 64643, "7th Precinct": 57985, "9th Precinct": 75951,
-  "10th Precinct": 65570, "13th Precinct": 100050, "14th Precinct": 28050, "17th Precinct": 89367, "18th Precinct": 67528,
-  "19th Precinct": 220261, "20th Precinct": 114575, "22nd Precinct": 129,
-  "23rd Precinct": 74769, "24th Precinct": 107489, "25th Precinct": 50996, "26th Precinct": 50002, "28th Precinct": 49200,
-  "30th Precinct": 60456, "32nd Precinct": 81240, "33rd Precinct": 71598, "34th Precinct": 108608,
-  "40th Precinct": 100929, "41st Precinct": 54454, "42nd Precinct": 93755, "43rd Precinct": 188015, "44th Precinct": 150436,
-  "45th Precinct": 130799, "46th Precinct": 132584, "47th Precinct": 163539, "48th Precinct": 89216, "49th Precinct": 119881,
-  "50th Precinct": 106976, "52nd Precinct": 146888,
-  "60th Precinct": 109024, "61st Precinct": 169513, "62nd Precinct": 198870, "63rd Precinct": 112652, "66th Precinct": 205377,
-  "67th Precinct": 162446, "68th Precinct": 136071, "69th Precinct": 90763, "70th Precinct": 164568, "71st Precinct": 102000,
-  "72nd Precinct": 133230, "73rd Precinct": 98506, "75th Precinct": 200994, "76th Precinct": 47789, "77th Precinct": 101267,
-  "78th Precinct": 73203, "79th Precinct": 106039, "81st Precinct": 68921, "83rd Precinct": 120747, "84th Precinct": 65597,
-  "88th Precinct": 64372, "90th Precinct": 131377, "94th Precinct": 72748,
-  "100th Precinct": 50809, "101st Precinct": 73376,
-  "102nd Precinct": 153297, "103rd Precinct": 121059, "104th Precinct": 178948, "105th Precinct": 199218, "106th Precinct": 129391,
-  "107th Precinct": 161402, "108th Precinct": 137962, "109th Precinct": 269581, "110th Precinct": 181051, "111th Precinct": 122211,
-  "112th Precinct": 119739, "113th Precinct": 135221, "114th Precinct": 208525, "115th Precinct": 179134,
-  "120th Precinct": 122308, "121st Precinct": 128149, "122nd Precinct": 144552, "123rd Precinct": 100738,
-  "Bronx": 1477472, "Brooklyn South": 1705506, "Brooklyn North": 1030568, "Manhattan South": 684541, "Manhattan North": 989323, "Queens South": 1023773, "Queens North": 1397151, "Staten Island": 495747
-};
+// Precincts from geoPopulations.js; patrol boroughs (including Bronx North and Bronx South, split in
+// May 2026) are the sums of their precincts. "Bronx" stays for reports from before the split.
+const GEO_POPULATIONS = { ...PRECINCT_POPULATIONS_2020, ...patrolBoroughPopulations(PRECINCT_POPULATIONS_2020), Bronx: patrolBoroughPopulations(PRECINCT_POPULATIONS_2020, { Bronx: [...PATROL_BOROUGHS['Bronx North'], ...PATROL_BOROUGHS['Bronx South']] }).Bronx };
 
 // 2010 Census populations mapped to 2020 precinct boundaries (John Keefe's crosswalk).
 // Used for precinct-level rate calculations on data from 2010–2019.
@@ -222,12 +203,12 @@ const GEO_POPULATIONS_2010 = { // eslint-disable-line no-unused-vars
 };
 
 const PRECINCT_NEIGHBORHOODS = {
-  "1st Precinct": "Tribeca, Wall St", "5th Precinct": "Chinatown, Little Italy", "6th Precinct": "Greenwich Village",
+  "1st Precinct": "Tribeca, Financial District", "5th Precinct": "Chinatown, Little Italy", "6th Precinct": "Greenwich Village",
   "7th Precinct": "Lower East Side", "9th Precinct": "East Village", "10th Precinct": "Chelsea",
   "13th Precinct": "Gramercy, Stuy Town", "14th Precinct": "Midtown South", "17th Precinct": "Midtown East",
   "18th Precinct": "Midtown North", "19th Precinct": "Upper East Side", "20th Precinct": "Upper West Side",
-  "22nd Precinct": "Central Park", "23rd Precinct": "East Harlem South", "24th Precinct": "Morningside Heights",
-  "25th Precinct": "East Harlem North", "26th Precinct": "Manhattanville", "28th Precinct": "Central Harlem",
+  "22nd Precinct": "Central Park", "23rd Precinct": "East Harlem South", "24th Precinct": "Upper West Side, Manhattan Valley",
+  "25th Precinct": "East Harlem North", "26th Precinct": "Morningside Heights, Manhattanville", "28th Precinct": "Central Harlem",
   "30th Precinct": "Hamilton Heights", "32nd Precinct": "Central Harlem North", "33rd Precinct": "Washington Heights",
   "34th Precinct": "Inwood, Wash. Heights", "40th Precinct": "Mott Haven", "41st Precinct": "Hunts Point",
   "42nd Precinct": "Morrisania", "43rd Precinct": "Soundview", "44th Precinct": "Highbridge",
@@ -259,7 +240,6 @@ const calcPct = (current, prior) => {
   if (!p) return c === 0 ? 0 : null;
   return ((c - p) / p) * 100;
 };
-const formatPct = (v) => (typeof v !== 'number' || Number.isNaN(v)) ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`;
 // Expand compact CompStat crime labels to friendlier names for prose.
 const EXPANDED_CRIME_NAMES = {
   'G.L.A.': 'grand larceny auto',
@@ -289,8 +269,9 @@ const offsetDriverText = (driver, dName, where) => {
   const dir = driver.diff > 0 ? 'rose' : 'fell';
   const otherDir = driver.others > 0 ? 'rose' : 'fell';
   const netText = driver.net > 0 ? `a net rise of ${plural(driver.net, 'crime', 'crimes')}` : `a net drop of ${plural(driver.net, 'crime', 'crimes')}`;
-  return `**${dName}** ${dir} by **${Math.abs(driver.diff).toLocaleString()}**${where === 'citywide' ? ' citywide' : ''}, while the other major felonies ${otherDir} by ${Math.abs(driver.others).toLocaleString()} combined, for ${netText}.`;
+  return `**${capFirst(dName)}** ${dir} by **${Math.abs(driver.diff).toLocaleString()}**${where === 'citywide' ? ' citywide' : ''}, while the other major felonies ${otherDir} by ${Math.abs(driver.others).toLocaleString()} combined, for ${netText}.`;
 };
+const capFirst = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 const expandCrimeTitle = (name) => {
   const exp = expandCrime(name);
   return exp.replace(/\b\w/g, c => c.toUpperCase());
@@ -308,12 +289,8 @@ const formatGeoName = (geo) => {
   if (PRECINCT_NEIGHBORHOODS[geo]) return `${geo} (${PRECINCT_NEIGHBORHOODS[geo]})`;
   return geo;
 };
-const formatPeriodDate = (iso) => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
-};
+// NYPD's dates are calendar days ("11/15/2026"), read as strings (apDate in ledgerRules.js), never as instants.
+const formatPeriodDate = (s) => (s ? apDate(s, { year: false }) : null);
 
 const buildStorySummary = ({ parsedData, activeTab }) => {
   if (!parsedData || !parsedData.totals) return null;
@@ -322,8 +299,8 @@ const buildStorySummary = ({ parsedData, activeTab }) => {
   const endLabel = formatPeriodDate(period?.week_end);
   const startLabel = formatPeriodDate(period?.week_start);
   const timeframe = isYTD
-    ? (endLabel ? `Year-to-date through ${endLabel}` : 'Year-to-date')
-    : (startLabel && endLabel ? `For the week of ${startLabel}–${endLabel}` : 'This reporting week');
+    ? (endLabel ? `Year to date through ${endLabel}` : 'Year to date')
+    : (startLabel && endLabel ? `For the week of ${apRange(period.week_start, period.week_end).replace(/, \d{4}$/, '')}` : 'This reporting week');
 
   const mCur = totals.mCur?.toLocaleString() ?? '—';
 
@@ -627,7 +604,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
   const groupDef = RTCI_GROUPS.find(g => g.key === activeGroup) || RTCI_GROUPS[0];
 
   const allCities = rtciData?.cities || {};
-  const updated = rtciData?.updated || RTCI_FALLBACK_UPDATED;
+  const updated = apDate(rtciData?.updated || RTCI_FALLBACK_UPDATED);
   // Every city shown must cover the same calendar year as New York.
   const year = allCities[RTCI_NYC_KEY]?.fullYear || RTCI_FALLBACK_YEAR;
   const cityName = (c) => (c.city === 'New York City' ? 'New York' : c.city);
@@ -681,7 +658,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
           return (
             <div key={c.city} className="flex items-center gap-3">
               <span className={`w-28 text-right text-[12px] ${isNYC ? 'font-black text-gray-900' : 'font-medium text-gray-500'}`}>
-                {cityName(c)}{c.cached && <span title={`Cached copy of the scorecard updated ${RTCI_FALLBACK_UPDATED}`}>†</span>}
+                {cityName(c)}{c.cached && <span title={`Cached copy of the scorecard updated ${apDate(RTCI_FALLBACK_UPDATED)}`}>†</span>}
               </span>
               <div className="flex-1 h-5 bg-gray-200 rounded-sm overflow-hidden relative">
                 <div className={`h-full rounded-sm ${isNYC ? 'bg-gray-900' : 'bg-gray-400'}`}
@@ -700,7 +677,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
       <div className="mt-4 pt-3 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-[10px] text-gray-400">
           Calendar year {year}, the latest complete year in the scorecard. Year-to-date counts aren’t used because cities report through different months. Scorecard updated {updated} · populations as published by the index.
-          {anyCached && <> † Cached copy of the scorecard updated {RTCI_FALLBACK_UPDATED}.</>}
+          {anyCached && <> † Cached copy of the scorecard updated {apDate(RTCI_FALLBACK_UPDATED)}.</>}
           {notShown.length > 0 && <> Left out for lack of a {year} {metric.label.toLowerCase()} figure: {notShown.join(', ')}.</>}
         </p>
         <div className="flex items-center gap-3 flex-wrap">
@@ -813,7 +790,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
       const cutoffDay = (maxDate.getFullYear() === year) ? maxDate.getDate() : 31;
       const monthStr = String(cutoffMonth + 1).padStart(2, '0');
       const dayStr = String(cutoffDay).padStart(2, '0');
-      const periodLabel = monthsCovered >= 11 || maxDate.getFullYear() !== year ? 'Full year' : `Jan 1 – ${maxDate.toLocaleString('en-US', { month: 'short', day: 'numeric' })}`;
+      const periodLabel = monthsCovered >= 11 || maxDate.getFullYear() !== year ? 'Full year' : `Jan. 1-${apDate({ y: year, m: maxDate.getMonth() + 1, d: maxDate.getDate() }, { year: false })}`;
 
       // Pick the right dataset for each year. 5uac-w243 may contain both years; qgea-i56i has older years.
       const buildQuery = (dataset, fromY, toY, m, d) => `https://data.cityofnewyork.us/resource/${dataset}.json?` +
@@ -920,7 +897,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
             Offenses recorded on the NYC subway and bus system. Live weekly CompStat feed from the NYPD Transit Bureau.
           </p>
         </div>
-        <span className="text-[12px] text-gray-400 whitespace-nowrap">Week ending {period.week_end || '?'}</span>
+        <span className="text-[12px] text-gray-400 whitespace-nowrap">Week ending {apDate(period.week_end)}</span>
       </div>
 
       {/* Current trend KPI grid */}
@@ -1084,7 +1061,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
         </div>
 
         <p className="text-[12px] text-gray-400 mt-6 italic leading-relaxed max-w-3xl">
-          CompStat live = weekly NYPD CompStat feed for Transit Bureau (all major felonies combined, through week ending {period.week_end || '?'}).
+          CompStat live = weekly NYPD CompStat feed for Transit Bureau (all major felonies combined, through the week ending {apDate(period.week_end)}).
           By-offense totals = NYC Open Data complaint-level extract filtered to felony records with a transit-district code: every felony, not just the seven majors, {breakdown?.periodLabel === 'Full year' ? `full year ${breakdown.year} vs. ${breakdown.priorYear}` : `year to date${breakdown?.periodLabel ? ` (${breakdown.periodLabel})` : ''}, ${breakdown?.year ?? ''} vs. the same dates in ${breakdown?.priorYear ?? 'the prior year'}`}. The two sources use different counting rules, so the aggregates will not match exactly. Homicides do not carry a transit-district code in the complaint-level extract, so they are absent from the by-offense table — transit homicides are tracked separately by the NYPD Transit Bureau and shown above.
         </p>
         </div>
@@ -1199,7 +1176,7 @@ const PrecinctMap = ({ precinctRates, onSelect, activeGeo, mapMode = 'rate', wid
             )}
             {hoveredData.rate != null && (
               <div className="text-gray-600">
-                {hoveredData.rate.toFixed(1)} per 100k ({POP_BASIS})
+                {fmt1(hoveredData.rate)} per 100k ({POP_BASIS})
                 {hoveredData.isTourist ? <span className="text-gray-400 italic"> (residents only — not comparable)</span> : rankInfo ? ` · Rank ${rankInfo.rank} of ${rankInfo.total}` : ''}
               </div>
             )}
@@ -1361,7 +1338,7 @@ const DivergingBarChart = ({ data }) => {
           const labelFill = labelOutside ? barColor : '#ffffff';
           return (
             <g key={row.name}>
-              <text x={NAME_COL - 8} y={y + 5} textAnchor="end" fontSize="14" fontWeight="bold" fill={VC.black} opacity={isSmallN ? 0.5 : 1}>{row.name}{isSmallN ? '*' : ''}</text>
+              <text x={NAME_COL - 8} y={y + 5} textAnchor="end" fontSize="14" fontWeight="bold" fill={VC.black} opacity={isSmallN ? 0.5 : 1}>{lineLabel(row.name)}{NYPD_FOOTNOTES[row.name] ? '†' : ''}{isSmallN ? '*' : ''}</text>
               <rect x={isIncrease ? CENTER_X : CENTER_X - barWidth} y={y - 9} width={barWidth} height="20" fill={barColor} fillOpacity={isSmallN ? 0.3 : 1} rx="3" />
               <text x={labelX} y={y + 5} textAnchor={labelAnchor} fontSize="13" fontWeight="bold" fill={labelFill} opacity={isSmallN ? 0.5 : 1}>{arrow} {Math.abs(row.pct).toFixed(1)}%</text>
             </g>
@@ -1401,12 +1378,12 @@ const UnifiedMagnitudeChart = ({ data, isTourist, citywideRates, activeGeo }) =>
           const color = VIOLENT_CRIMES.includes(row.name) ? VC.magenta : PROPERTY_CRIMES.includes(row.name) ? VC.indigo : VC.periwinkle;
           return (
             <g key={row.name}>
-              <text x={START_X - 14} y={y + 5} textAnchor="end" fontSize="14" fontWeight="bold" fill={VC.black}>{row.name}</text>
+              <text x={START_X - 14} y={y + 5} textAnchor="end" fontSize="14" fontWeight="bold" fill={VC.black}>{lineLabel(row.name)}{NYPD_FOOTNOTES[row.name] ? '†' : ''}</text>
               <rect x={START_X} y={y - 10} width={barWidth} height="22" fill={color} rx="3" />
               <text x={START_X + barWidth + 8} y={y + 5} fontSize="14" fontWeight="bold" fill={VC.black}>
                 {row.current.toLocaleString()}
                 {row.currentRate !== null && !isTourist && (
-                  <tspan fontSize="12" fill={VC.charcoal} fontWeight="normal">{' '}({row.currentRate.toFixed(1)}/100k{activeGeo !== 'citywide' && citywideRates[row.name] !== undefined ? ` vs ${citywideRates[row.name].toFixed(1)} CW` : ''})</tspan>
+                  <tspan fontSize="12" fill={VC.charcoal} fontWeight="normal">{' '}({fmt1(row.currentRate)}/100k{activeGeo !== 'citywide' && citywideRates[row.name] !== undefined ? ` vs ${fmt1(citywideRates[row.name])} CW` : ''})</tspan>
                 )}
               </text>
             </g>
@@ -1429,7 +1406,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(initialParams.get('tab') || 'ytd');
   const [activeGeo, setActiveGeo] = useState(initialParams.get('geo') || 'citywide');
   const [rawData, setRawData] = useState(FALLBACK_DATA);
-  const [loading, setLoading] = useState(false);
+  // 'loading' until the latest report arrives, then 'live'; 'saved' when it can't be loaded and the
+  // page is showing the copy built into it (FALLBACK_DATA).
+  const [dataSource, setDataSource] = useState('loading');
+  const [loading, setLoading] = useState(true);
   const [trendFilter, setTrendFilter] = useState(initialParams.get('rows') || 'all');
   const [isLocating, setIsLocating] = useState(false);
   const [locateMsg, setLocateMsg] = useState("");
@@ -1454,10 +1434,13 @@ export default function App() {
     const RAW_URL = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/data/latest_compstat.json`;
     try {
       const resp = await fetch(`${RAW_URL}?t=${Date.now()}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const json = await resp.json();
-      if (json && json.citywide) { setRawData(json); return; }
+      if (!json || !json.citywide) throw new Error('report has no citywide table');
+      setRawData(json); setDataSource('live');
     } catch (e1) {
       setFetchError(true);
+      setDataSource((d) => (d === 'live' ? 'live' : 'saved'));
     } finally { setLoading(false); }
   }, []);
 
@@ -1661,13 +1644,8 @@ export default function App() {
   // Dynamic <title> so browser tabs and social previews carry the latest reporting period.
   useEffect(() => {
     if (parsedData?.period?.week_end) {
-      const fmt = (s) => {
-        try { return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
-        catch { return s; }
-      };
-      const start = parsedData.period.week_start ? fmt(parsedData.period.week_start) : null;
-      const end = fmt(parsedData.period.week_end);
-      document.title = start ? `CompStat in Context: A · Week of ${start}–${end}` : `CompStat in Context: A · Through ${end}`;
+      const ws = parsedData.period.week_start; const we = parsedData.period.week_end;
+      document.title = ws ? `CompStat in Context: A · Week of ${apRange(ws, we)}` : `CompStat in Context: A · Through ${apDate(we)}`;
     }
   }, [parsedData.period?.week_end, parsedData.period?.week_start]);
 
@@ -1734,7 +1712,7 @@ export default function App() {
     const { driver, localAnomaly, localBrightSpot, topSurge, topDrop } = parsedData;
     if (activeGeo === 'citywide') {
       if (driver) {
-        const dName = expandCrimeTitle(driver.name);
+        const dName = expandCrime(driver.name);
         const driverShareText = driver.offset
           ? offsetDriverText(driver, dName, 'citywide')
           : driver.diff > 0
@@ -1770,8 +1748,8 @@ export default function App() {
               {shifts.map((s, i) => (
                 <li key={`${s.precinct}-${s.crime}`} className={i > 0 ? 'pt-2 border-t border-gray-100' : ''}>
                   {s.rising
-                    ? `In **${formatGeoName(s.precinct)}**, **${expandCrimeTitle(s.crime)}** offenses are up **${Math.round(s.pct)}%** (${s.prior.toLocaleString()} to ${s.current.toLocaleString()}).`
-                    : `In **${formatGeoName(s.precinct)}**, **${expandCrimeTitle(s.crime)}** offenses have fallen by **${Math.round(Math.abs(s.pct))}%** (${s.prior.toLocaleString()} to ${s.current.toLocaleString()}).`}
+                    ? `${capFirst(placePhrase(s.precinct))}${PRECINCT_NEIGHBORHOODS[s.precinct] ? ` (${PRECINCT_NEIGHBORHOODS[s.precinct]})` : ''}, **${expandCrime(s.crime)}** offenses are up **${Math.round(s.pct)}%** (${s.prior.toLocaleString()} to ${s.current.toLocaleString()}).`
+                    : `${capFirst(placePhrase(s.precinct))}${PRECINCT_NEIGHBORHOODS[s.precinct] ? ` (${PRECINCT_NEIGHBORHOODS[s.precinct]})` : ''}, **${expandCrime(s.crime)}** offenses have fallen **${Math.round(Math.abs(s.pct))}%** (${s.prior.toLocaleString()} to ${s.current.toLocaleString()}).`}
                 </li>
               ))}
             </ul>
@@ -1787,11 +1765,11 @@ export default function App() {
         // No Oxford comma per Vital City house style.
         const joinNames = (names) => names.length <= 1 ? names.join('')
           : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
-        const stillAbove = joinNames(recovery.above.map(a => expandCrimeTitle(a.name)));
+        const stillAbove = joinNames(recovery.above.map(a => expandCrime(a.name)));
         const content = recovery.above.length === 0
           ? `All **${recovery.total} major felonies** compared are tracking at or below their 2017–19 pre-pandemic average so far this year.`
           : `**${recovery.below} of the ${recovery.total} major felonies** compared are tracking at or below their 2017–19 pre-pandemic average so far this year. Still above: ${stillAbove}.`;
-        const leftOutText = recovery.leftOut.length > 0 ? ` ${recovery.leftOut.map(expandCrimeTitle).join(' and ')} is left out: its definition changed in 2024.` : '';
+        const leftOutText = recovery.leftOut.length > 0 ? ` ${capFirst(recovery.leftOut.map(expandCrime).join(' and '))} is left out: its definition changed in 2024.` : '';
         cards.push({ id: 'recovery', icon: ShieldCheck, title: 'Pre-Pandemic Recovery', content: content + leftOutText,
           dataViz: (
             <div className="mt-3">
@@ -1816,14 +1794,14 @@ export default function App() {
       }
     } else {
       if (driver && driver.share >= 25) cards.push({ id: 'local_driver', icon: Target, title: 'Local Driver', content: driver.offset
-        ? offsetDriverText(driver, expandCrimeTitle(driver.name), 'here')
-        : `The change in **${expandCrimeTitle(driver.name)}** volume accounts for **${Math.round(driver.share)}%** of this area's net change in major felonies.` });
-      if (localAnomaly && !isTouristPrecinct) cards.push({ id: 'anomaly', icon: AlertTriangle, title: 'Higher Local Rate', content: `The rate for **${expandCrimeTitle(localAnomaly.name)}** here is **${localAnomaly.localRate.toFixed(1)} per 100k residents**, **${timesWord(localAnomaly.ratio)}** the citywide rate (${localAnomaly.cityRate.toFixed(1)}).` });
-      else if (topSurge && topSurge.pct > 0) cards.push({ id: 'surge', icon: TrendingUp, title: 'Local Trajectory', content: `**${expandCrimeTitle(topSurge.name)}** index offenses have increased by **${Math.round(topSurge.pct)}%** compared to last year.` });
+        ? offsetDriverText(driver, expandCrime(driver.name), 'here')
+        : `The change in **${expandCrime(driver.name)}** volume accounts for **${Math.round(driver.share)}%** of this area's net change in major felonies.` });
+      if (localAnomaly && !isTouristPrecinct) cards.push({ id: 'anomaly', icon: AlertTriangle, title: 'Higher Local Rate', content: `The rate for **${expandCrime(localAnomaly.name)}** here is **${fmt1(localAnomaly.localRate)} per 100k residents**, **${timesWord(localAnomaly.ratio)}** the citywide rate (${fmt1(localAnomaly.cityRate)}).` });
+      else if (topSurge && topSurge.pct > 0) cards.push({ id: 'surge', icon: TrendingUp, title: 'Local Trajectory', content: `**${capFirst(expandCrime(topSurge.name))}** index offenses have increased by **${Math.round(topSurge.pct)}%** compared to last year.` });
       if (localBrightSpot && !isTouristPrecinct) cards.push({ id: 'brightspot', icon: ShieldCheck, title: 'Local Bright Spot', content: localBrightSpot.localRate === 0
-        ? `No **${expandCrimeTitle(localBrightSpot.name)}** offenses have been recorded here ${activeTab === 'ytd' ? 'so far this year' : 'this week'}, against a citywide rate of ${localBrightSpot.cityRate.toFixed(1)} per 100k.`
-        : `The rate of **${expandCrimeTitle(localBrightSpot.name)}** offenses here is **${Math.round((1 - localBrightSpot.ratio)*100)}% below** the citywide rate.` });
-      else if (topDrop && topDrop.pct < 0) cards.push({ id: 'drop', icon: TrendingDown, title: 'Local Trajectory', content: `**${expandCrimeTitle(topDrop.name)}** index offenses have fallen by **${Math.round(Math.abs(topDrop.pct))}%** here compared to last year.` });
+        ? `No **${expandCrime(localBrightSpot.name)}** offenses have been recorded here ${activeTab === 'ytd' ? 'so far this year' : 'this week'}, against a citywide rate of ${fmt1(localBrightSpot.cityRate)} per 100k.`
+        : `The rate of **${expandCrime(localBrightSpot.name)}** offenses here is **${Math.round((1 - localBrightSpot.ratio)*100)}% below** the citywide rate.` });
+      else if (topDrop && topDrop.pct < 0) cards.push({ id: 'drop', icon: TrendingDown, title: 'Local Trajectory', content: `**${capFirst(expandCrime(topDrop.name))}** index offenses have fallen by **${Math.round(Math.abs(topDrop.pct))}%** here compared to last year.` });
     }
     return cards;
   };
@@ -1851,8 +1829,8 @@ export default function App() {
         <div className="bg-[#050507] text-white pt-12 pb-16 px-5 sm:px-8">
            <div className="max-w-[1100px] mx-auto">
               <button onClick={() => setAppView('live')} className="text-gray-400 hover:text-white uppercase tracking-widest text-[11px] font-bold flex items-center gap-2 mb-8 transition-colors"><ArrowLeft size={14}/> Back to Live Dashboard</button>
-              <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4 leading-tight font-serif">The 30-Year Transformation of NYC Crime</h1>
-              <p className="text-lg text-gray-400 font-serif max-w-3xl leading-relaxed">Beyond the weekly CompStat fluctuations lies a deeper story. Over three decades, the volume, composition, and geographic distribution of crime in New York City has fundamentally rewritten itself.</p>
+              <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-4 leading-tight font-serif">New York City crime since {CW_FIRST.y}</h1>
+              <p className="text-lg text-gray-400 font-serif max-w-3xl leading-relaxed">Beyond the weekly CompStat fluctuations lies a deeper story. Over three decades, the volume, makeup and geography of crime in New York City have changed fundamentally.</p>
               <p className="text-[12px] text-gray-500 font-serif max-w-3xl leading-relaxed mt-4">{HISTORY_SOURCE_NOTE}</p>
            </div>
         </div>
@@ -1864,7 +1842,7 @@ export default function App() {
             <div className="lg:col-span-1 space-y-4">
                <div className="text-[#ff7c53] text-[10px] font-black uppercase tracking-widest">Macro Volume</div>
                <h2 className="text-2xl font-black leading-snug">The Great Decline & The Modern Rebound</h2>
-               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">From 1993 to 2019, major index crime collapsed. But the decline wasn't uniform. Violent crime leveled off around 2010, while property crime continued to fall. A post-2019 surge pushed violent crime upward through 2024, but murder has fallen every year since its 2021 spike and the broader violent index has begun declining.</p>
+               <p className="text-gray-600 font-serif text-[15px] leading-relaxed">From 2000 to 2019, the years in this chart, major index crime kept falling. But the decline wasn't uniform. Violent crime leveled off around 2010, while property crime continued to fall. A post-2019 surge pushed violent crime upward through 2024, but murder has fallen every year since its 2021 spike and the broader violent index has begun declining.</p>
             </div>
             <div className="lg:col-span-2 h-[350px]">
                <ResponsiveContainer width="100%" height="100%">
@@ -2036,13 +2014,26 @@ export default function App() {
           </div>
         </nav>
 
+        {dataSource === 'loading' && (
+          <div role="status" className="mb-4 px-4 py-3 rounded border border-gray-300 bg-gray-50 text-[14px] text-gray-700">
+            Loading NYPD’s latest weekly report. Until it arrives, the figures below are a saved copy from the week ending {apDate(FALLBACK_DATA.citywide.report_period.week_end)}.
+          </div>
+        )}
+        {dataSource === 'saved' && (
+          <div role="alert" className="mb-4 px-4 py-3 rounded border-2 border-orange-400 bg-orange-50 text-[14px] text-gray-900 flex flex-col sm:flex-row sm:items-center gap-3">
+            <span><strong>These are not the latest figures.</strong> NYPD’s latest report couldn’t be loaded, so this page is showing a saved copy: the report for the week ending {apDate(FALLBACK_DATA.citywide.report_period.week_end)}.</span>
+            <button onClick={loadReport} className="sm:ml-auto flex-shrink-0 text-[11px] font-black uppercase tracking-widest border border-gray-900 rounded px-3 py-1.5 hover:bg-white">Try again</button>
+          </div>
+        )}
+        {dataSource === 'live' && fetchError && (
+          <div role="status" className="mb-4 px-4 py-2 rounded border border-gray-300 bg-gray-50 text-[13px] text-gray-700">Couldn’t refresh just now; still showing the report for the week ending {apDate(parsedData.period?.week_end)}.</div>
+        )}
         <header className="pt-3 pb-3 mb-6 border-b border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative">
           <div className="flex items-center gap-3">
             <span className="text-[11px] font-black uppercase tracking-widest text-black whitespace-nowrap">CompStat in Context: A</span>
             <span className="text-gray-300">•</span>
-            <span className="text-[12px] font-medium text-gray-500 tabular-nums">{parsedData.period?.week_start || 'N/A'} – {parsedData.period?.week_end || 'N/A'}</span>
+            <span className="text-[12px] font-medium text-gray-500 tabular-nums">{apRange(parsedData.period?.week_start, parsedData.period?.week_end)}</span>
             <button onClick={loadReport} title="Refresh data from NYPD" aria-label="Refresh data" className="ml-2 text-gray-400 hover:text-black transition-colors"><RefreshCw size={14} className={loading ? "animate-spin" : ""} /></button>
-            {fetchError && <span className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">Using embedded data</span>}
             <div className="relative ml-1">
               <button onClick={() => setShowHelp(!showHelp)} title="How to use this tool" aria-label="How to use this tool" className={`text-gray-400 hover:text-black transition-colors ${showHelp ? 'text-black' : ''}`}><Info size={14} /></button>
               {showHelp && <div className="absolute top-full left-0 mt-3 w-72 bg-white border border-gray-200 shadow-2xl rounded p-4 z-50">
@@ -2120,7 +2111,7 @@ export default function App() {
             {headlineChange(parsedData.totals.mCur, parsedData.totals.mPri, activeTab === 'ytd' ? 'year to date' : 'this week')}
           </h1>
           <p className="text-base md:text-lg font-serif text-gray-600 mb-6 max-w-3xl leading-snug">
-            Violent index offenses account for <strong className="text-black">{Number((parsedData.totals.vCur / (parsedData.totals.mCur || 1)) * 100).toFixed(0)}%</strong> of the {parsedData.totals.mCur.toLocaleString()} major felonies reported {activeGeo === 'citywide' ? 'citywide' : `in the ${activeGeo}`}, while the remaining <strong className="text-black">{Number((parsedData.totals.pCur / (parsedData.totals.mCur || 1)) * 100).toFixed(0)}%</strong> are property-related.
+            Violent index offenses account for <strong className="text-black">{Number((parsedData.totals.vCur / (parsedData.totals.mCur || 1)) * 100).toFixed(0)}%</strong> of the {parsedData.totals.mCur.toLocaleString()} major felonies reported {placePhrase(activeGeo)}, while the remaining <strong className="text-black">{Number((parsedData.totals.pCur / (parsedData.totals.mCur || 1)) * 100).toFixed(0)}%</strong> are property-related.
           </p>
           <div className="flex flex-wrap items-end gap-x-8 gap-y-4">
             <div className="flex items-end gap-3 relative">
@@ -2149,8 +2140,8 @@ export default function App() {
               <div className="pb-1.5 flex flex-col pl-6 border-l border-gray-200">
                 <span className="text-sm font-medium text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Users size={14} /> Per 100k Residents</span>
                 <span className="text-[10px] text-gray-400 -mt-1 mb-1">{POP_BASIS}</span>
-                <span className="text-lg font-bold text-black tabular-nums">{((parsedData.totals.mCur / activePop) * 100000).toFixed(1)} incidents</span>
-                <span className="text-xs font-medium text-gray-500 mt-1">Citywide: {(parsedData.totals.citywideRate || 0).toFixed(1)} per 100k</span>
+                <span className="text-lg font-bold text-black tabular-nums">{fmt1((parsedData.totals.mCur / activePop) * 100000)} incidents</span>
+                <span className="text-xs font-medium text-gray-500 mt-1">Citywide: {fmt1(parsedData.totals.citywideRate || 0)} per 100k</span>
               </div>
             )}
             {REDRAWN_PRECINCTS[activeGeo] && (
@@ -2176,7 +2167,7 @@ export default function App() {
                   <div className="flex items-center gap-2 mb-2">
                     <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">In context</span>
                     <span className="text-[12px] font-medium text-gray-500 tabular-nums">
-                      {activeTab === 'ytd' ? `Through ${parsedData.period?.week_end || '—'}` : `${parsedData.period?.week_start || '—'} – ${parsedData.period?.week_end || '—'}`}
+                      {activeTab === 'ytd' ? `Through ${apDate(parsedData.period?.week_end)}` : apRange(parsedData.period?.week_start, parsedData.period?.week_end)}
                     </span>
                   </div>
                   <p className="font-serif text-[17px] leading-relaxed text-gray-800">{story}</p>
@@ -2196,11 +2187,11 @@ export default function App() {
                   <p className="text-[14px] text-gray-600 mt-2.5 leading-relaxed">
                     Major felonies tracking at or below their 2017–19 pre-pandemic baseline so far this year.
                     {recovery.above.length > 0 && (() => {
-                      const names = recovery.above.map(a => expandCrimeTitle(a.name));
+                      const names = recovery.above.map(a => expandCrime(a.name));
                       const joined = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
                       return <> Still above: <strong>{joined}</strong>.</>;
                     })()}
-                    {recovery.leftOut.length > 0 && <> {recovery.leftOut.map(expandCrimeTitle).join(' and ')} is left out: its definition changed in 2024.</>}
+                    {recovery.leftOut.length > 0 && <> {capFirst(recovery.leftOut.map(expandCrime).join(' and '))} is left out: its definition changed in 2024.</>}
                   </p>
                 </div>
               )}
@@ -2208,7 +2199,7 @@ export default function App() {
                 <div className="p-5 bg-white rounded-lg border border-gray-200">
                   <div className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2">Sharpest local spike</div>
                   <div className="text-[32px] font-black tabular-nums text-orange-600 leading-none" aria-label={`Up ${Math.round(spike.pct)} percent`}><span aria-hidden="true">▲</span> {Math.round(spike.pct)}%</div>
-                  <p className="text-[14px] text-gray-600 mt-2.5 leading-relaxed">{expandCrimeTitle(spike.crime)} in the {toOrdinalPrecinct(spike.precinct)}.</p>
+                  <p className="text-[14px] text-gray-600 mt-2.5 leading-relaxed">{capFirst(expandCrime(spike.crime))} in the {toOrdinalPrecinct(spike.precinct)}.</p>
                 </div>
               )}
             </section>
@@ -2233,7 +2224,7 @@ export default function App() {
               <Link2 size={12} /> {copyLinkLabel}
             </button>
             <button onClick={() => setAppView('historic')} className="text-[11px] font-black uppercase tracking-widest text-gray-400 hover:text-black transition-colors flex items-center gap-1.5">
-              <Activity size={12} /> 30-Year View →
+              <Activity size={12} /> Since {CW_FIRST.y} →
             </button>
           </span>
         </nav>
@@ -2285,7 +2276,7 @@ export default function App() {
                     <select value={['all', 'violent', 'property'].includes(mapCrime) ? '' : mapCrime} onChange={e => e.target.value && setMapCrime(e.target.value)} className="text-[10px] font-black uppercase tracking-widest bg-transparent border-none focus:outline-none text-gray-500 cursor-pointer pl-2">
                       <option value="">Crime...</option>
                       {['Murder', 'Rape', 'Robbery', 'Fel. Assault', 'Burglary', 'Gr. Larceny', 'G.L.A.', 'Petit Larceny', 'Misd. Assault'].map(c => (
-                        <option key={c} value={c}>{c}</option>
+                        <option key={c} value={c}>{lineLabel(c)}</option>
                       ))}
                     </select>
                   </div>
@@ -2366,7 +2357,8 @@ export default function App() {
                     : 'bg-gray-50 text-gray-600 border-gray-200';
                   return rows.map(item => {
                     const isVolatile = item.prior < VOLATILITY_THRESHOLD;
-                    const changeBarW = Math.abs(item.pct || 0) / maxAbsChange * 48;
+                    const cell = changeCell(item.current, item.prior);
+                    const changeBarW = cell.text === 'new' ? 48 : Math.abs(item.pct || 0) / maxAbsChange * 48;
                     const ctx = activeGeo === 'citywide' ? getHistoricalContext(crimeHistory.citywide, item, currentYear, activeTab) : null;
                     // Pick the most-noteworthy single badge to display inline (don't crowd the row).
                     const primaryBadge = ctx?.sinceSuperlative || ctx?.outlierBadge || ctx?.pandemicBadge;
@@ -2379,7 +2371,7 @@ export default function App() {
                                 {offenseClass(item.name) === 'Per' ? '● Per' : '■ Prop'}
                               </span>
                             )}
-                            <span title={expandCrimeTitle(item.name)}>{item.name}{isVolatile && <span className="ml-1 text-gray-400">*</span>}</span>
+                            <span title={expandCrimeTitle(item.name)}>{lineLabel(item.name)}{NYPD_FOOTNOTES[item.name] && <span className="ml-0.5 text-gray-400" title={NYPD_FOOTNOTES[item.name]}>†</span>}{isVolatile && <span className="ml-1 text-gray-400">*</span>}</span>
                             {primaryBadge && (
                               <span className={`text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border ${toneClass(primaryBadge.tone)}`} title={ctx?.pandemicBadge?.label && ctx.pandemicBadge !== primaryBadge ? `${primaryBadge.label} · ${ctx.pandemicBadge.label}` : primaryBadge.label}>
                                 {primaryBadge.label}
@@ -2399,18 +2391,18 @@ export default function App() {
                         </td>
                         <td className={`py-2.5 text-right tabular-nums text-black ${isVolatile ? 'opacity-50' : ''}`}>
                           <div className="text-sm font-black">{item.current.toLocaleString()}</div>
-                          {item.currentRate !== null && !isTouristPrecinct && <div className="text-[10px] font-normal text-gray-500">{item.currentRate.toFixed(1)}/100k (CW: {parsedData.citywideRates[item.name]?.toFixed(1)})</div>}
+                          {item.currentRate !== null && !isTouristPrecinct && <div className="text-[10px] font-normal text-gray-500">{fmt1(item.currentRate)}/100k (CW: {fmt1(parsedData.citywideRates[item.name])})</div>}
                           {ctx && ctx.ytdFrac && ctx.ytdFrac < 0.95 && (
                             <div className="text-[10px] font-normal text-gray-400" title={`Annualized to full-year using YTD fraction ${(ctx.ytdFrac * 100).toFixed(0)}%`}>~{Math.round(ctx.annualized).toLocaleString()} proj.</div>
                           )}
                         </td>
-                        <td className={`py-2.5 text-right text-xs font-bold tabular-nums ${item.pct > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                          <div className="flex items-center justify-end gap-1.5" aria-label={`${item.pct > 0 ? 'Up' : 'Down'} ${Math.abs(item.pct ?? 0).toFixed(1)} percent`}>
-                            <div className="w-12 h-[3px] bg-gray-100 rounded-full overflow-hidden flex" style={{ justifyContent: item.pct > 0 ? 'flex-start' : 'flex-end' }}>
-                              <div className="h-full rounded-full" style={{ width: `${changeBarW}px`, background: item.pct > 0 ? VC.orange : VC.green }} />
+                        <td className={`py-2.5 text-right text-xs font-bold tabular-nums ${cell.dir > 0 ? 'text-orange-600' : cell.dir < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                          <div className="flex items-center justify-end gap-1.5" aria-label={cell.dir === 0 ? 'No change' : cell.text === 'new' ? `Up from none to ${item.current.toLocaleString()}` : `${cell.dir > 0 ? 'Up' : 'Down'} ${cell.text.replace('%', ' percent')}`}>
+                            <div className="w-12 h-[3px] bg-gray-100 rounded-full overflow-hidden flex" style={{ justifyContent: cell.dir > 0 ? 'flex-start' : 'flex-end' }}>
+                              <div className="h-full rounded-full" style={{ width: `${changeBarW}px`, background: cell.dir > 0 ? VC.orange : VC.green }} />
                             </div>
-                            <span aria-hidden="true">{item.pct > 0 ? '▲' : item.pct < 0 ? '▼' : '•'}</span>
-                            <span>{formatPct(item.pct).replace(/^[+−-]/, '')}</span>
+                            <span aria-hidden="true">{cell.dir > 0 ? '▲' : cell.dir < 0 ? '▼' : ''}</span>
+                            <span>{cell.text}</span>
                           </div>
                         </td>
                       </tr>
@@ -2422,7 +2414,8 @@ export default function App() {
           </div>
           <div className="mt-6 text-[11px] font-serif italic text-gray-500 border-t border-gray-100 pt-4 space-y-1">
             <div>* Indicates a base sample size under 30 (statistically volatile).</div>
-            <div>Trajectory shows the offense's annual citywide count from the start of its series: 1993 for most major felonies, 2000 for petit larceny, 2015 for misdemeanor assault and 2025 for rape. The blue band marks the 2017–2019 pre-pandemic range — values inside the band have returned to pre-pandemic norms; values below are below pre-pandemic lows. Dot = current year, projected to a full-year equivalent from year-to-date data. Badges call out where each offense sits relative to that historical context (e.g., "Lowest since 2014," "Above pre-pandemic high," "5-yr high outlier"). Pandemic-context badges only appear for the 10 major offenses tracked in our 30-year history.</div>
+            {Object.entries(NYPD_FOOTNOTES).map(([k, note]) => <div key={k}>† {lineLabel(k)}: {note}</div>)}
+            <div>Trajectory shows the offense's annual citywide count from the start of its series: 1993 for most major felonies, 2000 for petit larceny, 2015 for misdemeanor assault and 2025 for rape. The blue band marks the 2017–2019 pre-pandemic range — values inside the band have returned to pre-pandemic norms; values below are below pre-pandemic lows. Dot = current year, projected to a full-year equivalent from year-to-date data. Badges call out where each offense sits relative to that historical context (e.g., "Lowest since 2014," "Above pre-pandemic high," "5-yr high outlier"). Pandemic-context badges only appear for the 10 major offenses tracked in our history since 1993.</div>
           </div>
         </section>
 
@@ -2432,7 +2425,7 @@ export default function App() {
           <div>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Data sources</h3>
             <ul className="space-y-1 leading-snug">
-              <li>NYPD CompStat 2.0 weekly report (scraped from <a href="https://compstat.nypdonline.org/" className="underline hover:text-black" target="_blank" rel="noopener noreferrer">compstat.nypdonline.org</a>)</li>
+              <li>NYPD's weekly CompStat reports, downloaded each week as Excel files from <a href="https://www.nyc.gov/site/nypd/stats/crime-statistics/citywide-crime-stats.page" className="underline hover:text-black" target="_blank" rel="noopener noreferrer">nyc.gov</a> by <a href="https://github.com/joshgreenman1973/nypd-compstat-scraper" className="underline hover:text-black" target="_blank" rel="noopener noreferrer">nypd-compstat-scraper</a></li>
               <li>NYC Open Data — NYPD Complaint Data Historic (<code className="text-[10px]">qgea-i56i</code>) &amp; Current YTD (<code className="text-[10px]">5uac-w243</code>)</li>
               <li>NYPD historical annual indices, 1993–present (NYPD Historical NYC Crime Data)</li>
               <li>2020 Census counts for per-100k rates: 8,804,190 citywide; precincts via John Keefe’s 2020 census-by-precincts crosswalk. Rates per resident don’t measure any one person’s risk of victimization: visitors, commuters and reporting patterns all shape the counts.</li>
@@ -2442,7 +2435,8 @@ export default function App() {
           <div>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Methodology notes</h3>
             <ul className="space-y-1 leading-snug">
-              <li>"Year-to-date" follows NYPD's CompStat week ending on Sunday — same-period prior-year comparison.</li>
+              <li>Year to date follows NYPD's CompStat week (Monday through Sunday) and compares the same dates a year earlier.</li>
+              {Object.entries(NYPD_FOOTNOTES).map(([k, note]) => <li key={k}>† {lineLabel(k)}, wherever it appears: {note}</li>)}
               <li>The 105th, 113th and 116th precincts have no per-100k rates: the 116th was carved from the other two in December 2024, and the 2020 Census crosswalk covers only the old lines. Their counts and changes are shown.</li>
                 <li>"Tourist hubs" (14th, 18th, 22nd precincts) have residential populations far below daytime populations, so per-100k rates are flagged with a hatch overlay. % change and volume Δ are unaffected.</li>
               <li>Pre-pandemic baseline = mean and range of 2017–2019 annual citywide totals.</li>
@@ -2458,7 +2452,7 @@ export default function App() {
               An independent project, not an official Vital City product. It is open source; data refreshes every Monday after NYPD posts the new CompStat report.
             </p>
             <p className="leading-snug text-gray-500">
-              CompStat data through {parsedData.period?.week_end || '—'}. Page rendered {new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}.
+              CompStat data through {apDate(parsedData.period?.week_end)}. Page rendered {apNow()}
             </p>
             <p className="mt-3"><a href="https://github.com/joshgreenman1973/compstat-ledger" className="underline hover:text-black" target="_blank" rel="noopener noreferrer">View source on GitHub →</a></p>
           </div>

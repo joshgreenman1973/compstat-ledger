@@ -387,3 +387,86 @@ export function povertyQuartiles(rows) {
     return { q, n: part.length, pov: mean(part, 'pov'), fa: mean(part, 'fa'), gl: mean(part, 'gl') };
   });
 }
+
+/* ---------------- Minor findings (Nov. 18, 2026 audit) ---------------- */
+
+// Dates come from NYPD's "M/D/YYYY" strings (or the scorecard's "YYYY-MM-DD"), read as calendar dates,
+// never through new Date(), so the page shows the same day in Paris, Tokyo or New York.
+const AP_MONTHS = ['Jan.', 'Feb.', 'March', 'April', 'May', 'June', 'July', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.'];
+export function parseDay(s) {
+  if (typeof s !== 'string') return null;
+  let m = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return { y: +m[3], m: +m[1], d: +m[2] };
+  m = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return { y: +m[1], m: +m[2], d: +m[3] };
+  return null;
+}
+// AP style: "Nov. 15, 2026"; { year: false } gives "Nov. 15".
+export function apDate(s, { year = true } = {}) {
+  const p = typeof s === 'object' && s ? s : parseDay(s);
+  if (!p) return s || '—';
+  return `${AP_MONTHS[p.m - 1]} ${p.d}${year ? `, ${p.y}` : ''}`;
+}
+// "Nov. 9-15, 2026"; "Oct. 27-Nov. 2, 2026"; across the New Year, "Dec. 29, 2026-Jan. 4, 2027".
+export function apRange(a, b) {
+  const A = parseDay(a); const B = parseDay(b);
+  if (!A || !B) return apDate(b);
+  if (A.y !== B.y) return `${apDate(A)}-${apDate(B)}`;
+  if (A.m === B.m) return A.d === B.d ? apDate(B) : `${apDate(A, { year: false })}-${B.d}, ${B.y}`;
+  return `${apDate(A, { year: false })}-${apDate(B)}`;
+}
+// The viewer's own clock, in AP style: "Nov. 18, 2026, 3:05 p.m."
+export function apNow(now = new Date()) {
+  const h = now.getHours(); const mm = String(now.getMinutes()).padStart(2, '0');
+  return `${apDate({ y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() })}, ${h % 12 || 12}:${mm} ${h < 12 ? 'a.m.' : 'p.m.'}`;
+}
+
+// A rate with a thousands comma and one decimal: "1,304.0".
+export const fmt1 = (v) => (Number.isFinite(v) ? v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '—');
+
+// Where, in a sentence: "in the 7th Precinct," "in the Bronx," "on Staten Island," "in Bronx North."
+export function placePhrase(geo) {
+  if (!geo || geo === 'citywide') return 'citywide';
+  if (geo === 'Bronx') return 'in the Bronx';
+  if (geo === 'Staten Island') return 'on Staten Island';
+  if (/Precinct/.test(geo)) return `in the ${geo}`;
+  return `in ${geo}`;
+}
+
+// Precincts in each patrol borough (checked against NYPD's Sept. 20, 2026 report, where each patrol
+// borough's counts equal the sum of these precincts).
+export const PATROL_BOROUGHS = {
+  'Manhattan South': [1, 5, 6, 7, 9, 10, 13, 14, 17, 18],
+  'Manhattan North': [19, 20, 22, 23, 24, 25, 26, 28, 30, 32, 33, 34],
+  'Bronx North': [46, 47, 48, 49, 50, 52],
+  'Bronx South': [40, 41, 42, 43, 44, 45],
+  'Brooklyn South': [60, 61, 62, 63, 66, 67, 68, 69, 70, 71, 72, 76, 78],
+  'Brooklyn North': [73, 75, 77, 79, 81, 83, 84, 88, 90, 94],
+  'Queens South': [100, 101, 102, 103, 105, 106, 107, 113, 116],
+  'Queens North': [104, 108, 109, 110, 111, 112, 114, 115],
+  'Staten Island': [120, 121, 122, 123],
+};
+export const precinctKey = (n) => {
+  const t = n % 100; const suf = t >= 11 && t <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+  return `${n}${suf} Precinct`;
+};
+// Each patrol borough's residents = the sum of its precincts' (a precinct with no population, like the
+// 116th, adds none).
+export function patrolBoroughPopulations(precinctPops, groups = PATROL_BOROUGHS) {
+  return Object.fromEntries(Object.entries(groups).map(([pb, nums]) => [pb, nums.reduce((s, n) => s + (precinctPops[precinctKey(n)] || 0), 0)]));
+}
+
+// NYPD's own footnotes. Its line names carry their own asterisk ("UCR Rape*"); the page shows the name
+// without it and the footnote in words, so it can't collide with the page's under-30 asterisk.
+export const NYPD_FOOTNOTES = {
+  'UCR Rape*': 'NYPD’s footnote: Uniform Crime Reporting (UCR) rape consists of all crimes defined in the FBI UCR definition of rape.',
+};
+export const lineLabel = (name) => (name || '').replace(/\*+$/, '');
+
+// The ledger's change cell. From zero, a rise is a rise ("new"), not a neutral dot.
+export function changeCell(cur, prior) {
+  if (!Number.isFinite(cur) || !Number.isFinite(prior)) return { dir: 0, text: '—' };
+  if (prior === 0) return cur === 0 ? { dir: 0, text: '—' } : { dir: 1, text: 'new' };
+  const pct = ((cur - prior) / prior) * 100;
+  return { dir: Math.sign(cur - prior), text: `${Math.abs(pct).toFixed(1)}%` };
+}
