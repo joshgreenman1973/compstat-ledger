@@ -157,3 +157,99 @@ describe('A4 and A5: other cities', () => {
     expect(new Set(LARGEST_CITIES).size).toBe(10);
   });
 });
+
+// ---- Moderate findings (A10-A17) ----
+import {
+  changePhrase, headlineChange, totalBadge, rateOutliers, timesWord, PER_RESIDENT_EXCLUDED,
+  rateConcentration, povertyQuartiles, SCATTER_EXCLUDED, SMALL_BASE, spell,
+} from './ledgerRules';
+
+describe('A10: misdemeanor histories are NYPD’s own table', () => {
+  const by = Object.fromEntries(H.map(r => [r.y, r]));
+  test('values match NYPD, “Misdemeanor Offenses 2000-2025”', () => {
+    expect(by[2025]['Misd. Assault']).toBe(45889);
+    expect(by[2015]['Misd. Assault']).toBe(42654);
+    expect(by[2025]['Petit Larceny']).toBe(105591);
+    expect(by[2000]['Petit Larceny']).toBe(93785);
+  });
+  test('misdemeanor assault starts after the 2015 classification change; nothing before 2000', () => {
+    expect(comparableSeries(H, 'Misd. Assault')[0].y).toBe(2015);
+    expect(comparableSeries(H, 'Petit Larceny')[0].y).toBe(2000);
+  });
+});
+
+describe('A11: rate cards need a real base and a per-resident line', () => {
+  const city = { Murder: 3, Housing: 50, Robbery: 140 };
+  test('eight murders at four times the city rate is not enough to say so (101st Precinct)', () => {
+    const r = rateOutliers([{ name: 'Murder', current: 8, prior: 6, currentRate: 12, isFelony: true }], city);
+    expect(r.high).toBeNull();
+  });
+  test('housing and transit never get a per-resident card', () => {
+    expect(PER_RESIDENT_EXCLUDED).toEqual(expect.arrayContaining(['Housing', 'Transit', 'Traffic Fatalities', 'Retail Theft']));
+    const r = rateOutliers([{ name: 'Housing', current: 400, prior: 380, currentRate: 300 }], city);
+    expect(r.high).toBeNull();
+  });
+  test('a big enough line passes, and the ratio reads in words', () => {
+    const r = rateOutliers([{ name: 'Robbery', current: 300, prior: 280, currentRate: 280, isFelony: true }], city);
+    expect(r.high.name).toBe('Robbery');
+    expect(timesWord(r.high.ratio)).toBe('2.0 times');
+  });
+});
+
+describe('A12: concentration ranks precincts by rate, not by count', () => {
+  test('a big precinct with many crimes but a low rate is not "highest"', () => {
+    const units = [
+      { id: 'big', count: 900, pop: 300000 }, // rate 300
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `hot${i}`, count: 200, pop: 20000 })), // rate 1,000
+      ...Array.from({ length: 10 }, (_, i) => ({ id: `low${i}`, count: 100, pop: 100000 })), // rate 100
+    ];
+    const c = rateConcentration(units);
+    expect(c.topSum).toBe(1000);
+    expect(c.bottomCount).toBe(10);
+  });
+  test('precincts without a population are never in it', () => {
+    const units = Array.from({ length: 12 }, (_, i) => ({ id: `p${i}`, count: 50 + i, pop: i === 0 ? null : 50000 }));
+    expect(rateConcentration(units)).not.toBeNull();
+    expect(rateConcentration(units.slice(0, 9))).toBeNull();
+  });
+});
+
+describe('A15: the quartile table uses the scatter’s precincts', () => {
+  test('the 14th is out of both', () => {
+    expect(SCATTER_EXCLUDED).toContain('14th');
+    const rows = Array.from({ length: 12 }, (_, i) => ({ n: i === 0 ? '14th' : `${i}0th`, pov: i, fa: i === 0 ? 99999 : 100, gl: 10 }));
+    const q = povertyQuartiles(rows);
+    expect(q.reduce((s, x) => s + x.n, 0)).toBe(11);
+    expect(q.every(x => x.fa === 100)).toBe(true);
+  });
+});
+
+describe('A17: headlines never print 0.0% for a non-change or a percent on a small base', () => {
+  test('equal counts', () => {
+    expect(changePhrase(18, 18)).toBe('unchanged at 18');
+    expect(headlineChange(18, 18, 'this week')).toBe('Major index offenses are unchanged this week from a year earlier, at 18.');
+  });
+  test('from zero (22nd Precinct, week of Nov. 9-15, 2026)', () => {
+    expect(changePhrase(3, 0)).toBe('up from none to three');
+    expect(headlineChange(3, 0, 'this week')).toBe('Major index offenses total three this week, up from none a year earlier.');
+  });
+  test('small bases give counts (100th Precinct, 3 vs. 8)', () => {
+    expect(changePhrase(3, 8)).toBe('down to three from eight');
+    expect(headlineChange(3, 8, 'this week')).toBe('Major index offenses total three this week, down from eight a year earlier.');
+    expect(totalBadge(3, 8).text).toBe('vs 8 last yr');
+  });
+  test('ordinary bases keep the percent', () => {
+    expect(headlineChange(88, 100, 'year to date')).toBe('Major index offenses are down 12.0% year to date vs. prior year.');
+    expect(totalBadge(88, 100).text).toBe('12.0% vs 100 last yr');
+    expect(changePhrase(10001, 10000)).toBe('essentially flat');
+    expect(SMALL_BASE).toBe(30);
+    expect(spell(7)).toBe('seven');
+    expect(spell(1234)).toBe('1,234');
+  });
+  test('no output ever reads "0.0%", "null" or "NaN"', () => {
+    for (let p = 0; p < 50; p += 3) for (let c = 0; c < 50; c += 4) {
+      const t = [changePhrase(c, p), headlineChange(c, p, 'this week'), totalBadge(c, p).text].join(' ');
+      expect(t).not.toMatch(/\b0\.0%|null|NaN|undefined/);
+    }
+  });
+});

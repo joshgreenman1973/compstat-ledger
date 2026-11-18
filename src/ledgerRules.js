@@ -295,3 +295,95 @@ export function getPrePandemicRecovery(felonies, history, reportYear, period) {
   if (result.total === 0) return null;
   return result;
 }
+
+// ---- Moderate findings from the Nov. 18, 2026 audit ----
+
+// Below this many last year, a percent change swings on a handful of crimes. The ledger already grays
+// these out (VOLATILITY_THRESHOLD in App.js); sentences give the counts instead (audit A11, A17).
+export const SMALL_BASE = 30;
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+// AP style: spell out whole numbers below 10 in running text.
+export const spell = (n) => (Number.isInteger(n) && n >= 0 && n < 10 ? WORDS[n] : Number(n).toLocaleString('en-US'));
+
+// A change in words, never "down 0.0%" for equal counts, "up 0.0%" from zero, or a percent on a base
+// under 30: "down 12.5%", "essentially flat", "unchanged at 18", "up from none to three",
+// "down to three from eight".
+export function changePhrase(cur, prior) {
+  if (!Number.isFinite(cur) || !Number.isFinite(prior)) return '';
+  if (cur === prior) return prior === 0 ? 'zero both years' : `unchanged at ${spell(cur)}`;
+  if (prior === 0) return `up from none to ${spell(cur)}`;
+  if (prior < SMALL_BASE) return `${cur > prior ? 'up' : 'down'} to ${spell(cur)} from ${spell(prior)}`;
+  const pct = ((cur - prior) / prior) * 100;
+  if (Math.abs(pct) < 0.05) return 'essentially flat';
+  return `${pct > 0 ? 'up' : 'down'} ${Math.abs(pct).toFixed(1)}%`;
+}
+
+// The page's headline about the seven major felonies. `when` is "year to date" or "this week".
+export function headlineChange(cur, prior, when) {
+  const L = 'Major index offenses';
+  if (!Number.isFinite(cur) || !Number.isFinite(prior)) return `${L}, ${when}.`;
+  if (cur === prior) return `${L} are unchanged ${when} from a year earlier, at ${spell(cur)}.`;
+  if (prior < SMALL_BASE) return `${L} total ${spell(cur)} ${when}, ${cur > prior ? 'up' : 'down'} from ${prior === 0 ? 'none' : spell(prior)} a year earlier.`;
+  return `${L} are ${changePhrase(cur, prior)} ${when} vs. prior year.`;
+}
+
+// The small change line beside the index total: the percent only on a base of 30 or more.
+export function totalBadge(cur, prior) {
+  const arrow = cur > prior ? '▲' : cur < prior ? '▼' : '•';
+  const last = Number(prior).toLocaleString('en-US');
+  if (cur === prior) return { arrow, text: `unchanged vs ${last} last yr`, pct: null };
+  if (prior < SMALL_BASE) return { arrow, text: `vs ${last} last yr`, pct: null };
+  const pct = ((cur - prior) / prior) * 100;
+  return { arrow, text: `${Math.abs(pct).toFixed(1)}% vs ${last} last yr`, pct };
+}
+
+// Lines where a rate per resident means nothing: crimes counted by place (transit, public housing,
+// stores), traffic deaths, and a duplicate of the rape line (audit A11).
+export const PER_RESIDENT_EXCLUDED = ['Transit', 'Housing', 'Retail Theft', 'Traffic Fatalities', 'UCR Rape*'];
+// "1.4 times," in words.
+export const timesWord = (r) => `${r.toFixed(1)} times`;
+// The line whose local rate is furthest above the city's (high) and the felony furthest below (low).
+// Each needs at least 30 crimes in the count it rests on: this year's for a high, last year's for a low.
+export function rateOutliers(items, citywideRates) {
+  let high = null; let low = null;
+  (items || []).forEach((item) => {
+    const city = citywideRates?.[item.name];
+    if (item.currentRate == null || !(city > 0) || PER_RESIDENT_EXCLUDED.includes(item.name)) return;
+    const ratio = item.currentRate / city;
+    if (item.current >= SMALL_BASE && ratio > 1.25 && (!high || ratio > high.ratio)) high = { name: item.name, localRate: item.currentRate, cityRate: city, ratio };
+    if (item.isFelony && item.prior >= SMALL_BASE && ratio < 0.75 && (!low || ratio < low.ratio)) low = { name: item.name, localRate: item.currentRate, cityRate: city, ratio };
+  });
+  return { high, low };
+}
+
+// Concentration of violent crime by RATE (audit A12): the five precincts with the highest violent-crime
+// rates, and how many of the lowest-rate precincts it takes to match their count. units: [{ id, count,
+// pop }]; leave out precincts with no population or tourist hubs before calling.
+export function rateConcentration(units, top = 5) {
+  const ok = (units || []).filter((u) => u.pop > 0 && Number.isFinite(u.count) && u.count >= 0)
+    .map((u) => ({ ...u, rate: u.count / u.pop })).sort((a, b) => b.rate - a.rate);
+  if (ok.length < top * 2) return null;
+  const head = ok.slice(0, top);
+  const topSum = head.reduce((s, u) => s + u.count, 0);
+  const topPop = head.reduce((s, u) => s + u.pop, 0);
+  let bottomSum = 0; let bottomCount = 0; let bottomPop = 0;
+  for (let i = ok.length - 1; i >= top && bottomSum < topSum; i--) { bottomSum += ok[i].count; bottomPop += ok[i].pop; bottomCount++; }
+  if (bottomSum < topSum || !(topSum > 0)) return null;
+  return { topCount: top, topSum, topPop, bottomCount, bottomSum, bottomPop };
+}
+
+// The 30-year view's precinct scatter and its quartile table use the same precincts (audit A15). The
+// 14th (Midtown South) has so few residents that its per-resident rates are off the chart.
+export const SCATTER_EXCLUDED = ['14th'];
+// Quartiles by poverty rate: mean poverty, felony assault and grand larceny rates in each quarter.
+export function povertyQuartiles(rows) {
+  const rs = (rows || []).filter((r) => !SCATTER_EXCLUDED.includes(r.n)).sort((a, b) => a.pov - b.pov);
+  const n = rs.length;
+  if (n < 8) return [];
+  const names = ['Q1: Lowest', 'Q2: Low-mid', 'Q3: Mid-high', 'Q4: Highest'];
+  const mean = (xs, k) => xs.reduce((s, r) => s + r[k], 0) / xs.length;
+  return names.map((q, i) => {
+    const part = rs.slice(Math.floor((i * n) / 4), Math.floor(((i + 1) * n) / 4));
+    return { q, n: part.length, pov: mean(part, 'pov'), fa: mean(part, 'fa'), gl: mean(part, 'gl') };
+  });
+}

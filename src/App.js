@@ -3,7 +3,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Cartesia
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from './data/nyc_precincts.json';
 import crimeHistory from './data/crime_history.json';
-import { ratePopulation, REDRAWN_PRECINCTS, describeDriver, LARGEST_CITIES, reportYearOf, RTCI_NYC_KEY, parseRTCIcsv, getHistoricalContext, getPrePandemicRecovery } from './ledgerRules';
+import { ratePopulation, REDRAWN_PRECINCTS, describeDriver, LARGEST_CITIES, reportYearOf, RTCI_NYC_KEY, parseRTCIcsv, getHistoricalContext, getPrePandemicRecovery, changePhrase, headlineChange, totalBadge, rateOutliers, timesWord, rateConcentration, povertyQuartiles, SCATTER_EXCLUDED, SMALL_BASE, spell } from './ledgerRules';
 
 /* ------------------------------------------------------------------ */
 /* 1. HISTORICAL DATASETS & CONFIG                                    */
@@ -13,7 +13,12 @@ import { ratePopulation, REDRAWN_PRECINCTS, describeDriver, LARGEST_CITIES, repo
 // 2000-2025: NYPD's "Seven Major Felony Offenses 2000-2025" table
 // (nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/), matched value
 // for value. 1993-1999 and shooting incidents: an earlier compilation with no matched NYPD table.
-const HISTORY_SOURCE_NOTE = 'Annual citywide totals of recorded complaints. 2000–2025: NYPD, “Seven Major Felony Offenses 2000–2025.” 1993–1999: an earlier compilation of NYPD figures not yet matched to a published NYPD table.';
+// Petit larceny (2000 on) and misdemeanor assault (2015 on) in crime_history.json come from NYPD's
+// "Misdemeanor Offenses 2000-2025" table (rows PETIT LARCENY and ASSAULT 3 & RELATED OFFENSES, 2025 as
+// of Jan. 19, 2026). Misdemeanor assault starts in 2015: the table's count drops 21% from 2014 to 2015,
+// a classification change, and the CompStat feed's own long-view comparison doesn't show that drop, so
+// earlier years aren't comparable with this year's counts (audit A10, Nov. 18, 2026).
+const HISTORY_SOURCE_NOTE = 'Annual citywide totals of recorded complaints. 2000–2025: NYPD, “Seven Major Felony Offenses 2000–2025.” Petit larceny (2000 on) and misdemeanor assault (2015 on, after a 2015 classification change): NYPD, “Misdemeanor Offenses 2000–2025.” 1993–1999: an earlier compilation of NYPD figures not yet matched to a published NYPD table.';
 const CW = crimeHistory.citywide.map(r => ({
   y: r.y, BU: r['Burglary'], FA: r['Fel. Assault'], GA: r['G.L.A.'], GL: r['Gr. Larceny'],
   MU: r['Murder'], RA: r['Rape'], RO: r['Robbery'],
@@ -320,13 +325,11 @@ const buildStorySummary = ({ parsedData, activeTab }) => {
     ? (endLabel ? `Year-to-date through ${endLabel}` : 'Year-to-date')
     : (startLabel && endLabel ? `For the week of ${startLabel}–${endLabel}` : 'This reporting week');
 
-  const mPct = typeof totals.mPct === 'number' ? totals.mPct : 0;
-  const upDown = mPct > 0 ? 'up' : mPct < 0 ? 'down' : 'flat';
-  const pctAbs = Math.abs(mPct).toFixed(1);
   const mCur = totals.mCur?.toLocaleString() ?? '—';
 
   const pctChange = (cur, pri) => (typeof cur === 'number' && typeof pri === 'number' && pri > 0) ? ((cur - pri) / pri) * 100 : null;
-  const move = (p) => Math.abs(p) < 0.5 ? 'essentially flat' : `${p > 0 ? 'up' : 'down'} ${Math.abs(p).toFixed(1)}%`;
+  // Counts, not percents, on bases under 30 (changePhrase in ledgerRules.js).
+  const move = (cur, pri) => changePhrase(cur, pri);
 
   // The three stat cards below already carry the driver, the inequality ratio, the pre-pandemic count and the
   // sharpest local spike. This box exists to add facts those cards don't: the violent/property split, and the
@@ -335,17 +338,17 @@ const buildStorySummary = ({ parsedData, activeTab }) => {
   const vPct = pctChange(totals.vCur, totals.vPri);
   const pPct = pctChange(totals.pCur, totals.pPri);
   if (vPct !== null && pPct !== null) {
-    sentence1 = `violent offenses are ${move(vPct)} and property offenses ${move(pPct)}.`;
+    sentence1 = `violent offenses are ${move(totals.vCur, totals.vPri)} and property offenses ${move(totals.pCur, totals.pPri)}.`;
   }
 
   let sentence2 = null;
   const murder = totals.murder;
   const shootings = totals.shootingVic;
   if ((typeof murder === 'number' && murder > 0) || (typeof shootings === 'number' && shootings > 0)) {
-    const mChg = pctChange(murder, totals.murderPri);
-    const sChg = pctChange(shootings, totals.shootingVicPri);
-    const murderClause = `Murder stands at ${murder.toLocaleString()}${mChg !== null ? ` (${move(mChg)})` : ''}`;
-    const shootClause = `shooting victims at ${shootings.toLocaleString()}${sChg !== null ? ` (${move(sChg)})` : ''}`;
+    // On a base under 30 the comparison is the count itself ("four a year earlier"), not a percent.
+    const vs = (cur, pri) => !Number.isFinite(pri) ? '' : pri < SMALL_BASE ? ` (${spell(pri)} a year earlier)` : ` (${move(cur, pri)})`;
+    const murderClause = `Murder stands at ${spell(murder)}${vs(murder, totals.murderPri)}`;
+    const shootClause = `shooting victims at ${spell(shootings)}${vs(shootings, totals.shootingVicPri)}`;
     sentence2 = `${murderClause} and ${shootClause}.`;
   } else if (Array.isArray(all) && all.length) {
     const risen = all.filter(o => typeof o.pct === 'number' && o.pct > 0).length;
@@ -354,7 +357,7 @@ const buildStorySummary = ({ parsedData, activeTab }) => {
   }
 
   // If the split isn't computable, fall back to the topline so the box is never empty.
-  if (!sentence1) sentence1 = `major index offenses are ${upDown} ${pctAbs}% versus the same period last year (${mCur} total).`;
+  if (!sentence1) sentence1 = `major index offenses are ${changePhrase(totals.mCur, totals.mPri)} versus the same period last year (${mCur} total).`;
 
   return [`${timeframe}, ${sentence1}`, sentence2].filter(Boolean).join(' ');
 };
@@ -765,17 +768,13 @@ const TRANSIT_OFFENSE_LABELS = {
 const TRANSIT_HOMICIDES = {
   note: 'Homicides are tracked by the NYPD Transit Bureau, not coded to a transit district in the complaint-level extract, so they cannot appear in the table above.',
   history: [
-    { year: 2022, count: 10 },
-    { year: 2023, count: 5 },
     { year: 2024, count: 10 },
     { year: 2025, count: 4 },
   ],
-  // Full-year NYPD Transit Bureau counts. 2025 = 4 transit murders, down 60% from 2024's 10
-  // and the lowest in five years (NYPD year-end, reported by amNewYork); Q1 2025 saw zero,
-  // the first time in seven years. 2022's 10 was a 25-year high. NYPD's year-end release
-  // itemizes only transit INDEX crime, not murder, so these come from Transit Bureau monthly
-  // reports and year-end reporting. 1997-2019 averaged roughly one to two murders per year.
-  context: '2025 closed with 4 transit murders, down 60% from 2024 and the lowest in five years; the first quarter of 2025 saw none, the first time in seven years. From 1997 to 2019 the system averaged roughly one to two homicides per year.',
+  // Only what the cited sources support (audit A14, Nov. 18, 2026): 10 transit murders in 2024 and 4 in
+  // 2025, a 60% drop (NYPD year-end, reported by amNewYork; Vital City). Earlier years, the first-quarter
+  // claim and a long-run average were removed because no cited source gives them.
+  context: '2025 closed with four transit murders, down 60% from 10 in 2024.',
   sources: [
     { label: 'amNewYork (NYPD 2025 year-end transit crime)', url: 'https://www.amny.com/news/subway-crime-drop-2025-nypd/' },
     { label: 'Vital City, subway safety', url: 'https://www.vitalcitynyc.org/what-the-data-show-about-subway-safety/' },
@@ -840,7 +839,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
         names.forEach(n => {
           const cur = curMap[n] || 0;
           const pri = priMap[n] || 0;
-          const pct = pri > 0 ? ((cur - pri) / pri) * 100 : (cur > 0 ? 100 : 0);
+          const pct = pri > 0 ? ((cur - pri) / pri) * 100 : null; // no percent from zero
           combined.push({ name: n, label: TRANSIT_OFFENSE_LABELS[n] || n, cur, prior: pri, pct, diff: cur - pri });
         });
         combined.sort((a, b) => b.cur - a.cur);
@@ -916,7 +915,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
       {/* Header */}
       <div className="flex items-start justify-between mb-6 gap-3 flex-wrap">
         <div className="flex-1 min-w-[220px]">
-          <h3 className="text-[12px] font-black uppercase tracking-[0.15em] text-gray-500 flex items-center gap-2">Transit System · Major Felony Index <AnchorLink id="transit" label="Transit System" size={12} /></h3>
+          <h3 className="text-[12px] font-black uppercase tracking-[0.15em] text-gray-500 flex items-center gap-2">Transit System · Major Felonies <AnchorLink id="transit" label="Transit System" size={12} /></h3>
           <p className="text-[15px] font-serif text-gray-600 mt-1 max-w-2xl">
             Offenses recorded on the NYC subway and bus system. Live weekly CompStat feed from the NYPD Transit Bureau.
           </p>
@@ -954,7 +953,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
           <div className="flex items-baseline gap-2 flex-wrap">
             <span className="flex items-center gap-1.5 text-[12px] font-black uppercase tracking-widest text-gray-600 group-hover:text-black transition-colors">
               <ChevronDown size={14} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
-              By offense type{breakdown ? ` · ${breakdown.year} vs ${breakdown.priorYear}` : ''}
+              All felonies by offense type{breakdown ? ` · ${breakdown.year} vs ${breakdown.priorYear}` : ''}
             </span>
             {breakdown && !expanded && (
               <span className="text-[12px] text-gray-400 normal-case font-medium tracking-normal">
@@ -1086,7 +1085,7 @@ const TransitCrimeBox = ({ rawData, downloadCSV }) => {
 
         <p className="text-[12px] text-gray-400 mt-6 italic leading-relaxed max-w-3xl">
           CompStat live = weekly NYPD CompStat feed for Transit Bureau (all major felonies combined, through week ending {period.week_end || '?'}).
-          By-offense totals = NYC Open Data complaint-level extract filtered to records with a transit-district code, most recent complete calendar year vs prior. The two sources use different counting rules, so the aggregates will not match exactly. Homicides do not carry a transit-district code in the complaint-level extract, so they are absent from the by-offense table — transit homicides are tracked separately by the NYPD Transit Bureau and shown above.
+          By-offense totals = NYC Open Data complaint-level extract filtered to felony records with a transit-district code: every felony, not just the seven majors, {breakdown?.periodLabel === 'Full year' ? `full year ${breakdown.year} vs. ${breakdown.priorYear}` : `year to date${breakdown?.periodLabel ? ` (${breakdown.periodLabel})` : ''}, ${breakdown?.year ?? ''} vs. the same dates in ${breakdown?.priorYear ?? 'the prior year'}`}. The two sources use different counting rules, so the aggregates will not match exactly. Homicides do not carry a transit-district code in the complaint-level extract, so they are absent from the by-offense table — transit homicides are tracked separately by the NYPD Transit Bureau and shown above.
         </p>
         </div>
         )}
@@ -1635,22 +1634,11 @@ export default function App() {
       }
     });
 
-    let localAnomaly = null, localBrightSpot = null;
-    if (activeGeo !== 'citywide' && pop && citywideData) {
-      let maxRatio = 0, minRatio = Infinity;
-      all.forEach(item => {
-        if (item.currentRate !== null && citywideRates[item.name] && item.current >= 5) {
-          const ratio = item.currentRate / citywideRates[item.name];
-          if (ratio > maxRatio && ratio > 1.25) { maxRatio = ratio; localAnomaly = { name: item.name, localRate: item.currentRate, cityRate: citywideRates[item.name], ratio }; }
-        }
-      });
-      felonies.forEach(item => {
-        if (item.currentRate !== null && citywideRates[item.name] && item.prior >= 5) {
-          const ratio = item.currentRate / citywideRates[item.name];
-          if (ratio < minRatio && ratio < 0.75) { minRatio = ratio; localBrightSpot = { name: item.name, localRate: item.currentRate, cityRate: citywideRates[item.name], ratio }; }
-        }
-      });
-    }
+    // Rates far from the city's: at least 30 crimes behind each, and only lines that make sense per
+    // resident (see rateOutliers in ledgerRules.js).
+    const { high: localAnomaly, low: localBrightSpot } = (activeGeo !== 'citywide' && pop && citywideData)
+      ? rateOutliers([...felonies.map(f => ({ ...f, isFelony: true })), ...minors], citywideRates)
+      : { high: null, low: null };
     
     return { 
       period: geoData.report_period || {}, 
@@ -1696,14 +1684,10 @@ export default function App() {
       });
       volumes.push({ precinct: pct, violent: vSum });
     });
-    const sortedV = [...volumes].filter(v => v.violent > 0 && ratePopulation(v.precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) && !TOURIST_PRECINCTS.includes(v.precinct)).sort((a,b) => b.violent - a.violent);
-    let inequality = null;
-    if (sortedV.length > 10) {
-      const top5 = sortedV.slice(0, 5); const top5Sum = top5.reduce((s, p) => s + p.violent, 0); const top5Pop = top5.reduce((s, p) => s + (ratePopulation(p.precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) || 0), 0);
-      let bottomSum = 0, bottomCount = 0, bottomPop = 0;
-      for (let i = sortedV.length - 1; i >= 0 && bottomSum < top5Sum; i--) { bottomSum += sortedV[i].violent; bottomCount++; bottomPop += (ratePopulation(sortedV[i].precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) || 0); }
-      inequality = { topCount: 5, topSum: top5Sum, topPop: top5Pop, bottomCount, bottomPop };
-    }
+    // Ranked by rate, not raw counts, and only precincts with an honest population (audit A12).
+    const inequality = rateConcentration(volumes
+      .filter(v => !TOURIST_PRECINCTS.includes(v.precinct))
+      .map(v => ({ id: v.precinct, count: v.violent, pop: ratePopulation(v.precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) })));
     allPrecinctCrimes.sort((a, b) => b.pct - a.pct);
     // One entry per precinct so the runner-up lists don't stack three offenses from the same command.
     const onePerPrecinct = (list) => {
@@ -1717,7 +1701,6 @@ export default function App() {
 
   const isTouristPrecinct = TOURIST_PRECINCTS.includes(activeGeo);
   const activePop = ratePopulation(activeGeo, GEO_POPULATIONS, CITYWIDE_POPULATION);
-  const formattedMPct = typeof parsedData.totals.mPct === 'number' ? Number(Math.abs(parsedData.totals.mPct)).toFixed(1) : '0.0';
 
   // Compute per-100k rates for all precincts (for map + ranking bars)
   const precinctRates = useMemo(() => {
@@ -1795,7 +1778,7 @@ export default function App() {
             {featuredSpike && <div className="text-[11px] text-gray-400 italic mt-3">Next-largest movements after the citywide sharpest spike, shown above.</div>}
           </>
         );
-        cards.push({ id: 'flashpoints', icon: MapPin, title: 'Significant Local Shifts', content: flashContent });
+        cards.push({ id: 'flashpoints', icon: MapPin, title: 'Largest Local Shifts', content: flashContent });
       }
       // Pre-pandemic recovery: how many of the 7 major felonies are back at or below their 2017-19 baseline,
       // using a YTD-annualized projection. Replaces a "lethality gap" card that asserted a claim it didn't show.
@@ -1835,9 +1818,11 @@ export default function App() {
       if (driver && driver.share >= 25) cards.push({ id: 'local_driver', icon: Target, title: 'Local Driver', content: driver.offset
         ? offsetDriverText(driver, expandCrimeTitle(driver.name), 'here')
         : `The change in **${expandCrimeTitle(driver.name)}** volume accounts for **${Math.round(driver.share)}%** of this area's net change in major felonies.` });
-      if (localAnomaly && !isTouristPrecinct) cards.push({ id: 'anomaly', icon: AlertTriangle, title: 'Elevated Local Risk', content: `The rate for **${expandCrimeTitle(localAnomaly.name)}** here is **${localAnomaly.localRate.toFixed(1)} per 100k residents**, which is **${localAnomaly.ratio.toFixed(1)}x** higher than the citywide average (${localAnomaly.cityRate.toFixed(1)}).` });
+      if (localAnomaly && !isTouristPrecinct) cards.push({ id: 'anomaly', icon: AlertTriangle, title: 'Higher Local Rate', content: `The rate for **${expandCrimeTitle(localAnomaly.name)}** here is **${localAnomaly.localRate.toFixed(1)} per 100k residents**, **${timesWord(localAnomaly.ratio)}** the citywide rate (${localAnomaly.cityRate.toFixed(1)}).` });
       else if (topSurge && topSurge.pct > 0) cards.push({ id: 'surge', icon: TrendingUp, title: 'Local Trajectory', content: `**${expandCrimeTitle(topSurge.name)}** index offenses have increased by **${Math.round(topSurge.pct)}%** compared to last year.` });
-      if (localBrightSpot && !isTouristPrecinct) cards.push({ id: 'brightspot', icon: ShieldCheck, title: 'Local Bright Spot', content: `The rate of **${expandCrimeTitle(localBrightSpot.name)}** offenses here sits **${Math.round((1 - localBrightSpot.ratio)*100)}% below** the citywide average.` });
+      if (localBrightSpot && !isTouristPrecinct) cards.push({ id: 'brightspot', icon: ShieldCheck, title: 'Local Bright Spot', content: localBrightSpot.localRate === 0
+        ? `No **${expandCrimeTitle(localBrightSpot.name)}** offenses have been recorded here ${activeTab === 'ytd' ? 'so far this year' : 'this week'}, against a citywide rate of ${localBrightSpot.cityRate.toFixed(1)} per 100k.`
+        : `The rate of **${expandCrimeTitle(localBrightSpot.name)}** offenses here is **${Math.round((1 - localBrightSpot.ratio)*100)}% below** the citywide rate.` });
       else if (topDrop && topDrop.pct < 0) cards.push({ id: 'drop', icon: TrendingDown, title: 'Local Trajectory', content: `**${expandCrimeTitle(topDrop.name)}** index offenses have fallen by **${Math.round(Math.abs(topDrop.pct))}%** here compared to last year.` });
     }
     return cards;
@@ -1851,7 +1836,8 @@ export default function App() {
   const vp = useMemo(()=>{const vC=['FA','MU','RA','RO'],pC=['BU','GA','GL'];return CW.map(d=>({y:d.y,violent:vC.reduce((s,c)=>s+d[c],0),property:pC.reduce((s,c)=>s+d[c],0)}));},[]);
   const idx = useMemo(()=>{const b=CW[0];return CW.map(d=>{const o={y:d.y};K7.forEach(c=>{o[c]=d[c]/b[c]*100;});return o;});},[]);
   const assaultD = useMemo(()=>CW.filter(d=>d.y>=2000&&MA_CW[d.y]!=null).map(d=>{const ma=MA_CW[d.y];return{y:d.y,fa:d.FA,ma,total:d.FA+ma,faPct:d.FA/(d.FA+ma)*100};}),[]);
-  const sd = useMemo(()=>PC.filter(p=>p.n!=='14th').map(p=>({...p,x:p[xM],y:p[yM]})), [xM, yM]);
+  const sd = useMemo(()=>PC.filter(p=>!SCATTER_EXCLUDED.includes(p.n)).map(p=>({...p,x:p[xM],y:p[yM]})), [xM, yM]);
+  const quartiles = useMemo(() => povertyQuartiles(PC), []);
   const ms = [{k:'pov',l:'Poverty %'},{k:'ta',l:'Total assault'},{k:'fa',l:'Felony assault'},{k:'ma',l:'Misd. assault'},{k:'sh',l:'Shootings'},{k:'ha',l:'Harassment'},{k:'pl',l:'Petit larceny'},{k:'gl',l:'Grand larceny'},{k:'fs',l:'Felony share %'}];
 
   // ==========================================
@@ -1944,7 +1930,7 @@ export default function App() {
             <div className="space-y-4">
                <div className="text-[#050507] text-[10px] font-black uppercase tracking-widest">Classification Shift</div>
                <h2 className="text-2xl font-black leading-snug">The Assault Anomaly</h2>
-               <p className="text-gray-600 font-serif text-[15px] leading-relaxed mb-4">While felony assault dominates headlines, misdemeanor assault outnumbered it about 1.5 to 1 in 2025. In 2015, misdemeanor assaults dropped 21% overnight while felonies didn't budge—a clear indicator of classification changes rather than behavioral shifts.</p>
+               <p className="text-gray-600 font-serif text-[15px] leading-relaxed mb-4">While felony assault dominates headlines, misdemeanor assault outnumbered it about 1.5 to 1 in 2025. From 2014 to 2015, recorded misdemeanor assaults fell 21% while felony assaults barely moved, a sign of a change in how NYPD classified them rather than in behavior.</p>
                <p className="text-gray-600 font-serif text-[15px] leading-relaxed">From 2020 to 2024, both categories rose in lockstep for the first time in the dataset, suggesting a genuine increase in violent contact rather than just administrative drift. That parallel rise has since leveled off: in 2025 misdemeanor assaults fell 4% and felony assaults rose 1%.</p>
             </div>
             <div className="h-[350px]">
@@ -1968,7 +1954,7 @@ export default function App() {
                <div className="max-w-2xl space-y-4">
                  <div className="text-[#9b9fbc] text-[10px] font-black uppercase tracking-widest">Geographic Reality</div>
                  <h2 className="text-2xl font-black leading-snug">The Complex Geography of Crime</h2>
-                 <p className="text-gray-600 font-serif text-[15px] leading-relaxed">Mapping the 76 standard precincts reveals distinct statistical clusters. In this specific dataset, poverty rates correlate strongly with violence (shootings, murder, felony assault). Conversely, theft (grand and petit larceny) shows virtually zero correlation with poverty, mapping closer to commercial density and foot traffic.</p>
+                 <p className="text-gray-600 font-serif text-[15px] leading-relaxed">Mapping {sd.length} precincts reveals distinct statistical clusters. In this specific dataset, poverty rates track violence closely (shootings and felony assault). Theft (grand and petit larceny) shows virtually no correlation with poverty, mapping closer to commercial density and foot traffic. Rates are per 100,000 residents for 2025, as compiled for this page; the precincts' poverty rates come from an earlier compilation whose source and year aren't documented. The {SCATTER_EXCLUDED.map(n => `${n} Precinct`).join(' and ')} (Midtown South, few residents) is left out of the chart and the table.</p>
                </div>
                
                {/* Controls */}
@@ -2012,12 +1998,7 @@ export default function App() {
                 </tr>
               </thead>
               <tbody>
-                {[
-                  {q:'Q1: Lowest',pov:'8.4%',fa:180,gl:651},
-                  {q:'Q2: Low-mid',pov:'13.3%',fa:400,gl:948},
-                  {q:'Q3: Mid-high',pov:'19.0%',fa:353,gl:492},
-                  {q:'Q4: Highest',pov:'30.3%',fa:607,gl:653},
-                ].map((q,i)=>(
+                {quartiles.map(qq => ({ ...qq, pov: `${qq.pov.toFixed(1)}%`, fa: Math.round(qq.fa), gl: Math.round(qq.gl) })).map((q,i)=>(
                   <tr key={i} className={`border-b border-gray-100 ${i===3 ? 'bg-red-50/50' : ''}`}>
                     <td className="p-2 font-semibold">{q.q}</td>
                     <td className="text-center p-2 font-bold">{q.pov}</td>
@@ -2136,7 +2117,7 @@ export default function App() {
         <section className="mb-10">
           {isTouristPrecinct && <div className="mb-6 p-4 bg-gray-50 border-l-4 border-gray-400 text-sm font-serif italic text-gray-700"><strong>Context Note:</strong> {formatGeoName(activeGeo)} is a high-traffic hub with few residents; crime rates primarily reflect commercial/visitor density.</div>}
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-black leading-[1.08] tracking-tight mb-3 text-black max-w-4xl">
-            Major index offenses are {parsedData.totals.diff > 0 ? 'up' : 'down'} {formattedMPct}% {activeTab === 'ytd' ? 'year-to-date' : 'this week'} vs. prior year.
+            {headlineChange(parsedData.totals.mCur, parsedData.totals.mPri, activeTab === 'ytd' ? 'year to date' : 'this week')}
           </h1>
           <p className="text-base md:text-lg font-serif text-gray-600 mb-6 max-w-3xl leading-snug">
             Violent index offenses account for <strong className="text-black">{Number((parsedData.totals.vCur / (parsedData.totals.mCur || 1)) * 100).toFixed(0)}%</strong> of the {parsedData.totals.mCur.toLocaleString()} major felonies reported {activeGeo === 'citywide' ? 'citywide' : `in the ${activeGeo}`}, while the remaining <strong className="text-black">{Number((parsedData.totals.pCur / (parsedData.totals.mCur || 1)) * 100).toFixed(0)}%</strong> are property-related.
@@ -2158,9 +2139,10 @@ export default function App() {
               <span className="text-5xl md:text-6xl font-black tabular-nums tracking-tighter leading-none relative">{parsedData.totals.mCur.toLocaleString()}</span>
               <div className="pb-1.5 flex flex-col">
                 <span className="text-sm font-medium text-gray-500 uppercase tracking-widest mb-1">Index Total</span>
-                <span className={`text-base font-bold tabular-nums ${parsedData.totals.mPct > 0 ? 'text-orange-600' : 'text-green-600'}`} aria-label={`${parsedData.totals.mPct > 0 ? 'Up' : 'Down'} ${formattedMPct} percent`}>
-                  <span aria-hidden="true">{parsedData.totals.mPct > 0 ? '▲' : (parsedData.totals.mPct < 0 ? '▼' : '•')}</span> {formattedMPct}% vs {parsedData.totals.mPri.toLocaleString()} last yr
-                </span>
+                {(() => { const b = totalBadge(parsedData.totals.mCur, parsedData.totals.mPri); const up = parsedData.totals.mCur > parsedData.totals.mPri; const same = parsedData.totals.mCur === parsedData.totals.mPri; return (
+                <span className={`text-base font-bold tabular-nums ${same ? 'text-gray-500' : up ? 'text-orange-600' : 'text-green-600'}`} aria-label={`${same ? 'Unchanged' : up ? 'Up' : 'Down'}: ${b.text}`}>
+                  <span aria-hidden="true">{b.arrow}</span> {b.text}
+                </span>); })()}
               </div>
             </div>
             {activePop && activeGeo !== 'citywide' && !isTouristPrecinct && (
@@ -2204,7 +2186,7 @@ export default function App() {
                 <div className="p-5 bg-white rounded-lg border border-gray-200">
                   <div className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2">Inequality</div>
                   <div className="text-[32px] font-black tabular-nums text-black leading-none">{ineq.topCount} : {ineq.bottomCount}</div>
-                  <p className="text-[14px] text-gray-600 mt-2.5 leading-relaxed">The {ineq.topCount} highest-crime precincts ({formatPop(ineq.topPop)} residents) match the violent crime total of the {ineq.bottomCount} safest ({formatPop(ineq.bottomPop)} residents).</p>
+                  <p className="text-[14px] text-gray-600 mt-2.5 leading-relaxed">The five precincts with the highest violent-crime rates ({formatPop(ineq.topPop)} residents) recorded as many violent major felonies ({ineq.topSum.toLocaleString()}) as the {ineq.bottomCount} with the lowest rates combined ({formatPop(ineq.bottomPop)} residents). Tourist hubs and precincts without a current population are left out.</p>
                 </div>
               )}
               {recovery && recovery.total > 0 && (
@@ -2358,7 +2340,7 @@ export default function App() {
           {activeGeo === 'citywide' && (
             <div className="hidden md:flex items-center gap-5 mb-4 text-[11px] text-gray-500">
               <span className="font-black uppercase tracking-widest text-[10px] text-gray-400">How to read the spark&shy;line:</span>
-              <span className="flex items-center gap-1.5"><svg width="22" height="10"><polyline points="1,7 6,5 11,6 16,2 21,3" fill="none" stroke="#9ca3af" strokeWidth="1.5" /></svg> Annual count, ~2013–now</span>
+              <span className="flex items-center gap-1.5"><svg width="22" height="10"><polyline points="1,7 6,5 11,6 16,2 21,3" fill="none" stroke="#9ca3af" strokeWidth="1.5" /></svg> Annual count since the series begins (1993 for most lines)</span>
               <span className="flex items-center gap-1.5"><span className="inline-block w-5 h-2.5 rounded-sm" style={{ background: '#dbeafe' }} /> 2017–19 pre-pandemic range</span>
               <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: VC.green }} /> This year (projected to full year)</span>
             </div>
@@ -2440,7 +2422,7 @@ export default function App() {
           </div>
           <div className="mt-6 text-[11px] font-serif italic text-gray-500 border-t border-gray-100 pt-4 space-y-1">
             <div>* Indicates a base sample size under 30 (statistically volatile).</div>
-            <div>Trajectory shows the offense's annual citywide count back to the early 2010s. The blue band marks the 2017–2019 pre-pandemic range — values inside the band have returned to pre-pandemic norms; values below are below pre-pandemic lows. Dot = current year, projected to a full-year equivalent from year-to-date data. Badges call out where each offense sits relative to that historical context (e.g., "Lowest since 2014," "Above pre-pandemic high," "5-yr high outlier"). Pandemic-context badges only appear for the 10 major offenses tracked in our 30-year history.</div>
+            <div>Trajectory shows the offense's annual citywide count from the start of its series: 1993 for most major felonies, 2000 for petit larceny, 2015 for misdemeanor assault and 2025 for rape. The blue band marks the 2017–2019 pre-pandemic range — values inside the band have returned to pre-pandemic norms; values below are below pre-pandemic lows. Dot = current year, projected to a full-year equivalent from year-to-date data. Badges call out where each offense sits relative to that historical context (e.g., "Lowest since 2014," "Above pre-pandemic high," "5-yr high outlier"). Pandemic-context badges only appear for the 10 major offenses tracked in our 30-year history.</div>
           </div>
         </section>
 
@@ -2465,8 +2447,9 @@ export default function App() {
                 <li>"Tourist hubs" (14th, 18th, 22nd precincts) have residential populations far below daytime populations, so per-100k rates are flagged with a hatch overlay. % change and volume Δ are unaffected.</li>
               <li>Pre-pandemic baseline = mean and range of 2017–2019 annual citywide totals.</li>
               <li>Current-year sparkline dot uses an annualized projection: <code className="text-[10px]">current_ytd / (prior_year_ytd / prior_year_full)</code>.</li>
-              <li>Outlier badges use z-score against the prior-5-year baseline; |z| ≥ 2 triggers a flag.</li>
-              <li>"Significant" YoY shifts at the precinct level filter for a base of at least 5 incidents in the prior period to avoid volatile small-sample noise.</li>
+              <li>Outlier badges use a z-score against the five full years before this one; |z| ≥ 2 triggers a flag. "Lowest since" and "highest since" claims must hold across a chance range around the projection.</li>
+              <li>"Largest local shifts" are the biggest percent changes among precinct lines with at least {SMALL_BASE} crimes last year. That is a size filter, not a test of whether a change is beyond chance. Sentences give counts, not percents, when last year's count is under {SMALL_BASE}.</li>
+              <li>"Higher local rate" cards need at least {SMALL_BASE} crimes and skip lines counted by place (transit, public housing, retail theft) and traffic deaths.</li>
             </ul>
           </div>
           <div>
