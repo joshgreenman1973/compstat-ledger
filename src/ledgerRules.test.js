@@ -323,3 +323,11 @@ describe('minor: style', () => {
     expect(changeCell(8, 10)).toEqual({ dir: -1, text: '20.0%' });
   });
 });
+
+describe('audit (minor): the 1999 shootings figure, a copy of 1998, is left out', () => {
+  test('no year repeats the year before', () => {
+    const h = require('./data/crime_history.json').citywide;
+    expect(h.find(d => d.y === 1999)['Shooting Inc.']).toBeUndefined();
+    h.forEach((d, i) => { if (i > 0 && d['Shooting Inc.'] != null) expect(d['Shooting Inc.']).not.toBe(h[i - 1]['Shooting Inc.']); });
+  });
+});
