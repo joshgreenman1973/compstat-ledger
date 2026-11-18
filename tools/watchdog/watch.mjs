@@ -56,6 +56,8 @@ const BAD = [
   [/(?<![\d.])[−-]0(?:\.0+)?%/, 'a "−0%"'],
   [/(?:Nov|Dec)\. \d{1,2}-Jan\. \d{1,2}, \d{4}/, 'a New Year date range without its first year'],
   [/Loading NYPD/, 'the page never finished loading'],
+  [/\bNo of them\b|\bOne of them are\b|, and no show\b/, 'a garbled count sentence'],
+  [/\bnew\s*·\s*0 vs\. 0\b/, '"new" printed for zero both years'],
 ];
 async function check(view) {
   const page = await ctx.newPage(); const errs = [];

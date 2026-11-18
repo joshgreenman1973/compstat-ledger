@@ -1,122 +1,122 @@
 {
  "_source": "tools/dispersion/build_dispersion.py over NYPD weekly CompStat reports archived by nypd-compstat-scraper",
- "_weeks": "2026-03-01 to 2026-09-20",
- "_pairs": 29,
+ "_weeks": "2026-03-01 to 2026-11-15",
+ "_pairs": 37,
  "_note": "variance / mean of weekly counts (1 = a plain random count), pooled by level; the page never uses less than 1",
  "lines": {
   "Burglary": {
-   "borough": 1.08,
-   "city": 1.69,
-   "county": 0.96,
-   "precinct": 1.12
+   "borough": 1.1,
+   "city": 1.51,
+   "county": 1.0,
+   "precinct": 1.17
   },
   "Fel. Assault": {
    "borough": 1.31,
-   "city": 2.64,
-   "county": 1.5,
-   "precinct": 1.26
+   "city": 2.69,
+   "county": 1.53,
+   "precinct": 1.24
   },
   "G.L.A.": {
-   "borough": 1.28,
-   "city": 2.28,
-   "county": 1.39,
+   "borough": 1.27,
+   "city": 2.44,
+   "county": 1.48,
    "precinct": 1.17
   },
   "Gr. Larceny": {
-   "borough": 1.13,
-   "city": 1.95,
-   "county": 1.32,
+   "borough": 1.08,
+   "city": 1.82,
+   "county": 1.24,
    "precinct": 1.09
   },
   "Hate Crimes": {
-   "borough": 1.56,
-   "city": 1.59,
-   "county": 1.8,
-   "precinct": 1.34
+   "borough": 1.55,
+   "city": 1.56,
+   "county": 1.74,
+   "precinct": 1.4
   },
   "Housing": {
-   "borough": 1.1,
-   "city": 1.08,
-   "county": 1.06,
-   "precinct": 1.14
+   "borough": 1.11,
+   "city": 1.13,
+   "county": 1.04,
+   "precinct": 1.11
   },
   "Misd. Assault": {
-   "borough": 1.47,
-   "city": 2.95,
+   "borough": 1.48,
+   "city": 2.89,
    "county": 1.56,
    "precinct": 1.27
   },
   "Murder": {
-   "borough": 0.96,
-   "city": 0.65,
-   "county": 0.92,
-   "precinct": 1.15
+   "borough": 0.95,
+   "city": 0.66,
+   "county": 0.91,
+   "precinct": 1.13
   },
   "Other Sex Crimes": {
-   "borough": 0.93,
-   "city": 1.29,
-   "county": 0.98,
-   "precinct": 1.09
+   "borough": 1.01,
+   "city": 1.24,
+   "county": 1.07,
+   "precinct": 1.11
   },
   "Petit Larceny": {
-   "borough": 1.68,
-   "city": 4.27,
-   "county": 1.93,
-   "precinct": 1.65
+   "borough": 1.7,
+   "city": 3.93,
+   "county": 1.92,
+   "precinct": 1.61
   },
   "Rape": {
-   "borough": 0.96,
+   "borough": 0.91,
    "city": 0.89,
-   "county": 1.07,
-   "precinct": 1.04
+   "county": 1.02,
+   "precinct": 1.01
   },
   "Retail Theft": {
-   "borough": 1.61,
-   "city": 3.23,
-   "county": 1.86,
-   "precinct": 1.53
+   "borough": 1.63,
+   "city": 2.86,
+   "county": 1.85,
+   "precinct": 1.49
   },
   "Robbery": {
-   "borough": 0.96,
-   "city": 1.57,
-   "county": 1.01,
+   "borough": 0.97,
+   "city": 1.38,
+   "county": 0.95,
    "precinct": 1.03
   },
   "Shooting Inc.": {
-   "borough": 1.02,
-   "city": 1.31,
-   "county": 1.19,
+   "borough": 1.03,
+   "city": 1.16,
+   "county": 1.15,
    "precinct": 1.02
   },
   "Shooting Vic.": {
-   "borough": 1.75,
-   "city": 2.33,
-   "county": 2.05,
-   "precinct": 1.76
+   "borough": 1.7,
+   "city": 2.1,
+   "county": 1.94,
+   "precinct": 1.7
   },
   "Traffic Fatalities": {
-   "borough": 0.95,
-   "city": 1.12,
-   "county": 0.93,
-   "precinct": 1.01
+   "borough": 0.93,
+   "city": 1.07,
+   "county": 0.87,
+   "precinct": 1.0
   },
   "Transit": {
-   "borough": 0.92,
-   "city": 1.37,
-   "county": 0.96,
+   "borough": 0.89,
+   "city": 1.2,
+   "county": 0.94,
    "precinct": 1.03
   },
   "UCR Rape*": {
-   "borough": 0.87,
-   "city": 1.01,
-   "county": 1.0,
-   "precinct": 1.03
+   "borough": 0.85,
+   "city": 1.05,
+   "county": 0.98,
+   "precinct": 1.01
   },
   "_majors": {
-   "borough": 1.1,
-   "city": 2.32,
-   "county": 1.37,
-   "precinct": 1.1
+   "borough": 1.09,
+   "city": 2.21,
+   "county": 1.33,
+   "precinct": 1.11
   }
  }
 }

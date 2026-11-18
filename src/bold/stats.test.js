@@ -121,7 +121,7 @@ describe('headline', () => {
     expect(rows[0].verdict).toBe('drop'); // z ≈ −2.1
     const h = buildHeadline(rows);
     expect(h.lead).toBeNull();
-    expect(h.sentences).toEqual(['No major crime moved by a clear margin.']);
+    expect(h.sentences).toEqual(['No major crime’s change clears the stricter headline threshold.']);
     expect(h.cleared.map((r) => r.name)).toEqual(['Robbery']);
   });
   test('small bases headline in counts, not percentages', () => {
@@ -563,5 +563,39 @@ describe('January: dates that cross the New Year say both years', () => {
   test('revision flows never pair a December report with a January one', () => {
     const snap = (end, ytdCur) => ({ citywide: { report_period: { week_end: end }, seven_major_felonies: { Murder: { year_to_date: { current_year: ytdCur, prior_year: 300 }, week_to_date: { current_year: 5, prior_year: 6 } } } } });
     expect(revisionFlows([snap('12/28/2026', 290), snap('1/4/2027', 5)])).toBeNull();
+  });
+});
+
+// Moderate findings from the Nov. 18, 2026 audit.
+describe('audit B5: counts as subjects read as English', () => {
+  test('none, one, several', () => {
+    expect(S.countSubject(0)).toBe('None of them is');
+    expect(S.countSubject(1)).toBe('One of them is');
+    expect(S.countSubject(3)).toBe('Three of them are');
+    expect(S.countVerb(0, 'shows', 'show')).toBe('none shows');
+    expect(S.countVerb(1, 'shows', 'show')).toBe('one shows');
+    expect(S.countVerb(4, 'shows', 'show')).toBe('four show');
+  });
+});
+
+describe('audit B7: a rise from zero can lead the headline, in counts', () => {
+  test('ten burglaries from none clears the test and is stated in counts', () => {
+    const rows = [{ name: 'Burglary', label: 'Burglary', cur: 10, prior: 0, pct: null, z: 2.9, verdict: 'rise' }];
+    const h = buildHeadline(rows);
+    expect(h.lead?.name).toBe('Burglary');
+    expect(h.sentences[0]).toBe('10 burglaries, up from none.') // AP: numerals from 10;
+  });
+});
+
+describe('audit B9: version A links keep the place when A has it', () => {
+  const raw = S.withBoroughs({ citywide: {}, 'Staten Island': {}, 'Brooklyn South': {}, 'Brooklyn North': {}, '75th Precinct': {} });
+  test('Staten Island and precincts carry over; summed boroughs and 28 days say where they land', () => {
+    expect(S.classicLink('Staten Island', 'ytd', raw)).toEqual({ query: '?geo=Staten+Island', note: '' });
+    expect(S.classicLink('75th Precinct', 'wtd', raw).query).toBe('?geo=75th+Precinct&tab=wtd');
+    expect(S.classicLink('citywide', 'ytd', raw)).toEqual({ query: '', note: '' });
+    const bk = S.classicLink('Brooklyn', 'd28', raw);
+    expect(bk.query).toBe('');
+    expect(bk.note).toMatch(/no Brooklyn page/);
+    expect(bk.note).toMatch(/no 28-day view/);
   });
 });

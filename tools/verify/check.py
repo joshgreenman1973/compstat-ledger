@@ -58,10 +58,18 @@ dates = sorted(arch)
 # build_dispersion.py; as boroughs they're pooled again, at the county level, below.
 def raw_lvl(k): return 'city' if k == 'citywide' else 'precinct' if 'Precinct' in k else 'borough'
 def lvl(k): return 'city' if k == 'citywide' else 'precinct' if 'Precinct' in k else 'county' if k in ('Manhattan', 'Bronx', 'Brooklyn', 'Queens', 'Staten Island') else 'borough'
+# dispersion.json is rebuilt as the archive grows, so it's checked against the archive weeks it names
+# (_weeks), read from a current copy of the scraper (run.sh clones it to scraper-disp).
+_dj = json.load(open('src/bold/dispersion.json'))
+_w0, _w1 = _dj['_weeks'].split(' to ')
+_dsrc = f'{SP}/scraper-disp/data/archive' if os.path.isdir(f'{SP}/scraper-disp/data/archive') else f'{SP}/scraper/data/archive'
+darch = {os.path.basename(f)[:-5]: json.load(open(f)) for f in glob.glob(f'{_dsrc}/*.json')}
+ddates = sorted(k for k in darch if _w0 <= k <= _w1)
+check(len(ddates) == _dj['_pairs'] + 1, f"dispersion archive has the {_dj['_pairs'] + 1} reports dispersion.json names ({len(ddates)})")
 num = {}; den = {}
-for a_, b_ in zip(dates, dates[1:]):
+for a_, b_ in zip(ddates, ddates[1:]):
     if (date.fromisoformat(b_) - date.fromisoformat(a_)).days != 7: continue
-    A, B = arch[a_], arch[b_]
+    A, B = darch[a_], darch[b_]
     for geo in B:
         if geo not in A: continue
         names = set(A[geo]['seven_major_felonies']) | set(A[geo]['additional_stats'])
@@ -99,8 +107,8 @@ def add_boroughs(rep):
         out[b] = {grp: {n: sum_line([rep[k][grp].get(n) for k in pbs]) for n in set().union(*(rep[k][grp] for k in pbs))} for grp in ('seven_major_felonies', 'additional_stats')}
         out[b]['total_seven_major'] = sum_line([rep[k]['total_seven_major'] for k in pbs])
     return out
-archB = {k: add_boroughs(v) for k, v in arch.items()}
-for a_, b_ in zip(dates, dates[1:]):
+archB = {k: add_boroughs(darch[k]) for k in ddates}
+for a_, b_ in zip(ddates, ddates[1:]):
     if (date.fromisoformat(b_) - date.fromisoformat(a_)).days != 7: continue
     A, B = archB[a_], archB[b_]
     for geo in BOROS:
@@ -116,7 +124,7 @@ for a_, b_ in zip(dates, dates[1:]):
             for x0, x1 in pairs:
                 if x0 is None or x1 is None: continue
                 k = ('county', n); num[k] = num.get(k, 0) + (x1 - x0) ** 2; den[k] = den.get(k, 0) + x0 + x1
-arch = archB  # revision flows below read boroughs too
+arch = {k: add_boroughs(v) for k, v in arch.items()}  # revision flows below read boroughs too
 d = add_boroughs(d)
 # the method rests on the patrol boroughs adding up to NYPD's citywide figures: check every value
 cw_ok = [(n, per, s_) for g in ('seven_major_felonies', 'additional_stats') for n in d['citywide'][g] for per in ('week_to_date', 'twenty_eight_day', 'year_to_date') for s_ in ('current_year', 'prior_year')]

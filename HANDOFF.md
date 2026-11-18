@@ -48,7 +48,7 @@ git checkout package-lock.json   # npm install rewrites it; don't commit that ch
 npm start            # http://localhost:3000 ; classic view at ?classic=1
 ```
 
-- **Unit tests** (68, all passing): `npm run test:once`. They also run first in `npm run build` and `tools/deploy-vercel.sh`, so a failing test stops a build or deploy.
+- **Unit tests** (71, all passing): `npm run test:once`. They also run first in `npm run build` and `tools/deploy-vercel.sh`, so a failing test stops a build or deploy.
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
 - **Publish version B:** `bash tools/deploy-vercel.sh` builds, adds noindex and uploads the build to the Vercel project `compstat-in-context-b` (project IDs in `tools/vercel-project-b.json`; needs a one-time `npx vercel login`).
@@ -134,6 +134,8 @@ A Nov. 18, 2026 audit of both versions found four major errors in B. Each fix is
 - **Rape two years back.** The three-year trend tags compared rape with 2024, before the Sept. 1, 2024 definition change. `rapeComparable(period, weekEnd, yearsBack)` now gates them; rape's tags come back on their own with the first 2027 report.
 - **Pace claims need a margin.** A ranked claim ("fewest since 2018") must clear last year by 1% (at least one crime), and says "since at least" when the named year's total falls inside the range. On the Nov. 15 report, murder is "about where 2025 did" rather than a claim 0.53 of a murder from flipping.
 - **January.** Dates come from `periodText`, which names both years when a week or 28 days crosses the New Year and compares with "the same week a year earlier." The trend tags take their years from the report. When revision data is missing (a failed load, or January before two reports of the year exist), the hero says so instead of dropping fragility silently.
+
+- **Moderate fixes, same day.** Sentences with a count as subject use `countSubject` and `countVerb` ("None of them is in the 75th Precinct"). A cell with none in either year shows a dash, not "new". A rise from zero can lead the headline, in counts, and its trend bar says "none last year" instead of drawing 0%. `classicLink` keeps Staten Island and precincts when switching to version A, and says where summed boroughs and the 28-day view land. The "none" count matches the map's list. The rank tag is now "Clearest break from city", with a tooltip saying it's judged by the test, not the percentage. The shootings dek no longer cites NYPD's table. "Routinely" became the model's actual p, and "Counts are real" became "as NYPD reports them". The rate-mode hover explains changes lost to the correction. Dispersion was rebuilt from 37 pairs through Nov. 15; `check.py` now checks it against a current archive clone (`.work/scraper-disp`), limited to the weeks `dispersion.json` names. Rebuild dispersion every few months with `python3 tools/dispersion/build_dispersion.py <scraper>/data/archive`.
 
 ## Version switch (Oct. 14)
 
@@ -244,7 +246,7 @@ Don't loosen these without a reason you can defend in print.
 
 ## Verified numbers (Sept. 20, 2026 report)
 
-`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Nov. 18, 795 of 795 checks pass (five rendered pages: citywide year to date and week, the 75th Precinct, Brooklyn and the Bronx), including an independent Python reimplementation of the notable-trends tests. `check.py` now also checks the precinct 2020 counts against Keefe's file and the per-resident rates against July 2025 populations, re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
+`tools/verify/run.sh` re-derives these in Python, independently of the JavaScript, and confirms the page prints them. As of Nov. 18, 796 of 796 checks pass (five rendered pages: citywide year to date and week, the 75th Precinct, Brooklyn and the Bronx), including an independent Python reimplementation of the notable-trends tests. `check.py` now also checks the precinct 2020 counts against Keefe's file and the per-resident rates against July 2025 populations, re-derives dispersion from the archive and confirms `dispersion.json`, compares `annual-history.json` with NYPD's own spreadsheet (fetched into `.work/nypd7.xls`) year by year, and redoes the Benjamini-Hochberg tallies. It needs python3 with xlrd. If you change the stats code, rerun it. Any difference should be one you intended.
 
 - **Headline:** "Murder is down 24%. Felony assault is essentially flat."
 - **Signal board:** 8 of 18 citywide year-to-date changes are beyond chance: murder, robbery, burglary, grand larceny, vehicle theft, public housing, petit larceny and retail theft. None is fragile.

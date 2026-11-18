@@ -311,7 +311,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
           <div style={{ fontVariantNumeric: 'tabular-nums' }}>
             <div><strong>{fmtInt(hovered.count)}</strong> {measureNoun} <span className="text-[#707175]">vs. {fmtInt(hovered.prior)} {priorLabel}</span></div>
             <div className="mt-1 flex items-center gap-2"><span>{fmtPct(hovered.pct)}</span><Chip verdict={hovered.real || (hovered.verdict === 'none' ? 'none' : 'noise')} small /></div>
-            {mode === 'signal' && !hovered.real && hovered.sig === false && (hovered.verdict === 'drop' || hovered.verdict === 'rise') && <div className="mt-1 text-[#707175] italic">Clears the test on its own, but not after correcting for testing every precinct</div>}
+            {!hovered.real && hovered.sig === false && (hovered.verdict === 'drop' || hovered.verdict === 'rise') && <div className="mt-1 text-[#707175] italic">Clears the test on its own, but not after correcting for testing every precinct</div>}
             {hovered.rate != null && !hovered.tourist && <div className="mt-1">{hovered.rate.toFixed(1)} per 100k residents</div>}
             {hovered.tourist && <div className="mt-1 text-[#707175] italic">Commuter and visitor hub; per-resident rate not meaningful</div>}
             {hovered.merged && <div className="mt-1 text-[#707175] italic">105th, 113th and 116th shown combined (see note)</div>}
@@ -435,6 +435,16 @@ export function PeerBars({ list }) {
 /* ------------------------------------------------------------------ */
 export function PairBars({ pct, cityPct, max = 60, placeLabel }) {
   const row = (label, v, col, strong, delay) => {
+    if (!Number.isFinite(v)) {
+      // Last year was zero: there's no percent to draw, so say so instead of drawing a 0% bar.
+      return (
+        <div className="grid grid-cols-[52px_1fr_44px] items-center gap-2 h-[18px]">
+          <span className={`text-[11px] text-right truncate ${strong ? 'font-bold text-[#050507]' : 'text-[#555]'}`}>{label}</span>
+          <span className="text-[11px] text-[#707175] italic">none last year, so no percent</span>
+          <span className="text-[11px] text-right text-[#555]">new</span>
+        </div>
+      );
+    }
     const w = (Math.min(Math.abs(v), max) / max) * 50; // share of the track; each side is half
     const up = v >= 0;
     return (
@@ -451,7 +461,7 @@ export function PairBars({ pct, cityPct, max = 60, placeLabel }) {
     );
   };
   return (
-    <div className="w-full max-w-[360px]" role="img" aria-label={`${placeLabel}: ${fmtPct(pct, 0)}; citywide: ${fmtPct(cityPct, 0)}`}>
+    <div className="w-full max-w-[360px]" role="img" aria-label={`${placeLabel}: ${Number.isFinite(pct) ? fmtPct(pct, 0) : 'none last year'}; citywide: ${fmtPct(cityPct, 0)}`}>
       {row(placeLabel, pct, pct >= 0 ? VERDICT.rise.color : VERDICT.drop.color, true, 0)}
       {row('Citywide', cityPct, '#a3a3ad', false, 140)}
     </div>

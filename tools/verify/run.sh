@@ -13,6 +13,9 @@ mkdir -p "$WORK"
 [ -d "$WORK/scraper/.git" ] || git clone -q https://github.com/joshgreenman1973/nypd-compstat-scraper "$WORK/scraper"
 git -C "$WORK/scraper" checkout -q c0165dc
 cp "$WORK/scraper/data/archive/2026-09-20.json" "$WORK/latest.json"
+# A current copy of the archive, for checking dispersion.json against the weeks it was built from.
+[ -d "$WORK/scraper-disp/.git" ] || git clone -q https://github.com/joshgreenman1973/nypd-compstat-scraper "$WORK/scraper-disp"
+git -C "$WORK/scraper-disp" pull -q --ff-only
 # RTCI changes monthly; the page and check.py both read this same copy, so either vintage works.
 [ -f "$WORK/rtci.csv" ] || curl -sSfL https://raw.githubusercontent.com/AH-Datalytics/rtci/main/docs/app_data/scorecard.csv -o "$WORK/rtci.csv"
 # NYPD's own annual table, to check the page's history file against (nyc.gov refuses curl's default agent).

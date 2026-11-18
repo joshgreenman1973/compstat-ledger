@@ -199,8 +199,12 @@ export function CountUp({ value, ms = 800, format = fmtInt }) {
 }
 
 // A percent change, grayed and starred when last year's count was too small for a percentage to mean much.
-export function Pct({ pct, prior, digits = 1, className = '', dark = false }) {
-  if (pct == null || !Number.isFinite(pct)) return <span className={className}>{prior === 0 ? 'new' : 'n/a'}</span>;
+export function Pct({ pct, prior, cur, digits = 1, className = '', dark = false }) {
+  if (pct == null || !Number.isFinite(pct)) {
+    // From zero: "new" only if there's something this year; none in either year is a dash.
+    if (prior === 0) return cur === 0 ? <span className={className} title="None in either year">—</span> : <span className={className} title="None last year, so no percent change">new</span>;
+    return <span className={className}>n/a</span>;
+  }
   if (!smallBase(prior)) return <span className={className}>{fmtPct(pct, digits)}</span>;
   return <span className={`${className} ${dark ? 'text-white/45' : 'text-[#a3a3ad]'} cursor-help`} title={SMALL_BASE_NOTE}>{fmtPct(pct, digits)}*</span>;
 }

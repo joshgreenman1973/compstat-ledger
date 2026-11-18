@@ -400,6 +400,28 @@ export function clause(r, kind) {
   return '';
 }
 
+// "None of them is," "One of them is," "Three of them are": a count as the subject of a sentence.
+export function countSubject(n, noun = 'of them') {
+  if (n === 0) return `None ${noun} is`;
+  return `${cap(spell(n))} ${noun} ${n === 1 ? 'is' : 'are'}`;
+}
+// "and none shows a drop" / "and one shows" / "and three show": a count as a later subject.
+export const countVerb = (n, sing, plur) => `${n === 0 ? 'none' : spell(n)} ${n === 1 || n === 0 ? sing : plur}`;
+
+// Version A's link for this page. A reads the same NYPD feed but has no summed boroughs and no 28-day
+// view, so those land on the nearest page A has, and `note` says so.
+export function classicLink(geo, periodId, raw) {
+  const own = geo === 'citywide' || (raw?.[geo] && !raw[geo].summedFrom);
+  const q = new URLSearchParams();
+  if (geo !== 'citywide' && own) q.set('geo', geo);
+  if (periodId === 'wtd') q.set('tab', 'wtd');
+  const notes = [];
+  if (!own) notes.push(`version A has no ${geo} page, so this opens its citywide page`);
+  if (periodId === 'd28') notes.push('version A has no 28-day view, so this opens year to date');
+  const qs = q.toString();
+  return { query: qs ? `?${qs}` : '', note: notes.length ? `${notes.join('; ').replace(/^./, (c) => c.toUpperCase())}.` : '' };
+}
+
 // A change in words for running text: "down 12%" on a base of 30 or more, counts below that
 // ("up to 47 from 23", "up from none to three"), so no sentence prints a percent the ledger grays out.
 export function changeWords(cur, prior) {
@@ -416,7 +438,8 @@ export function changeWords(cur, prior) {
 // not the headline bar; `fragileOnes`, lines that cleared it but that revisions could erase.
 export function buildHeadline(rows) {
   const by = Object.fromEntries(rows.map((r) => [r.name, r]));
-  const eligible = HEADLINE_ORDER.map((n) => by[n]).filter((r) => r && r.verdict !== 'flagged' && r.verdict !== 'none' && r.pct != null);
+  // A rise from zero has no percent but can still clear the test; clause() states it in counts.
+  const eligible = HEADLINE_ORDER.map((n) => by[n]).filter((r) => r && r.verdict !== 'flagged' && r.verdict !== 'none' && (r.pct != null || (r.prior === 0 && r.cur > 0)));
   // A change beyond chance that recent revisions could erase ("fragile") never headlines.
   const firm = (r) => (r.verdict === 'drop' || r.verdict === 'rise') && !r.fragile;
   const strong = (r) => firm(r) && Math.abs(r.z) >= Z_HEAD;
@@ -427,7 +450,7 @@ export function buildHeadline(rows) {
   const cleared = eligible.filter((r) => firm(r) && !strong(r));
   if (!lead) {
     const text = cleared.length
-      ? 'No major crime moved by a clear margin.'
+      ? 'No major crime’s change clears the stricter headline threshold.'
       : fragileOnes.length
         ? 'No major crime’s change clears this model’s threshold and holds up under the revision scenario.'
         : 'No major crime’s change clears this model’s threshold.';

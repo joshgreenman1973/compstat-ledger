@@ -130,7 +130,7 @@ function MoveItem({ x: raw, onPick, showPlace = true, status = false, max = 60, 
   const up = x.diff > 0;
   const beyond = x.verdict === 'drop' || x.verdict === 'rise';
   const tags = [];
-  if (x.notable && x.rank === 1) tags.push(<Tag key="rank" tone="accent" title={`The biggest ${lc(x.label)} ${up ? 'rise' : 'drop'} against the citywide trend of any precinct.`}>Biggest in city</Tag>);
+  if (x.notable && x.rank === 1) tags.push(<Tag key="rank" tone="accent" title={`Of every precinct, the clearest break from the citywide trend in ${lc(x.label)}, as judged by the test against the city, which weighs both the size of the ${up ? 'rise' : 'drop'} and how many crimes it rests on. A precinct with a bigger percentage on fewer crimes can rank lower.`}>Clearest break from city</Tag>);
   if (status) {
     if (x.notable) tags.push(<Tag key="st" tone="ink" title="Unusual under this model, differs from the citywide trend and survives the correction for testing every precinct and crime.">Stands out</Tag>);
     else if (!beyond) tags.push(<Tag key="st" tone="line" title="A change this size is common under this page’s model, even if the underlying rate hadn’t changed.">Below threshold</Tag>);
@@ -153,14 +153,14 @@ function MoveItem({ x: raw, onPick, showPlace = true, status = false, max = 60, 
     <div className="grid grid-cols-[1fr_auto] gap-x-4 items-start">
       <div className="min-w-0 pr-1">
         <div className="text-[15px] font-bold leading-tight">{x.label}{showPlace && <span className="font-normal text-[#555]"> · {shortName(x.geo)}{hoodOf(x.geo) ? `, ${hoodOf(x.geo).split(',')[0]}` : ''}</span>}</div>
-        <div className="mt-2"><PairBars pct={x.pct ?? 0} cityPct={x.cityPct} max={max} placeLabel={shortName(x.geo)} /></div>
+        <div className="mt-2"><PairBars pct={x.pct} cityPct={x.cityPct} max={max} placeLabel={shortName(x.geo)} /></div>
         <div className="mt-1 text-[12px] text-[#555]" style={{ fontVariantNumeric: 'tabular-nums' }} title="Counts for the same dates in each year">
           {years.map(([yy, v], i) => <span key={yy}>{i > 0 && <span className="text-[#aaa]"> → </span>}<span className="text-[#707175]">{yy}:</span> <span className={i === years.length - 1 ? 'font-bold text-[#050507]' : ''}>{S.fmtInt(v)}</span></span>)}
         </div>
         {tags.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1.5 vc-rise" style={{ '--d': '350ms' }}>{tags}</div>}
       </div>
       <div className="text-right">
-        <div className="text-[24px] font-black leading-none"><Pct pct={x.pct} prior={x.prior} digits={0} /></div>
+        <div className="text-[24px] font-black leading-none"><Pct pct={x.pct} prior={x.prior} cur={x.cur} digits={0} /></div>
         <div className="mt-1 text-[11px] text-[#707175] whitespace-nowrap">vs. {x.yearNow - 1}</div>
       </div>
     </div>
@@ -647,13 +647,8 @@ export default function BoldApp() {
   }, []);
 
   // The classic view has precincts and patrol boroughs but not whole boroughs, and no 28-day period.
-  const classicHref = (() => {
-    const p = new URLSearchParams();
-    if (activeGeo !== 'citywide' && !S.isBorough(activeGeo)) p.set('geo', activeGeo);
-    if (period === 'wtd') p.set('tab', 'wtd');
-    const qs = p.toString();
-    return CLASSIC_URL + (qs ? `?${qs}` : '');
-  })();
+  const classic = S.classicLink(activeGeo, period, raw);
+  const classicHref = CLASSIC_URL + classic.query;
 
   /* ---------------- render ---------------- */
   const masthead = (
@@ -661,7 +656,7 @@ export default function BoldApp() {
       <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-3 flex items-center gap-3">
         <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">Two versions</span>
         <nav aria-label="Versions of this page" className="inline-flex rounded-full p-0.5 border border-white/25 bg-white/5">
-          <a href={classicHref} className="rounded-full font-bold uppercase tracking-wider whitespace-nowrap text-[10px] px-2.5 py-1 text-white/70 hover:text-white">Version A</a>
+          <a href={classicHref} title={classic.note || undefined} className="rounded-full font-bold uppercase tracking-wider whitespace-nowrap text-[10px] px-2.5 py-1 text-white/70 hover:text-white">Version A</a>
           <span aria-current="page" className="rounded-full font-bold uppercase tracking-wider whitespace-nowrap text-[10px] px-2.5 py-1 bg-[#dde44c] text-[#050507]">Version B</span>
         </nav>
       </div>
@@ -727,7 +722,7 @@ export default function BoldApp() {
     <p key={`z-${r.name}`}>
       <strong>{r.label}:</strong> {S.fmtInt(r.cur)} vs. {S.fmtInt(r.prior)} = {S.fmtSigned(r.diff)} ({S.fmtPct(r.pct)}). Chance test: (gap of {S.fmtInt(Math.abs(r.diff))}, minus 1) ÷ √({r.phi > 1 ? `${r.phi.toFixed(2)} × (` : ''}{S.fmtInt(r.cur)} + {S.fmtInt(r.prior)}{r.phi > 1 ? ')' : ''}) = <strong>z = {r.z < 0 ? '−' : ''}{Math.abs(r.z).toFixed(2)}</strong>.{' '}
       {r.phi > 1 && `The ${r.phi.toFixed(2)} allows for how much this line varies from week to week beyond a plain random count, measured from NYPD's weekly reports. `}
-      {Math.abs(r.z) >= S.Z_CRIT ? 'Beyond ±1.96: unusual under this model. If the underlying rate hadn’t changed and the model’s assumptions held, a gap this big would show up less than 5% of the time.' : 'Inside ±1.96: doesn’t clear this model’s threshold. A gap this size shows up routinely even when the underlying rate hasn’t changed, so the counts can’t settle whether it did.'}
+      {Math.abs(r.z) >= S.Z_CRIT ? 'Beyond ±1.96: unusual under this model. If the underlying rate hadn’t changed and the model’s assumptions held, a gap this big would show up less than 5% of the time.' : `Inside ±1.96: doesn’t clear this model’s threshold. If the underlying rate hadn’t changed, a gap this big would show up about ${Math.max(5, Math.round(S.pTwoSided(r.z) * 100))}% of the time under the model, too often to rule out chance, so the counts can’t settle whether it did.`}
       {r.rev && <>{' '}{revisionSentence(r)}</>}
     </p>
   ));
@@ -873,7 +868,7 @@ export default function BoldApp() {
           {spotlight && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/85">{spotlight} <a href="#trends" className="underline decoration-[#dde44c] underline-offset-2 hover:text-[#dde44c] whitespace-nowrap">Notable trends ↓</a></p>}
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
           {!revNote && revMissing && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revMissing}</p>}
-          {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
+          {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. The counts and changes are as NYPD reports them; per-resident rates are not meaningful here.</p>}
           {isBoro && <p className="mt-4 max-w-3xl text-[14px] text-white/70">{geoData?.summedFrom ? `NYPD doesn't report borough totals; these add up its ${geoData.summedFrom.join(' and ')} patrol-borough reports.` : `${placeLabel(activeGeo)} is a single NYPD patrol borough; these are its figures as reported.`}</p>}
           {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created in December 2024 from parts of the 105th and 113th. NYPD reports all three separately, restated for the new lines, but the population figures and precinct map use the old lines, so per-resident rates for any one of them would be wrong. Maps and rates combine the three.</p>}
           </div>
@@ -897,7 +892,7 @@ export default function BoldApp() {
               <div key={key} className="pt-5 pb-2 pr-4 border-b lg:border-b-0 border-white/10">
                 <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/60">{label}</div>
                 <div className="vc-display font-black text-[40px] sm:text-[52px] leading-none mt-2"><CountUp value={r.cur} /></div>
-                <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}><strong className="text-[17px] text-white"><Pct pct={r.pct} prior={r.prior} digits={0} dark /></strong> · {S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
+                <div className="mt-2 text-[13px] text-white/70" style={{ fontVariantNumeric: 'tabular-nums' }}><strong className="text-[17px] text-white"><Pct pct={r.pct} prior={r.prior} cur={r.cur} digits={0} dark /></strong> · {S.fmtSigned(r.diff)} vs. {S.fmtInt(r.prior)}</div>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5"><Chip verdict={r.verdict} dark small />{r.fragile && <FragileTag dark weeks={fragileWeeks} />}</div>
               </div>
             ))}
@@ -1052,7 +1047,7 @@ export default function BoldApp() {
             )}
             <Receipt>
               <p>Three bars, all required. <strong>The model:</strong> the precinct’s own change clears this model’s threshold (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes fragile under the revision scenario are left out.</p>
-              <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them are ${here}.` : ''}</p>
+              <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${S.countSubject(scoped.rises.length + scoped.drops.length)} ${here}.` : ''}</p>
               {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the {reportYear - 2} count shown. “Two years running” means the count also moved the same way from {reportYear - 2} to {reportYear - 1}, by enough to be unusual under the model. “After a flat {reportYear - 1}” means the {reportYear - 2}-to-{reportYear - 1} change didn’t clear the model’s threshold, so this year’s move is the first that does. “After a {reportYear - 1} spike (or dip)” means the count swung the other way from {reportYear - 2} to {reportYear - 1}, by enough to be unusual under the model; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
             </Receipt>
           </section>
@@ -1140,7 +1135,7 @@ export default function BoldApp() {
               })()}
               dek={arcFlagged
                 ? 'New York broadened its legal definition of rape on Sept. 1, 2024, to cover nonconsensual oral and anal sexual contact. NYPD has attributed part of the rise in reported rapes since then to the change.'
-                : `Annual citywide totals since 1993: NYPD’s official table from 2000 and an older compilation before that. The orange bar is an illustrative full-year pace range for ${reportYear} under two extrapolation methods and a revision scenario, widened for chance in the months left; it isn’t a 95% prediction interval.${earlyClaim ? ` ${earlyNote}` : ''}`}
+                : `Annual citywide totals since 1993: ${arcKey === 'Shooting Inc.' ? 'all from an older compilation, since NYPD’s official annual table doesn’t include shootings' : 'NYPD’s official table from 2000 and an older compilation before that'}. The orange bar is an illustrative full-year pace range for ${reportYear} under two extrapolation methods and a revision scenario, widened for chance in the months left; it isn’t a 95% prediction interval.${earlyClaim ? ` ${earlyNote}` : ''}`}
             />
             <div className="flex flex-wrap gap-1.5 mb-6" role="group" aria-label="Offense">
               {ARC_OPTIONS.map(([k, lbl]) => (
@@ -1193,8 +1188,12 @@ export default function BoldApp() {
                   return `The ${activeGeo}: ${counted}${cmp}.`;
                 }
                 if (own.count === 0) {
-                  const none = precinctList.filter((x) => x.count === 0).length;
-                  return `The ${activeGeo} recorded no ${measureNoun} ${P.since}, one of ${nw(none)} precincts with none.`;
+                  // Count the way the map's "None recorded" list does: the 105th, 113th and 116th as one area.
+                  const none = zeroUnits.length;
+                  if (!zeroUnits.includes(u)) return `The ${activeGeo} recorded no ${measureNoun} ${P.since}; the map shows it combined with the 105th and 113th, which recorded some.`;
+                  return u.merged
+                    ? `The ${activeGeo} recorded no ${measureNoun} ${P.since}, nor did the 105th and 113th, shown with it as one area on the map: one of ${nw(none)} with none.`
+                    : `The ${activeGeo} recorded no ${measureNoun} ${P.since}, one of ${nw(none)} precincts with none.`;
                 }
                 // Rankings on a handful of incidents are mostly luck: a precinct with three murders can rank anywhere from first to 30th.
                 if (own.count < 10) return `The ${activeGeo}: ${counted}, too few to rank reliably against other precincts.`;
@@ -1207,7 +1206,7 @@ export default function BoldApp() {
               if (mapMode === 'signal') {
                 const up = precinctList.filter((u) => u.real === 'rise').length;
                 const down = precinctList.filter((u) => u.real === 'drop').length;
-                return `${capFirst(nw(up))} ${up === 1 ? 'precinct shows' : 'precincts show'} a rise in ${measureNoun} unusual under this model ${P.since}, and ${nw(down)} ${down === 1 ? 'shows' : 'show'} a drop, after allowing for testing every precinct at once.`;
+                return `${capFirst(nw(up))} ${up === 1 ? 'precinct shows' : 'precincts show'} a rise in ${measureNoun} unusual under this model ${P.since}, and ${S.countVerb(down, 'shows', 'show')} a drop, after allowing for testing every precinct at once.`;
               }
               if (!conc || conc.total < 20) return `${capFirst(measureNoun)} by precinct ${P.since}.`;
               const verb = measure === 'shootvic' ? 'were shot' : 'occurred';
@@ -1265,7 +1264,7 @@ export default function BoldApp() {
                         <button type="button" onClick={() => selectGeo(u.geoKey)} className={`w-full flex items-baseline justify-between gap-3 py-1.5 text-left border-b border-[#f0f0f0] hover:bg-[#f7f8dd] ${u.num === selectedNum ? 'bg-[#f7f8dd]' : ''}`}>
                           <span className="min-w-0"><span className="text-[14px] font-bold">{u.label.replace(' Precincts', '').replace(' Precinct', '')}</span>{u.hood && <span className="text-[12px] text-[#707175]"> · {u.hood.split(',')[0]}</span>}</span>
                           <span className="text-[13px] whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {mapMode === 'signal' ? <>{S.fmtInt(u.count)} vs. {S.fmtInt(u.prior)} <strong><Pct pct={u.pct} prior={u.prior} digits={0} /></strong></> : <strong>{u.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>}
+                            {mapMode === 'signal' ? <>{S.fmtInt(u.count)} vs. {S.fmtInt(u.prior)} <strong><Pct pct={u.pct} prior={u.prior} cur={u.count} digits={0} /></strong></> : <strong>{u.rate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</strong>}
                           </span>
                         </button>
                       </li>
@@ -1493,7 +1492,7 @@ export default function BoldApp() {
                       <td className="py-2 px-2 text-right text-[14px] font-black">{S.fmtInt(r.cur)}</td>
                       <td className="py-2 px-2 text-right text-[14px] text-[#555]">{S.fmtInt(r.prior)}</td>
                       <td className="py-2 px-2 text-right text-[14px]">{S.fmtSigned(r.diff)}</td>
-                      <td className="py-2 px-2 text-right text-[14px]"><Pct pct={r.pct} prior={r.prior} /></td>
+                      <td className="py-2 px-2 text-right text-[14px]"><Pct pct={r.pct} prior={r.prior} cur={r.cur} /></td>
                       <td className="py-2 px-2"><span className="inline-flex items-center gap-2"><Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}<span className="text-[12px] text-[#707175] whitespace-nowrap">{r.z != null ? `z ${r.z < 0 ? '−' : ''}${Math.abs(r.z).toFixed(1)}` : ''}</span></span></td>
                       {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{r.rev ? S.fmtSigned(r.rev.cur) : '—'}</td>}
                       {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555] whitespace-nowrap">{r.risk ? `${S.fmtInt(r.risk.breakEven)} · ${Number.isFinite(r.risk.weeksToErase) ? `${r.risk.weeksToErase < 10 ? r.risk.weeksToErase.toFixed(1) : Math.round(r.risk.weeksToErase)} wks` : r.risk.direction === 'none' ? 'none' : 'opposite'}` : '—'}</td>}
@@ -1564,7 +1563,7 @@ export default function BoldApp() {
             </div>
           </div>
           <p className="mt-10 text-[14px] text-[#555]">
-            Want the original dashboard? <a href={classicHref} className="underline font-bold text-[#050507]">Open version A</a>.
+            Want the original dashboard? <a href={classicHref} className="underline font-bold text-[#050507]">Open version A</a>.{classic.note ? ` ${classic.note}` : ''}
           </p>
         </section>
       </main>
