@@ -247,10 +247,18 @@ lin = c / (263 / 365); sea = c / (p / full25); adj = c + round(fm / 8 * 8)
 lo0 = min(lin, sea, adj / (263 / 365), adj / (p / full25)); hi0 = max(lin, sea, adj / (263 / 365), adj / (p / full25))
 lo = max(c, lo0 - 1.96 * math.sqrt(phi('Murder') * (lo0 - c))); hi = hi0 + 1.96 * math.sqrt(phi('Murder') * (hi0 - c))
 expect(t, f'The range shown, {fmt(lo)} to {fmt(hi)}, spans all of it.', 'pace range with revisions and chance')
+# A ranked claim must clear each later year by a margin (1% of last year, at least one murder), and says
+# "since at least" when the named year's own total falls inside the range (audit, Nov. 18, 2026).
 low = min(r['Murder'] for r in hist)
-check(hi < low, f'record-low claim holds at the high end ({hi:.1f} < {low})')
-print(f'murder pace high end {hi:.1f} vs. series low {low}: margin {low - hi:.1f}')
-expect(t, 'would have the fewest murders since at least 1993, where this series begins', 'arc claim')
+mrg = max(1, 0.01 * full25)
+print(f'murder pace high end {hi:.1f} vs. series low {low}: gap {low - hi:.1f}, margin needed {mrg:.2f}')
+yrs = sorted((r['y'], r['Murder']) for r in hist)
+check(hi + mrg <= full25, 'pace clears 2025 by the margin')
+since = next(((y, v) for y, v in reversed(yrs) if v < hi + mrg), None)
+check(since is not None and since[0] <= 2023, f'fewest since {since}')
+check(all(v >= hi + mrg for y, v in yrs if y > since[0]), 'every year after it is above the high end plus the margin')
+at_least = since[1] >= lo - mrg
+expect(t, f"would have the fewest murders since {'at least ' if at_least else ''}{since[0]}", 'arc claim')
 # fragile set, citywide YTD
 frag = [n for n in tested if fragile('citywide', n, *row('citywide', n), phi(n))]
 print('independent fragile set:', frag)
