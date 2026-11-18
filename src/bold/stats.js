@@ -42,6 +42,17 @@ export const labelFor = (name) => LABELS[name] || name;
 export const isPlural = (name) => PLURAL.has(name);
 
 /* ---------------------------- formatting ---------------------------- */
+// A rate per 100,000: thousands commas, one decimal, and enough digits that a count above zero never
+// prints as "0.0" (four murders in a week citywide is 0.05).
+export const fmtRate = (v) => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '—';
+  if (v === 0) return '0';
+  if (v < 0.005) return '<0.01';
+  if (v < 0.1) return v.toFixed(2);
+  return v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+};
+// Weeks of revisions, with commas ("3,437 weeks") and a decimal below 10.
+export const fmtWeeks = (w) => (w < 10 ? w.toFixed(1) : fmtInt(w));
 export const fmtInt = (n) => (typeof n === 'number' && Number.isFinite(n) ? Math.round(n).toLocaleString('en-US') : '—');
 export const fmtPct = (v, digits = 1) => {
   if (typeof v !== 'number' || !Number.isFinite(v)) return '—';

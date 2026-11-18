@@ -225,7 +225,7 @@ function revisionSentence(r) {
   const alt = risk.thresholdWeeks === S.REVISION_WEEKS
     ? ` Under a four-week scenario it ${wk < 4 ? 'would' : 'wouldn’t'} be fragile; under a 12-week one it ${wk < 12 ? 'would' : 'wouldn’t'}.`
     : '';
-  return `${base} ${need}: about ${wk < 10 ? wk.toFixed(1) : Math.round(wk)} weeks at the recent pace, ${risk.fragile ? `so it’s fragile under ${scen}` : `so it holds up under ${scen}`}.${alt}`;
+  return `${base} ${need}: about ${S.fmtWeeks(wk)} weeks at the recent pace, ${risk.fragile ? `so it’s fragile under ${scen}` : `so it holds up under ${scen}`}.${alt}`;
 }
 
 // The dates each sentence names (see S.periodText; tested there, including ranges across the New Year).
@@ -1135,7 +1135,7 @@ export default function BoldApp() {
               })()}
               dek={arcFlagged
                 ? 'New York broadened its legal definition of rape on Sept. 1, 2024, to cover nonconsensual oral and anal sexual contact. NYPD has attributed part of the rise in reported rapes since then to the change.'
-                : `Annual citywide totals since 1993: ${arcKey === 'Shooting Inc.' ? 'all from an older compilation, since NYPD’s official annual table doesn’t include shootings' : 'NYPD’s official table from 2000 and an older compilation before that'}. The orange bar is an illustrative full-year pace range for ${reportYear} under two extrapolation methods and a revision scenario, widened for chance in the months left; it isn’t a 95% prediction interval.${earlyClaim ? ` ${earlyNote}` : ''}`}
+                : `${period !== 'ytd' ? 'This section always uses year-to-date counts, whatever period is chosen above. ' : ''}Annual citywide totals since 1993: ${arcKey === 'Shooting Inc.' ? 'all from an older compilation, since NYPD’s official annual table doesn’t include shootings' : 'NYPD’s official table from 2000 and an older compilation before that'}. The orange bar is an illustrative full-year pace range for ${reportYear} under two extrapolation methods and a revision scenario, widened for chance in the months left; it isn’t a 95% prediction interval.${earlyClaim ? ` ${earlyNote}` : ''}`}
             />
             <div className="flex flex-wrap gap-1.5 mb-6" role="group" aria-label="Offense">
               {ARC_OPTIONS.map(([k, lbl]) => (
@@ -1208,7 +1208,7 @@ export default function BoldApp() {
                 const down = precinctList.filter((u) => u.real === 'drop').length;
                 return `${capFirst(nw(up))} ${up === 1 ? 'precinct shows' : 'precincts show'} a rise in ${measureNoun} unusual under this model ${P.since}, and ${S.countVerb(down, 'shows', 'show')} a drop, after allowing for testing every precinct at once.`;
               }
-              if (!conc || conc.total < 20) return `${capFirst(measureNoun)} by precinct ${P.since}.`;
+              if (!conc || conc.total < 20) return `Too few ${measureNoun} ${P.since} (${S.fmtInt(conc?.total ?? 0)}) to say where they concentrate; the map shows each precinct's count.`;
               const verb = measure === 'shootvic' ? 'were shot' : 'occurred';
               return `At least half the city's ${measureNoun} ${P.since} ${verb} in ${nw(conc.kPrecincts)} of ${conc.nPrecincts} precincts, home to ${Math.round(conc.popShare * 100)}% of New Yorkers.`;
             })()}
@@ -1400,7 +1400,9 @@ export default function BoldApp() {
                   : `the ${nw(n)} other cities shown`;
                 const hi = peers.others.filter((c) => c.vsNYC === 'higher').length;
                 const same = peers.others.filter((c) => c.vsNYC === 'same');
-                const sameTail = same.length ? ` and about the same as in ${joinAnd(same.map((c) => c.agency))}` : '';
+                const lower = peers.others.filter((c) => c.vsNYC === 'lower');
+                const tails = [same.length && `about the same as in ${joinAnd(same.map((c) => c.agency))}`, lower.length && `higher than in ${joinAnd(lower.map((c) => c.agency))}`].filter(Boolean);
+                const sameTail = tails.length === 1 ? ` and ${tails[0]}` : tails.length ? `, ${joinAnd(tails)}` : '';
                 if (hi === n) return `In ${peers.year}, New York's murder rate was lower than in any of ${who}.`;
                 if (hi === 0 && !same.length) return `In ${peers.year}, New York's murder rate was higher than in all of ${who}.`;
                 return `In ${peers.year}, New York's murder rate was lower than in ${nw(hi)} of ${who}${sameTail}.`;
@@ -1472,8 +1474,8 @@ export default function BoldApp() {
                   <th className="py-2 px-2 text-right">Change</th>
                   <th className="py-2 px-2 text-right">%</th>
                   <th className="py-2 px-2">Chance test</th>
-                  {revs && <th className="py-2 px-2 text-right" title={`Net revisions NYPD made in the past ${revs.weeks} weeks to already-reported weeks of this line`}>Revised, {revs.weeks} wks</th>}
-                  {revs && <th className="py-2 px-2 text-right" title="Revisions it would take to bring a flagged change back below the threshold, and how many weeks that is at the recent pace ('opposite' = recent revisions run the other way; 'none' = no net revisions)">Cushion</th>}
+                  {revs && period === 'ytd' && <th className="py-2 px-2 text-right" title={`Net revisions NYPD made in the past ${revs.weeks} weeks to already-reported weeks of this line`}>Revised, {revs.weeks} wks</th>}
+                  {revs && period === 'ytd' && <th className="py-2 px-2 text-right" title="Revisions it would take to bring a flagged change back below the threshold, and how many weeks that is at the recent pace ('opposite' = recent revisions run the other way; 'none' = no net revisions)">Cushion</th>}
                   {pop && !isTourist && <th className="py-2 px-2 text-right">Per 100k</th>}
                   {!isCity && <th className="py-2 px-2 text-right">City per 100k</th>}
                   {period === 'ytd' && histCols.map((c) => <th key={c.key} className="py-2 px-2 text-right">vs. {c.year}</th>)}
@@ -1494,10 +1496,10 @@ export default function BoldApp() {
                       <td className="py-2 px-2 text-right text-[14px]">{S.fmtSigned(r.diff)}</td>
                       <td className="py-2 px-2 text-right text-[14px]"><Pct pct={r.pct} prior={r.prior} cur={r.cur} /></td>
                       <td className="py-2 px-2"><span className="inline-flex items-center gap-2"><Chip verdict={r.verdict} small />{r.fragile && <FragileTag weeks={fragileWeeks} />}<span className="text-[12px] text-[#707175] whitespace-nowrap">{r.z != null ? `z ${r.z < 0 ? '−' : ''}${Math.abs(r.z).toFixed(1)}` : ''}</span></span></td>
-                      {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{r.rev ? S.fmtSigned(r.rev.cur) : '—'}</td>}
-                      {revs && <td className="py-2 px-2 text-right text-[13px] text-[#555] whitespace-nowrap">{r.risk ? `${S.fmtInt(r.risk.breakEven)} · ${Number.isFinite(r.risk.weeksToErase) ? `${r.risk.weeksToErase < 10 ? r.risk.weeksToErase.toFixed(1) : Math.round(r.risk.weeksToErase)} wks` : r.risk.direction === 'none' ? 'none' : 'opposite'}` : '—'}</td>}
-                      {pop && !isTourist && <td className="py-2 px-2 text-right text-[13px]">{((r.cur / pop) * 100000).toFixed(1)}</td>}
-                      {!isCity && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{cw ? ((cw.cur / CITY_POPULATION) * 100000).toFixed(1) : '—'}</td>}
+                      {revs && period === 'ytd' && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{r.rev ? S.fmtSigned(r.rev.cur) : '—'}</td>}
+                      {revs && period === 'ytd' && <td className="py-2 px-2 text-right text-[13px] text-[#555] whitespace-nowrap">{r.risk ? `${S.fmtInt(r.risk.breakEven)} · ${Number.isFinite(r.risk.weeksToErase) ? `${S.fmtWeeks(r.risk.weeksToErase)} wks` : r.risk.direction === 'none' ? 'none' : 'opposite'}` : '—'}</td>}
+                      {pop && !isTourist && <td className="py-2 px-2 text-right text-[13px]">{S.fmtRate((r.cur / pop) * 100000)}</td>}
+                      {!isCity && <td className="py-2 px-2 text-right text-[13px] text-[#555]">{cw ? S.fmtRate((cw.cur / CITY_POPULATION) * 100000) : '—'}</td>}
                       {period === 'ytd' && histCols.map((c) => {
                         const blocked = longViewBlocked(r, c.year);
                         return <td key={c.key} className="py-2 px-2 text-right text-[13px] text-[#555]" title={blocked || undefined}>{blocked ? (r.name === 'Rape' ? 'n/c' : '—') : S.fmtPct(r.hist?.[c.key], 0)}</td>;
@@ -1519,11 +1521,11 @@ export default function BoldApp() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 text-[16px] leading-relaxed text-[#222] max-w-5xl">
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Same numbers, fewer shortcuts</h3>
-              <p>Every count here is NYPD's own, from the weekly CompStat report. We don't adjust or smooth any of them; the only estimates on the page are the full-year pace ranges, labeled as such. What changes is the framing: CompStat puts a percent change next to every line and leaves you to guess which ones matter. This page runs each change through an exploratory chance test, draws the full annual history behind CompStat's few long-view percentages, and shows where crime concentrates.</p>
+              <p>Every count here is NYPD's own, from the weekly CompStat report. We don't adjust or smooth any of them. What the page estimates is labeled: the full-year pace ranges, how much each line varies from week to week (dispersion), the pace of NYPD's revisions and the precinct populations behind per-resident rates. What changes is the framing: CompStat puts a percent change next to every line and leaves you to guess which ones matter. This page runs each change through an exploratory chance test, draws the full annual history behind CompStat's few long-view percentages, and shows where crime concentrates.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">The chance test</h3>
-              <p>z = (the gap between this year and last, minus 1) ÷ √(dispersion × (this year + last year)). We flag changes that would be unusual if underlying rates were unchanged under our statistical assumptions (|z| ≥ 1.96). Reporting changes and model limitations can also produce a flag, and a change that doesn’t clear the threshold may still reflect a shift in the underlying rate. The minus 1 keeps small counts honest: four murders against none last year doesn’t clear it. The dispersion allows for how much each line varies from week to week beyond a plain random count (shooting victims vary about twice as much, because one shooting can wound several people; murder varies no more than a plain random count). It is estimated from {S.DISPERSION_INFO.pairs} pairs of adjacent weekly reports ({dispersionSpan}), pooled by level and never set below 1. Adjacent weeks don’t capture clustering that spans several weeks, and the test hasn’t been checked against held-out years, so treat it as exploratory: near the line, a flag is a prompt, not a conclusion.</p>
+              <p>z = (the gap between this year and last, minus 1) ÷ √(dispersion × (this year + last year)). We flag changes that would be unusual if underlying rates were unchanged under our statistical assumptions (|z| ≥ 1.96). Reporting changes and model limitations can also produce a flag, and a change that doesn’t clear the threshold may still reflect a shift in the underlying rate. The minus 1 keeps small counts honest: four murders against none last year doesn’t clear it. The dispersion allows for how much each line varies from week to week beyond a plain random count (shooting victims vary about twice as much, because one shooting can wound several people; citywide, murder varies no more than a plain random count, though by precinct it varies a little more). It is estimated from {S.DISPERSION_INFO.pairs} pairs of adjacent weekly reports ({dispersionSpan}), pooled by level and never set below 1. Adjacent weeks don’t capture clustering that spans several weeks, and the test hasn’t been checked against held-out years, so treat it as exploratory: near the line, a flag is a prompt, not a conclusion.</p>
             </div>
             <div>
               <h3 className="font-black text-[15px] uppercase tracking-[0.1em] mb-1.5">Notable trends</h3>

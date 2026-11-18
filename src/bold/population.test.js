@@ -32,3 +32,9 @@ test('every borough is covered and the city total is preserved', () => {
   expect(Object.keys(cur)).toHaveLength(5);
   expect(Object.values(cur).reduce((a, b) => a + b, 0)).toBe(P.CITY_POPULATION);
 });
+
+test('audit (minor): Rikers Island is taken out of the 114th Precinct', () => {
+  const cur = P.currentPopulations({ '114th Precinct': 200000, '115th Precinct': 200000 });
+  expect(cur['114th Precinct']).toBe(Math.round((200000 - 3772) * 2358182 / 2405464));
+  expect(cur['115th Precinct']).toBe(Math.round(200000 * 2358182 / 2405464));
+});

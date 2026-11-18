@@ -48,7 +48,7 @@ git checkout package-lock.json   # npm install rewrites it; don't commit that ch
 npm start            # http://localhost:3000 ; classic view at ?classic=1
 ```
 
-- **Unit tests** (71, all passing): `npm run test:once`. They also run first in `npm run build` and `tools/deploy-vercel.sh`, so a failing test stops a build or deploy.
+- **Unit tests** (75, all passing): `npm run test:once`. They also run first in `npm run build` and `tools/deploy-vercel.sh`, so a failing test stops a build or deploy.
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
 - **Publish version B:** `bash tools/deploy-vercel.sh` builds, adds noindex and uploads the build to the Vercel project `compstat-in-context-b` (project IDs in `tools/vercel-project-b.json`; needs a one-time `npx vercel login`).
@@ -136,6 +136,16 @@ A Nov. 18, 2026 audit of both versions found four major errors in B. Each fix is
 - **January.** Dates come from `periodText`, which names both years when a week or 28 days crosses the New Year and compares with "the same week a year earlier." The trend tags take their years from the report. When revision data is missing (a failed load, or January before two reports of the year exist), the hero says so instead of dropping fragility silently.
 
 - **Moderate fixes, same day.** Sentences with a count as subject use `countSubject` and `countVerb` ("None of them is in the 75th Precinct"). A cell with none in either year shows a dash, not "new". A rise from zero can lead the headline, in counts, and its trend bar says "none last year" instead of drawing 0%. `classicLink` keeps Staten Island and precincts when switching to version A, and says where summed boroughs and the 28-day view land. The "none" count matches the map's list. The rank tag is now "Clearest break from city", with a tooltip saying it's judged by the test, not the percentage. The shootings dek no longer cites NYPD's table. "Routinely" became the model's actual p, and "Counts are real" became "as NYPD reports them". The rate-mode hover explains changes lost to the correction. Dispersion was rebuilt from 37 pairs through Nov. 15; `check.py` now checks it against a current archive clone (`.work/scraper-disp`), limited to the weeks `dispersion.json` names. Rebuild dispersion every few months with `python3 tools/dispersion/build_dispersion.py <scraper>/data/archive`.
+
+- **Minor fixes, same day.**
+  - Rates print with commas and never "0.0" for a count above zero (`fmtRate`), and weeks of revisions get commas (`fmtWeeks`).
+  - The revision columns show only on year to date, since they hold year-to-date revisions.
+  - The long-arc section says it uses year-to-date counts on the week and 28-day views.
+  - The concentration headline is a sentence when the counts are too few.
+  - Method copy names every estimate, and murder's dispersion is described by level.
+  - Peer cities name the ones lower than New York.
+  - Rikers Island (3,772 people in the 2020 Census, nearly all in the jails) is taken out of the 114th's population, in `population.js` and `check.py`.
+  - 1999 shooting incidents are left out: the compilation repeated 1998's 1,759.
 
 ## Version switch (Oct. 14)
 

@@ -1,7 +1,8 @@
 {
  "_sources": {
   "2000-2025 majors": "https://www.nyc.gov/assets/nypd/downloads/excel/analysis_and_planning/historical-crime-data/seven-major-felony-offenses-2000-2025.xls",
-  "1993-1999 majors and all shooting incidents": "src/data/crime_history.json (classic view compilation)"
+  "1993-1999 majors and all shooting incidents": "src/data/crime_history.json (classic view compilation)",
+  "1999 shooting incidents": "left out: the compilation repeats 1998's 1,759, apparently a copy error, and no primary source for 1999 was found"
  },
  "citywide": [
   {
@@ -78,8 +79,7 @@
    "Gr. Larceny": 50139,
    "Murder": 667,
    "Rape": 2089,
-   "Robbery": 35654,
-   "Shooting Inc.": 1759
+   "Robbery": 35654
   },
   {
    "y": 2000,

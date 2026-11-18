@@ -40,7 +40,10 @@ BORO = {**{n: 'Manhattan' for n in [1, 5, 6, 7, 9, 10, 13, 14, 17, 18, 19, 20, 2
         **{n: 'Queens' for n in [100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115]},
         **{n: 'Staten Island' for n in [120, 121, 122, 123]}}
 check(set(BORO) == set(keefe), 'every precinct has a borough')
-gp = {k: math.floor(v * V25[BORO[pnum(k)]] / C20[BORO[pnum(k)]] + 0.5) for k, v in gp2020.items()}
+# Rikers Island (Bronx tract 1: 3,772 people in the 2020 Census, nearly all in the jails) sits in the 114th
+# and is taken out, as in population.js.
+NOT_RES = {'114th Precinct': 3772}
+gp = {k: math.floor((v - NOT_RES.get(k, 0)) * V25[BORO[pnum(k)]] / C20[BORO[pnum(k)]] + 0.5) for k, v in gp2020.items()}
 WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine']
 def nw(n): return WORDS[n] if 0 <= n < 10 else fmt(n)
 def get(geo, name, src_=None):

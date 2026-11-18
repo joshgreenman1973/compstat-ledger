@@ -599,3 +599,23 @@ describe('audit B9: version A links keep the place when A has it', () => {
     expect(bk.note).toMatch(/no 28-day view/);
   });
 });
+
+describe('audit minor findings: numbers print cleanly', () => {
+  test('rates have commas and never show 0.0 for a count above zero', () => {
+    expect(S.fmtRate(1030.04)).toBe('1,030.0');
+    expect(S.fmtRate(0.047)).toBe('0.05'); // four murders in a week, citywide
+    expect(S.fmtRate(0.001)).toBe('<0.01');
+    expect(S.fmtRate(0)).toBe('0');
+    expect(S.fmtRate(12.34)).toBe('12.3');
+  });
+  test('weeks of revisions have commas', () => {
+    expect(S.fmtWeeks(3437.2)).toBe('3,437');
+    expect(S.fmtWeeks(4.26)).toBe('4.3');
+  });
+  test('the 1999 shootings figure, a copy of 1998, is left out', () => {
+    const hist = require('./annual-history.json').citywide;
+    const y = (yr) => hist.find((d) => d.y === yr)['Shooting Inc.'];
+    expect(y(1999)).toBeUndefined();
+    hist.forEach((d, i) => { if (i > 0 && d['Shooting Inc.'] != null) expect(d['Shooting Inc.']).not.toBe(hist[i - 1]['Shooting Inc.']); });
+  });
+});

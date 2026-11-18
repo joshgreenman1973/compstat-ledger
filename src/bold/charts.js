@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from '../data/nyc_precincts.json';
 import { C, VERDICT, useWidth, Chip, FragileTag, Reveal, scenarioPhrase } from './ui';
-import { fmtInt, fmtPct, zBin, binFor, spell, smallBase, SMALL_BASE_NOTE } from './stats';
+import { fmtInt, fmtPct, fmtRate, zBin, binFor, spell, smallBase, SMALL_BASE_NOTE } from './stats';
 
 const Z_CRIT_BAND = 1.96;
 const niceMax = (v) => [5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100].find((s) => s >= v) || 100;
@@ -312,7 +312,7 @@ export function PrecinctMap({ units, mode, cuts, selectedNum, onSelect, measureN
             <div><strong>{fmtInt(hovered.count)}</strong> {measureNoun} <span className="text-[#707175]">vs. {fmtInt(hovered.prior)} {priorLabel}</span></div>
             <div className="mt-1 flex items-center gap-2"><span>{fmtPct(hovered.pct)}</span><Chip verdict={hovered.real || (hovered.verdict === 'none' ? 'none' : 'noise')} small /></div>
             {!hovered.real && hovered.sig === false && (hovered.verdict === 'drop' || hovered.verdict === 'rise') && <div className="mt-1 text-[#707175] italic">Clears the test on its own, but not after correcting for testing every precinct</div>}
-            {hovered.rate != null && !hovered.tourist && <div className="mt-1">{hovered.rate.toFixed(1)} per 100k residents</div>}
+            {hovered.rate != null && !hovered.tourist && <div className="mt-1">{fmtRate(hovered.rate)} per 100k residents</div>}
             {hovered.tourist && <div className="mt-1 text-[#707175] italic">Commuter and visitor hub; per-resident rate not meaningful</div>}
             {hovered.merged && <div className="mt-1 text-[#707175] italic">105th, 113th and 116th shown combined (see note)</div>}
             {hovered.fragile && hovered.sig && <div className="mt-1 text-[#707175] italic">Fragile under the revision scenario: recent revisions, continued, could erase this change, so the map shades it as below the threshold</div>}
@@ -421,7 +421,7 @@ export function PeerBars({ list }) {
           <span className={`w-[118px] sm:w-[150px] text-right text-[14px] leading-tight ${c.isNYC ? 'font-black text-[#050507]' : 'text-[#333]'}`}>{c.isNYC ? 'New York' : c.agency}</span>
           <div className="flex-1 flex items-center gap-2">
             <div className="h-[18px] rounded-r-[4px]" style={{ width: `${(c.rate / max) * 100}%`, minWidth: 3, background: c.isNYC ? C.magenta : C.cerulean }} />
-            <span className={`text-[13px] whitespace-nowrap ${c.isNYC ? 'font-black' : ''}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{c.rate.toFixed(1)}</span>
+            <span className={`text-[13px] whitespace-nowrap ${c.isNYC ? 'font-black' : ''}`} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(c.rate)}</span>
           </div>
         </li>
       ))}

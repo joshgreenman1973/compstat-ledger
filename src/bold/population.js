@@ -39,10 +39,16 @@ export function boroughOfPrecinct(num) {
 
 export const boroughChange = (borough) => (CENSUS_2020[borough] ? ESTIMATE_2025[borough] / CENSUS_2020[borough] : null);
 
+// People counted in a precinct who don't live in the neighborhoods it patrols. Rikers Island sits in the
+// 114th Precinct; its 2020 Census tract (Bronx County tract 1) counted 3,772 people, 3,745 of them in
+// institutional group quarters (the jails). U.S. Census Bureau, 2020 Census redistricting data, P1 and P5.
+export const NOT_RESIDENTS_2020 = { '114th Precinct': 3772 };
+
 // pop2020: { '1st Precinct': 84799, ... } (other keys, such as patrol boroughs, are dropped).
 export function currentPopulations(pop2020) {
   const out = {};
-  Object.entries(pop2020 || {}).forEach(([key, n]) => {
+  Object.entries(pop2020 || {}).forEach(([key, n0]) => {
+    const n = (n0 || 0) - (NOT_RESIDENTS_2020[key] || 0);
     if (!/Precinct/.test(key) || !(n > 0)) return;
     const f = boroughChange(boroughOfPrecinct(key));
     if (f) out[key] = Math.round(n * f);
