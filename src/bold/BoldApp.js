@@ -141,9 +141,10 @@ function MoveItem({ x: raw, onPick, showPlace = true, status = false, max = 60, 
   // The three-year pattern, in words a reader can check against the counts shown under the bars.
   if (x.shape && beyond) {
     const way = up ? 'Up' : 'Down';
-    if (x.shape.kind === 'again') tags.push(<Tag key="sh" tone="soft" title="The count also moved this way from 2024 to 2025, by enough to be unusual under this model.">{way} two years running</Tag>);
-    else if (x.shape.kind === 'rebound') tags.push(<Tag key="sh" tone="warn" title={`The count ${x.shape.last === 'rise' ? 'jumped' : 'dipped'} from 2024 to 2025 by enough to be unusual under this model. When a count swings unusually one year, it tends to swing back, so part of this year's change may be a return to normal (regression to the mean).`}>{way} after a 2025 {x.shape.last === 'rise' ? 'spike' : 'dip'}</Tag>);
-    else tags.push(<Tag key="sh" tone="soft" title="The change from 2024 to 2025 didn’t clear this model’s threshold; this year’s move is the first that does.">{way} after a flat 2025</Tag>);
+    const y1 = x.yearNow - 1; const y2 = x.yearNow - 2;
+    if (x.shape.kind === 'again') tags.push(<Tag key="sh" tone="soft" title={`The count also moved this way from ${y2} to ${y1}, by enough to be unusual under this model.`}>{way} two years running</Tag>);
+    else if (x.shape.kind === 'rebound') tags.push(<Tag key="sh" tone="warn" title={`The count ${x.shape.last === 'rise' ? 'jumped' : 'dipped'} from ${y2} to ${y1} by enough to be unusual under this model. When a count swings unusually one year, it tends to swing back, so part of this year's change may be a return to normal (regression to the mean).`}>{way} after a {y1} {x.shape.last === 'rise' ? 'spike' : 'dip'}</Tag>);
+    else tags.push(<Tag key="sh" tone="soft" title={`The change from ${y2} to ${y1} didn’t clear this model’s threshold; this year’s move is the first that does.`}>{way} after a flat {y1}</Tag>);
   }
   const years = x.shape?.twoBack != null
     ? [[x.yearNow - 2, x.shape.twoBack], [x.yearNow - 1, x.prior], [x.yearNow, x.cur]]
@@ -227,37 +228,8 @@ function revisionSentence(r) {
   return `${base} ${need}: about ${wk < 10 ? wk.toFixed(1) : Math.round(wk)} weeks at the recent pace, ${risk.fragile ? `so it’s fragile under ${scen}` : `so it holds up under ${scen}`}.${alt}`;
 }
 
-// Every change on the page compares a stretch of this year with the SAME dates a year earlier (CompStat's
-// own comparison), never with the previous week or month. These strings name the dates so each
-// sentence can say so.
-function periodText(periodId, geoData) {
-  const end = S.parseMDY(geoData?.report_period?.week_end);
-  const start = S.parseMDY(geoData?.report_period?.week_start);
-  const endStr = S.apDate(geoData?.report_period?.week_end, { year: false });
-  const y = end?.y;
-  const md = (d) => S.apDate(`${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`, { year: false });
-  const range = (a, b) => (a && b ? (md(a).split(' ')[0] === md(b).split(' ')[0] ? `${md(a)}-${b.getUTCDate()}` : `${md(a)}-${md(b)}`) : '');
-  const endDate = end ? new Date(Date.UTC(end.y, end.m - 1, end.d)) : null;
-  if (periodId === 'd28') {
-    const dates = endDate ? range(new Date(endDate.getTime() - 27 * 86400000), endDate) : '';
-    return {
-      eyebrow: `28 days through ${S.apDate(geoData?.report_period?.week_end)}`, lead: `In the 28 days through ${endStr}`, cmp: `the same 28 days of ${y - 1}`, since: 'in the last 28 days', short: `in the same 28 days of ${y - 1}`, priorLabel: `in the same 28 days of ${y - 1}`,
-      dates: `${dates}, ${y}`, kicker: `28 days, ${dates}, ${y}, vs. the same dates in ${y - 1}`, lead2: `From ${dates.replace('-', ' to ')}`, over: `compared with the same dates in ${y - 1}`, tag: `${dates} vs. the same dates in ${y - 1}`, compares: `${dates}, ${y}, with the same dates in ${y - 1}`,
-    };
-  }
-  if (periodId === 'wtd') {
-    const dates = start && end && start.m === end.m ? `${S.apDate(geoData.report_period.week_start, { year: false })}-${end.d}` : `${S.apDate(geoData?.report_period?.week_start, { year: false })} to ${endStr}`;
-    return {
-      eyebrow: `Week of ${dates}, ${y}`, lead: `In the week of ${dates}`, cmp: `the same week of ${y - 1}`, since: 'this week', short: `in the same week of ${y - 1}`, priorLabel: `in the same week of ${y - 1}`,
-      dates: `${dates}, ${y}`, kicker: `Week of ${dates}, ${y}, vs. the same week of ${y - 1}`, lead2: `In the week of ${dates}`, over: `compared with the same week of ${y - 1}`, tag: `${dates} vs. the same week of ${y - 1}`, compares: `the week of ${dates}, ${y}, with the same week of ${y - 1}`,
-    };
-  }
-  const dates = `Jan. 1-${endStr}`;
-  return {
-    eyebrow: `Year to date through ${S.apDate(geoData?.report_period?.week_end)}`, lead: `Through ${endStr}`, cmp: `the same period of ${y - 1}`, since: 'so far this year', short: `at this point in ${y - 1}`, priorLabel: `at this point in ${y - 1}`,
-    dates: `${dates}, ${y}`, kicker: `Year to date, ${dates}, ${y}, vs. the same dates in ${y - 1}`, lead2: `From Jan. 1 to ${endStr}`, over: `compared with the same dates in ${y - 1}`, tag: `${dates} vs. the same dates in ${y - 1}`, compares: `${dates}, ${y}, with the same dates in ${y - 1}`,
-  };
-}
+// The dates each sentence names (see S.periodText; tested there, including ranges across the New Year).
+const periodText = (periodId, geoData) => S.periodText(periodId, geoData?.report_period);
 
 // "The Bronx" as a label; everything else as NYPD names it.
 const placeLabel = (geo) => (geo === 'Bronx' ? 'The Bronx' : geo);
@@ -733,7 +705,11 @@ export default function BoldApp() {
   const deck = (() => {
     if (!total) return null;
     const dir = total.pct == null ? null : Math.abs(total.pct) < 0.05 ? 'flat' : total.pct < 0 ? 'down' : 'up';
-    const s1 = dir === 'flat'
+    // Last year's total of zero has no percent change, and one under 30 swings on a handful of crimes:
+    // say the counts (S.changeWords), as the ledger does.
+    const s1 = dir == null || S.smallBase(total.prior)
+      ? `${P.lead}, the seven major felonies ${here} total ${nw(total.cur)}, ${total.cur === total.prior ? `the same as in ${P.cmp}` : `${total.cur > total.prior ? 'up' : 'down'} from ${total.prior === 0 ? 'none' : nw(total.prior)} in ${P.cmp}`}.`
+      : dir === 'flat'
       ? `${P.lead}, the seven major felonies ${here} are unchanged from ${P.cmp}: ${S.fmtInt(total.cur)}.`
       : `${P.lead}, the seven major felonies ${here} are ${dir} ${Math.abs(total.pct).toFixed(1)}% from ${P.cmp}: ${S.fmtInt(total.cur)}, or ${nw(Math.abs(total.diff))} ${total.diff < 0 ? 'fewer' : 'more'}.`;
     let s2 = null;
@@ -773,31 +749,40 @@ export default function BoldApp() {
     return `These are first counts, and NYPD keeps revising them. Over the past ${weeksWord(revs.weeks)}, its revisions to weeks it had already reported came to ${counts}; the ${reportYear - 1} figures they're compared against ${priorMoved}. ${tilt} A change that’s unusual under this model but that ${nw(fragileWeeks)} more ${fragileWeeks === 1 ? 'week' : 'weeks'} of revisions at that pace could erase is marked fragile (a stress test, not a confidence interval) and kept out of the headline.`.replace(/ {2,}/g, ' ');
   })();
 
+  // A precinct move and the city's, in words: percents on bases of 30 or more, counts below that.
+  const moveWords = (x) => S.changeWords(x.cur, x.prior);
+  const cityWords = (x) => S.changeWords(x.cityCur, x.cityPrior);
+  // Without the archive of earlier reports (a failed load, or the first weeks of a year, before two reports
+  // of the same year exist), nothing can be tested against revisions: say so rather than go quiet.
+  const revMissing = revs ? null
+    : source !== 'live' ? 'This page is showing a saved copy of the report, so it can’t check how NYPD has been revising recent weeks: no change is tested for fragility, and pace ranges carry no revision allowance.'
+      : revStatus === 'failed' ? 'NYPD’s earlier weekly reports didn’t load, so this page can’t check how recent revisions might change these counts: no change is tested for fragility, and pace ranges carry no revision allowance. Reloading may fix it.'
+        : `There aren’t yet two consecutive ${reportYear} reports to measure NYPD’s revisions from, so no change is tested for fragility, and pace ranges carry no revision allowance.`;
   // One line in the hero pointing to what stands out locally.
   const spotlight = (() => {
     if (!scoped) return null;
     const r0 = scoped.rises[0]; const d0 = scoped.drops[0];
-    const bit = (x) => `${lc(x.label)} ${pctProse(x.pct)} in the ${shortName(x.geo)}`;
+    const bit = (x) => `${lc(x.label)} ${moveWords(x)} in the ${shortName(x.geo)}`;
     if (isPrecinct) {
       const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
-      return x ? `Stands out here (${P.tag}): ${lc(x.label)}, ${pctProse(x.pct)}, while citywide it's ${pctProse(x.cityPct)}.` : null;
+      return x ? `Stands out here (${P.tag}): ${lc(x.label)}, ${moveWords(x)}, while citywide it's ${cityWords(x)}.` : null;
     }
     if (!r0 && !d0) return null;
     return `Standing out from the citywide trend (${P.tag}): ${[r0, d0].filter(Boolean).map(bit).join('; ')}.`;
   })();
   // The section's kicker and first line of text name the dates compared.
-  const moveSentence = (x) => `${x.label} is ${pctProse(x.pct)} in the ${x.geo}; citywide, it's ${pctProse(x.cityPct)}.`;
+  const moveSentence = (x) => `${x.label} is ${moveWords(x)} in the ${x.geo}; citywide, it's ${cityWords(x)}.`;
   const trendsTitle = (() => {
     if (!scoped) return '';
     if (isPrecinct) {
       const x = [...scoped.rises, ...scoped.drops].sort((a, b) => Math.abs(b.zRel) - Math.abs(a.zRel))[0];
       return x
-        ? `In the ${activeGeo}, ${lc(x.label)} stands out: ${pctProse(x.pct)}, while citywide it's ${pctProse(x.cityPct)}.`
+        ? `In the ${activeGeo}, ${lc(x.label)} stands out: ${moveWords(x)}, while citywide it's ${cityWords(x)}.`
         : `Nothing in the ${activeGeo} clears this model’s threshold and stands out from the citywide trend ${P.since}.`;
     }
     const r0 = scoped.rises[0]; const d0 = scoped.drops[0];
-    if (r0 && d0 && r0.name === d0.name) return `${r0.label} is ${pctProse(r0.pct)} in the ${r0.geo} and ${pctProse(d0.pct)} in the ${shortName(d0.geo)}; citywide, it's ${pctProse(r0.cityPct)}.`;
-    if (r0 && d0) return `${r0.label} is ${pctProse(r0.pct)} in the ${r0.geo}; ${lc(d0.label)} is ${pctProse(d0.pct)} in the ${shortName(d0.geo)}.`;
+    if (r0 && d0 && r0.name === d0.name) return `${r0.label} is ${moveWords(r0)} in the ${r0.geo} and ${moveWords(d0)} in the ${shortName(d0.geo)}; citywide, it's ${cityWords(r0)}.`;
+    if (r0 && d0) return `${r0.label} is ${moveWords(r0)} in the ${r0.geo}; ${lc(d0.label)} is ${moveWords(d0)} in the ${shortName(d0.geo)}.`;
     if (r0 || d0) return moveSentence(r0 || d0);
     return `No precinct's change in a major crime${isCity ? '' : ` ${here}`} clears this model’s threshold and stands out from the citywide trend ${P.since}.`;
   })();
@@ -876,7 +861,7 @@ export default function BoldApp() {
             // Percentages hide scale: the same percent means very different numbers of crimes.
             const fa = ratio.numer; const mu = ratio.denom;
             // (A change that rounds to 0.0% illustrates nothing, so it's left out.)
-            const sized = (r) => (r.diff === 0 || r.pct == null || Math.abs(r.pct) < 0.05 ? null : `${Math.abs(r.pct) < 10 ? Math.abs(r.pct).toFixed(1) : Math.round(Math.abs(r.pct))}% ${r.diff > 0 ? 'rise' : 'drop'}`);
+            const sized = (r) => (r.diff === 0 || r.pct == null || S.smallBase(r.prior) || Math.abs(r.pct) < 0.05 ? null : `${Math.abs(r.pct) < 10 ? Math.abs(r.pct).toFixed(1) : Math.round(Math.abs(r.pct))}% ${r.diff > 0 ? 'rise' : 'drop'}`);
             const parts = [[fa, 'felony assaults', 'assault'], [mu, 'murders', 'murder']].filter(([r]) => sized(r))
               .map(([r, pl, noun]) => `a ${sized(r)} in ${pl} is ${nw(Math.abs(r.diff))} ${r.diff > 0 ? 'more' : 'fewer'} ${noun}${Math.abs(r.diff) === 1 ? '' : 's'}`);
             return (
@@ -887,6 +872,7 @@ export default function BoldApp() {
           })()}
           {spotlight && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/85">{spotlight} <a href="#trends" className="underline decoration-[#dde44c] underline-offset-2 hover:text-[#dde44c] whitespace-nowrap">Notable trends ↓</a></p>}
           {revNote && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revNote}</p>}
+          {!revNote && revMissing && <p className="mt-4 max-w-3xl text-[15px] sm:text-[16px] text-white/70">{revMissing}</p>}
           {isTourist && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The {activeGeo} covers {hoodOf(activeGeo)}, where daytime crowds of workers and visitors dwarf the resident population. Counts and changes are real; per-resident rates are not meaningful here.</p>}
           {isBoro && <p className="mt-4 max-w-3xl text-[14px] text-white/70">{geoData?.summedFrom ? `NYPD doesn't report borough totals; these add up its ${geoData.summedFrom.join(' and ')} patrol-borough reports.` : `${placeLabel(activeGeo)} is a single NYPD patrol borough; these are its figures as reported.`}</p>}
           {isSplit && <p className="mt-4 max-w-3xl text-[14px] text-[#dde44c]">The 116th Precinct was created in December 2024 from parts of the 105th and 113th. NYPD reports all three separately, restated for the new lines, but the population figures and precinct map use the old lines, so per-resident rates for any one of them would be wrong. Maps and rates combine the three.</p>}
@@ -1067,7 +1053,7 @@ export default function BoldApp() {
             <Receipt>
               <p>Three bars, all required. <strong>The model:</strong> the precinct’s own change clears this model’s threshold (|z| ≥ 1.96, allowing for how much that crime varies week to week at the precinct level). <strong>The city:</strong> it differs from what the precinct would show had it moved exactly with the city. With n = this year + last year there, the city's ratio r puts this year's expected share at r ÷ (1 + r), tested the same way. <strong>Many tests:</strong> {S.fmtInt(notable.tested)} precinct-and-crime pairs are tested at once, so the city test has to survive the Benjamini-Hochberg correction (a 5% false-discovery rate). Changes fragile under the revision scenario are left out.</p>
               <p>{S.fmtInt(notable.rises.length)} rises and {S.fmtInt(notable.drops.length)} drops clear all three citywide {P.since}.{!isCity ? ` ${capFirst(nw(scoped.rises.length + scoped.drops.length))} of them are ${here}.` : ''}</p>
-              {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the 2024 count shown. “Two years running” means the count also moved the same way from 2024 to 2025, by enough to be unusual under the model. “After a flat 2025” means the 2024-to-2025 change didn’t clear the model’s threshold, so this year’s move is the first that does. “After a 2025 spike (or dip)” means the count swung the other way from 2024 to 2025, by enough to be unusual under the model; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
+              {period === 'ytd' && <p><strong>Three years:</strong> NYPD's report also compares each line with the same dates two years back, which gives the {reportYear - 2} count shown. “Two years running” means the count also moved the same way from {reportYear - 2} to {reportYear - 1}, by enough to be unusual under the model. “After a flat {reportYear - 1}” means the {reportYear - 2}-to-{reportYear - 1} change didn’t clear the model’s threshold, so this year’s move is the first that does. “After a {reportYear - 1} spike (or dip)” means the count swung the other way from {reportYear - 2} to {reportYear - 1}, by enough to be unusual under the model; counts that swing unusually one year tend to swing back, so part of this year's change may be a return to normal, the regression to the mean <a className="underline" href="https://www.vitalcitynyc.org/nypd-zone-strategy-crime-drop-analysis/" target="_blank" rel="noopener noreferrer">John Hall describes in Vital City</a>.</p>}
             </Receipt>
           </section>
         )}
@@ -1144,10 +1130,10 @@ export default function BoldApp() {
                 if (pace.tooEarly) return `Too early in ${reportYear} to project ${noun}.`;
                 switch (claim?.kind) {
                   case 'record-low': return `At this pace, ${reportYear} would have the fewest ${noun} since at least ${claim.since}, where this series begins.`;
-                  case 'low-since': return `At this pace, ${reportYear} would have the fewest ${noun} since ${claim.since}${earlyYear(claim.since) ? ' in this series' : ''}.`;
+                  case 'low-since': return `At this pace, ${reportYear} would have the fewest ${noun} since ${claim.atLeast ? 'at least ' : ''}${claim.since}${earlyYear(claim.since) ? ' in this series' : ''}.`;
                   case 'below-last': return `${lbl} ${is} on pace to finish below ${claim.last.y}.`;
                   case 'above-last': return `${lbl} ${is} on pace to finish above ${claim.last.y}.`;
-                  case 'high-since': return `At this pace, ${reportYear} would have the most ${noun} since ${claim.since}${earlyYear(claim.since) ? ' in this series' : ''}.`;
+                  case 'high-since': return `At this pace, ${reportYear} would have the most ${noun} since ${claim.atLeast ? 'at least ' : ''}${claim.since}${earlyYear(claim.since) ? ' in this series' : ''}.`;
                   case 'record-high': return `At this pace, ${reportYear} would have the most ${noun} since at least ${claim.since}, where this series begins.`;
                   default: return `${lbl} ${is} on pace to land about where ${claim?.last?.y ?? 'last year'} did.`;
                 }
@@ -1177,7 +1163,7 @@ export default function BoldApp() {
                 {pace.seasonal != null && <p><strong>Last year's shape:</strong> by this date in {reportYear - 1}, NYPD had recorded {S.fmtInt(arcRow.prior)} of that year's {S.fmtInt(lastHist.val)} ({(pace.seasonalShare * 100).toFixed(1)}%). {S.fmtInt(arcRow.cur)} ÷ {(pace.seasonalShare * 100).toFixed(1)}% = {S.fmtInt(pace.seasonal)}.</p>}
                 {pace.allowance != null && <p><strong>Revision allowance:</strong> over the past {weeksWord(revs.weeks)}, NYPD's revisions to already-reported weeks came to {S.fmtSigned(arcFlow.cur)} {arcOpt[2]}. {capFirst(nw(S.REVISION_WEEKS))} more weeks at that pace would be {S.fmtSigned(pace.allowance)}, making the year-to-date {S.fmtInt(arcRow.cur + pace.allowance)} and the pace {S.fmtInt(Math.min(pace.adj.linear, pace.adj.seasonal ?? Infinity))} to {S.fmtInt(Math.max(pace.adj.linear, pace.adj.seasonal ?? -Infinity))}.</p>}
                 {pace.chanceHigh != null && <p><strong>Chance in the rest of the year:</strong> the count still to come is itself random, so each end is widened by 1.96 × √({arcPhi > 1 ? `${arcPhi.toFixed(1)} × ` : ''}the count still to come): {pace.chanceLow > 0 ? `−${S.fmtInt(pace.chanceLow)} at the low end and ` : ''}+{S.fmtInt(pace.chanceHigh)} at the high end. The range shown, {S.fmtInt(pace.low)} to {S.fmtInt(pace.high)}, spans all of it.</p>}
-                <p>The headline's comparison has to hold at the <em>high</em> end of the range for a low (or the low end for a high). {claim?.kind === 'low-since' && `${claim.since} had ${S.fmtInt(claim.sinceVal)}, at or below the high end, and every year since had more.`}{claim?.kind === 'record-low' && `The lowest full year in the series is ${S.fmtInt(Math.min(...arcSeries.map((d) => d.val)))}, above even the high end.`}{claim?.kind === 'high-since' && `${claim.since} had ${S.fmtInt(claim.sinceVal)}, at or above the low end, and every year since had fewer.`}</p>
+                <p>The headline's comparison has to hold at the <em>high</em> end of the range for a low (or the low end for a high), and by a margin of {S.fmtInt(Math.ceil(S.claimMargin(lastHist.val)))} ({lastHist.y}'s total ÷ 100, at least one), so a single crime or revision can't flip it. {claim?.kind === 'in-line' && `The range doesn't clear ${lastHist.y}'s ${S.fmtInt(lastHist.val)} by that margin.`}{claim?.kind === 'low-since' && `${claim.since} had ${S.fmtInt(claim.sinceVal)}${claim.atLeast ? ', inside the range, so the year could also land below it' : ', below the range'}, and every year since had more than the high end plus the margin.`}{claim?.kind === 'record-low' && `The lowest full year in the series is ${S.fmtInt(Math.min(...arcSeries.map((d) => d.val)))}, above even the high end.`}{claim?.kind === 'high-since' && `${claim.since} had ${S.fmtInt(claim.sinceVal)}${claim.atLeast ? ', inside the range, so the year could also land above it' : ', above the range'}, and every year since had fewer than the low end minus the margin.`}</p>
               </Receipt>
             )}
             <SourceLine>

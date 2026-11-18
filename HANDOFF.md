@@ -48,7 +48,7 @@ git checkout package-lock.json   # npm install rewrites it; don't commit that ch
 npm start            # http://localhost:3000 ; classic view at ?classic=1
 ```
 
-- **Unit tests** (44, all passing): `CI=true npx react-scripts test src/bold --watchAll=false`
+- **Unit tests** (68, all passing): `npm run test:once`. They also run first in `npm run build` and `tools/deploy-vercel.sh`, so a failing test stops a build or deploy.
 - **Production build:** `CI=true npx react-scripts build`. With `CI=true`, any lint warning fails the build, as it will on Vercel. Unused imports are the usual culprit.
 - **Independent number check:** `bash tools/verify/run.sh`. See "Verification" below.
 - **Publish version B:** `bash tools/deploy-vercel.sh` builds, adds noindex and uploads the build to the Vercel project `compstat-in-context-b` (project IDs in `tools/vercel-project-b.json`; needs a one-time `npx vercel login`).
@@ -125,6 +125,15 @@ An outside review (Nov. 4, 2026) found the weekly counts correct but the statist
 - "Fragile" is "fragile under an eight-week revision scenario," a stress test, not a confidence interval; each receipt says whether a change would be fragile under four- and 12-week scenarios.
 - Pace ranges are "illustrative ... not a 95% prediction interval." Record claims reaching before 2000 (or any shootings claim) say "in this series" and carry a provenance caveat.
 - Deferred: held-out validation and backtests of the test, the revision scenario and the pace range.
+
+## Audit fixes (Nov. 18)
+
+A Nov. 18, 2026 audit of both versions found four major errors in B. Each fix is a rule in `src/bold/stats.js`, keyed off the report's own dates and counts rather than a year written into the code, with a test named for the finding in `stats.test.js`:
+
+- **No percent on zero or a small base.** The deck printed "null 0.0%" when last year's total was 0, and lead sentences gave percents on bases under 30 ("up 104%" on 23 to 47). `changeWords` gives counts below 30 ("up to 47 from 23," "up from none to three"); the deck, spotlight, trends title and scale line all follow it.
+- **Rape two years back.** The three-year trend tags compared rape with 2024, before the Sept. 1, 2024 definition change. `rapeComparable(period, weekEnd, yearsBack)` now gates them; rape's tags come back on their own with the first 2027 report.
+- **Pace claims need a margin.** A ranked claim ("fewest since 2018") must clear last year by 1% (at least one crime), and says "since at least" when the named year's total falls inside the range. On the Nov. 15 report, murder is "about where 2025 did" rather than a claim 0.53 of a murder from flipping.
+- **January.** Dates come from `periodText`, which names both years when a week or 28 days crosses the New Year and compares with "the same week a year earlier." The trend tags take their years from the report. When revision data is missing (a failed load, or January before two reports of the year exist), the hero says so instead of dropping fragility silently.
 
 ## Version switch (Oct. 14)
 

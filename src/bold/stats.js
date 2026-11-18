@@ -72,6 +72,59 @@ export function dayOfYear({ y, m, d }) {
   const days = [31, isLeap(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   return days.slice(0, m - 1).reduce((a, b) => a + b, 0) + d;
 }
+const addDays = (p, n) => {
+  const t = new Date(Date.UTC(p.y, p.m - 1, p.d) + n * 86400000);
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
+};
+const mdy = (p) => `${p.m}/${p.d}/${p.y}`;
+// A date range in AP style. `short` leaves the year off when both ends share it ("Nov. 9-15");
+// `full` always says the year ("Nov. 9-15, 2026"), and a range that crosses the New Year names both
+// years so it can't be misread ("Dec. 29, 2025-Jan. 4, 2026"). `to` is the same with "to".
+export function dateSpan(a, b) {
+  if (!a || !b) return { short: '', full: '', to: '', crosses: false };
+  if (a.y !== b.y) {
+    const A = apDate(mdy(a)); const B = apDate(mdy(b));
+    return { short: `${A}-${B}`, full: `${A}-${B}`, to: `${A}, to ${B}`, crosses: true };
+  }
+  const A = apDate(mdy(a), { year: false }); const B = apDate(mdy(b), { year: false });
+  const same = a.m === b.m && a.d === b.d;
+  const short = same ? A : a.m === b.m ? `${A}-${b.d}` : `${A}-${B}`;
+  const to = same ? A : `${A} to ${a.m === b.m ? b.d : B}`;
+  return { short, full: `${short}, ${b.y}`, to, crosses: false };
+}
+
+// Every change on the page compares a stretch of this year with the SAME dates a year earlier (CompStat's
+// own comparison), never with the previous week or month. These strings name the dates so each
+// sentence can say so. A week or 28 days that crosses the New Year is compared with the same dates a
+// year earlier, which also cross it, so those comparisons say "a year earlier" rather than one year.
+export function periodText(periodId, reportPeriod) {
+  const end = parseMDY(reportPeriod?.week_end);
+  const endStr = apDate(reportPeriod?.week_end, { year: false });
+  const y = end?.y;
+  if (periodId === 'd28') {
+    const span = end ? dateSpan(addDays(end, -27), end) : dateSpan(null, null);
+    const prev = span.crosses ? 'a year earlier' : `in ${y - 1}`;
+    const same = span.crosses ? 'the same 28 days a year earlier' : `the same 28 days of ${y - 1}`;
+    return {
+      eyebrow: `28 days through ${apDate(reportPeriod?.week_end)}`, lead: `In the 28 days through ${endStr}`, cmp: same, since: 'in the last 28 days', short: `in ${same}`, priorLabel: `in ${same}`,
+      dates: span.full, kicker: `28 days, ${span.full}, vs. the same dates ${prev}`, lead2: `From ${span.to}`, over: `compared with the same dates ${prev}`, tag: `${span.short} vs. the same dates ${prev}`, compares: `${span.full}, with the same dates ${prev}`,
+    };
+  }
+  if (periodId === 'wtd') {
+    const start = parseMDY(reportPeriod?.week_start) || (end ? addDays(end, -6) : null);
+    const span = dateSpan(start, end);
+    const same = span.crosses ? 'the same week a year earlier' : `the same week of ${y - 1}`;
+    return {
+      eyebrow: `Week of ${span.full}`, lead: `In the week of ${span.short}`, cmp: same, since: 'this week', short: `in ${same}`, priorLabel: `in ${same}`,
+      dates: span.full, kicker: `Week of ${span.full}, vs. ${same}`, lead2: `In the week of ${span.short}`, over: `compared with ${same}`, tag: `${span.short} vs. ${same}`, compares: `the week of ${span.full}, with ${same}`,
+    };
+  }
+  const span = end ? dateSpan({ y: end.y, m: 1, d: 1 }, end) : dateSpan(null, null);
+  return {
+    eyebrow: `Year to date through ${apDate(reportPeriod?.week_end)}`, lead: `Through ${endStr}`, cmp: `the same period of ${y - 1}`, since: 'so far this year', short: `at this point in ${y - 1}`, priorLabel: `at this point in ${y - 1}`,
+    dates: span.full, kicker: `Year to date, ${span.full}, vs. the same dates in ${y - 1}`, lead2: `From ${span.to}`, over: `compared with the same dates in ${y - 1}`, tag: `${span.short} vs. the same dates in ${y - 1}`, compares: `${span.full}, with the same dates in ${y - 1}`,
+  };
+}
 
 /* ------------------------- signal vs. noise ------------------------- */
 // Two counts from equal-length windows (this year's YTD vs. the same window last year).
@@ -153,16 +206,18 @@ const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 // New York broadened the legal definition of rape effective Sept. 1, 2024. A year-over-year
 // comparison is apples-to-apples only if the prior-year window starts on or after that date.
 export const RAPE_DEFINITION_CHANGE = { y: 2024, m: 9, d: 1 };
-export function rapeYoYComparable(periodId, weekEnd) {
+// yearsBack = 2 asks the same of the window two years back (the three-year trend tags).
+export function rapeComparable(periodId, weekEnd, yearsBack = 1) {
   const end = parseMDY(weekEnd);
   if (!end) return false;
   const days = periodId === 'ytd' ? dayOfYear(end) - 1 : periodId === 'd28' ? 27 : 6;
-  // Start of the prior-year window, as a comparable ordinal (y*1000 + day of year).
-  const startDoy = dayOfYear(end) - days;
-  const priorStart = (end.y - 1) * 1000 + startDoy;
-  const change = RAPE_DEFINITION_CHANGE.y * 1000 + dayOfYear(RAPE_DEFINITION_CHANGE);
-  return priorStart >= change;
+  // Start of the earlier window, moved back whole years from this year's window.
+  const start = addDays(end, -days);
+  const earlier = { y: start.y - yearsBack, m: start.m, d: Math.min(start.d, start.m === 2 ? 28 : start.d) };
+  const key = (p) => p.y * 10000 + p.m * 100 + p.d;
+  return key(earlier) >= key(RAPE_DEFINITION_CHANGE);
 }
+export const rapeYoYComparable = (periodId, weekEnd) => rapeComparable(periodId, weekEnd, 1);
 
 // One row per CompStat line for a geography and period. pct is recomputed from the two counts
 // (it matches NYPD's printed pct_change) so the receipt is reproducible from what's shown.
@@ -343,6 +398,17 @@ export function clause(r, kind) {
   if (kind === 'stuck') return `${L} ${isPlural(r.name) ? "aren't" : "isn't"} falling.`;
   if (kind === 'flat') return `${L} ${be} essentially flat.`;
   return '';
+}
+
+// A change in words for running text: "down 12%" on a base of 30 or more, counts below that
+// ("up to 47 from 23", "up from none to three"), so no sentence prints a percent the ledger grays out.
+export function changeWords(cur, prior) {
+  if (!Number.isFinite(cur) || !Number.isFinite(prior)) return '';
+  if (cur === prior) return prior === 0 ? 'zero both years' : prior < SMALL_BASE ? `unchanged at ${spell(cur)}` : 'unchanged';
+  if (prior === 0) return `up from none to ${spell(cur)}`;
+  if (prior < SMALL_BASE) return `${cur > prior ? 'up' : 'down'} to ${spell(cur)} from ${spell(prior)}`;
+  const pct = Math.round(Math.abs(((cur - prior) / prior) * 100));
+  return pct === 0 ? 'unchanged' : `${cur < prior ? 'down' : 'up'} ${pct}%`;
 }
 
 // Returns { sentences, lead, counter, counterKind, kind, cleared, fragileOnes } — kind is
@@ -547,6 +613,7 @@ export function notableMoves({ raw, places, periodId = 'ytd', crimes = NOTABLE_C
   const pkey = PERIODS[periodId]?.key || PERIODS.ytd.key;
   const line = (g, n) => g?.seven_major_felonies?.[n] || g?.additional_stats?.[n];
   const city = raw?.citywide;
+  const weekEnd = city?.report_period?.week_end;
   const all = [];
   crimes.forEach((name) => {
     const cw = line(city, name)?.[pkey];
@@ -564,7 +631,9 @@ export function notableMoves({ raw, places, periodId = 'ytd', crimes = NOTABLE_C
       const f = flows?.[geo]?.[name];
       const wk = weeksByGeo?.[geo] ?? weeks;
       const risk = f && wk > 0 ? revisionRisk({ verdict, cur, prior, phi }, { cur: f.cur, prior: f.prior, weeks: wk }, fragileWeeks) : null;
-      const twoBack = periodId === 'ytd' ? twoYearsBack(cur, s?.historical?.['2_yr_pct']) : null;
+      // Rape's count two years back predates the Sept. 1, 2024 definition change until 2027's reports.
+      const twoBackOK = periodId === 'ytd' && (name !== 'Rape' || rapeComparable('ytd', weekEnd, 2));
+      const twoBack = twoBackOK ? twoYearsBack(cur, s?.historical?.['2_yr_pct']) : null;
       all.push({
         geo, name, label: labelFor(name), cur, prior, phi, z, verdict, zRel, pRel: zRel == null ? NaN : pTwoSided(zRel),
         pct: prior > 0 ? ((cur - prior) / prior) * 100 : null, diff: cur - prior, cityCur: cw.current_year, cityPrior: cw.prior_year, cityPct,
@@ -652,23 +721,28 @@ export function withChance(range, cur, phi = 1) {
 }
 
 // Where a full-year value would rank in a series of complete years ({y, val}, ascending by y).
-// Returns the conservative comparison for a pace RANGE — the claim must hold at both ends.
+// Returns the conservative comparison for a pace RANGE — the claim must hold at both ends, and by a
+// margin (1% of last year, at least one crime), so a single crime or revision can't flip the claim.
+// If the "since" year's own total falls inside the range, the year could land below it too, so the
+// claim is "since at least" that year (atLeast).
+export const claimMargin = (lastVal) => Math.max(1, 0.01 * lastVal);
 export function arcClaim(series, pace) {
   if (!pace || pace.tooEarly || !series?.length) return null;
   const last = series[series.length - 1];
   const first = series[0];
-  if (pace.high < last.val) {
-    // Falling. "Fewest since Y": Y is the most recent year at or below the HIGH end.
-    const y = [...series].reverse().find((d) => d.val <= pace.high);
+  const m = claimMargin(last.val);
+  if (pace.high + m <= last.val) {
+    // Falling. "Fewest since Y": every year after Y is clearly above the high end; Y is not.
+    const y = [...series].reverse().find((d) => d.val < pace.high + m);
     if (!y) return { kind: 'record-low', since: first.y, last };
     // "Fewest since last-year-minus-one" is too thin to headline; just say it's below last year.
-    if (y.y <= last.y - 2) return { kind: 'low-since', since: y.y, sinceVal: y.val, last };
+    if (y.y <= last.y - 2) return { kind: 'low-since', since: y.y, sinceVal: y.val, atLeast: y.val >= pace.low - m, last };
     return { kind: 'below-last', last };
   }
-  if (pace.low > last.val) {
-    const y = [...series].reverse().find((d) => d.val >= pace.low);
+  if (pace.low - m >= last.val) {
+    const y = [...series].reverse().find((d) => d.val > pace.low - m);
     if (!y) return { kind: 'record-high', since: first.y, last };
-    if (y.y <= last.y - 2) return { kind: 'high-since', since: y.y, sinceVal: y.val, last };
+    if (y.y <= last.y - 2) return { kind: 'high-since', since: y.y, sinceVal: y.val, atLeast: y.val <= pace.high + m, last };
     return { kind: 'above-last', last };
   }
   return { kind: 'in-line', last };

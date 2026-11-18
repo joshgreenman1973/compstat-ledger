@@ -15,6 +15,8 @@ trap 'rm -rf "$WORK"' EXIT
 SITE="$WORK/$PROJECT"   # the folder name becomes the project name on the first deploy
 
 git -C "$ROOT" diff --quiet HEAD || echo "note: uncommitted changes are included in this build"
+# The unit tests guard every claim the page makes (see src/bold/stats.test.js); a failing test stops the deploy.
+(cd "$ROOT" && CI=true npx react-scripts test --watchAll=false > "$WORK/test.log" 2>&1) || { cat "$WORK/test.log"; echo "tests failed: not deploying"; exit 1; }
 (cd "$ROOT" && BUILD_PATH="$SITE" CI=true npx react-scripts build > "$WORK/build.log" 2>&1) || { cat "$WORK/build.log"; exit 1; }
 for f in "$SITE/index.html" "$SITE/precinct-day/index.html"; do
   sed -i '' 's#<head>#<head><meta name="robots" content="noindex,nofollow">#' "$f"

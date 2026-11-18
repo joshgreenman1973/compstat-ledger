@@ -451,3 +451,117 @@ describe('boroughs', () => {
     expect(S.inBoroughPhrase('Queens')).toBe('in Queens');
   });
 });
+
+// Guards from the Nov. 18, 2026 audit (B1-B4, B8, B14 and the January checks). Each one keys off the
+// report's own dates and counts, never a calendar year written into the code, so it keeps holding.
+describe('audit B1, B2, B8: no percent on a base under 30, and none at all on zero', () => {
+  test('counts below 30, percents from 30 up', () => {
+    expect(S.changeWords(47, 23)).toBe('up to 47 from 23'); // 123rd Precinct vehicle theft, Nov. 15, 2026
+    expect(S.changeWords(3, 0)).toBe('up from none to three'); // 22nd Precinct, week of Nov. 9-15, 2026
+    expect(S.changeWords(0, 0)).toBe('zero both years');
+    expect(S.changeWords(5, 5)).toBe('unchanged at five');
+    expect(S.changeWords(3, 8)).toBe('down to three from eight');
+    expect(S.changeWords(88, 100)).toBe('down 12%');
+    expect(S.changeWords(30, 30)).toBe('unchanged');
+  });
+  test('nothing in the output is ever "null", "NaN" or a percent on a small base', () => {
+    for (let prior = 0; prior < 60; prior++) {
+      for (let cur = 0; cur < 60; cur += 7) {
+        const w = S.changeWords(cur, prior);
+        expect(w).not.toMatch(/null|NaN|undefined|Infinity/);
+        if (prior < SMALL_BASE) expect(w).not.toMatch(/%/);
+      }
+    }
+    expect(S.changeWords(null, 5)).toBe('');
+  });
+});
+
+describe('audit B3: rape is never compared across the Sept. 1, 2024 definition change', () => {
+  test('two years back: not in 2026, yes from the first 2027 report', () => {
+    expect(S.rapeComparable('ytd', '11/15/2026', 2)).toBe(false); // Jan. 1, 2024 start
+    expect(S.rapeComparable('ytd', '1/4/2027', 2)).toBe(true); // Jan. 1, 2025 start
+    expect(S.rapeComparable('wtd', '11/15/2026', 2)).toBe(true); // Nov. 9-15, 2024
+    expect(S.rapeComparable('wtd', '8/16/2026', 2)).toBe(false); // Aug. 10-16, 2024
+  });
+  const raw = (weekEnd) => ({
+    citywide: { report_period: { week_end: weekEnd }, seven_major_felonies: { Rape: { year_to_date: { current_year: 2000, prior_year: 2200 } }, Robbery: { year_to_date: { current_year: 8800, prior_year: 10000 } } }, additional_stats: {} },
+    '41st Precinct': { seven_major_felonies: {
+      Rape: { year_to_date: { current_year: 19, prior_year: 43 }, historical: { '2_yr_pct': -45.7 } },
+      Robbery: { year_to_date: { current_year: 300, prior_year: 150 }, historical: { '2_yr_pct': 100 } },
+    }, additional_stats: {} },
+  });
+  test('no two-year shape for rape in 2026; other crimes keep theirs', () => {
+    const r = notableMoves({ raw: raw('11/15/2026'), places: ['41st Precinct'], crimes: ['Rape', 'Robbery'] });
+    expect(r.all.find((x) => x.name === 'Rape').shape).toBeNull();
+    expect(r.all.find((x) => x.name === 'Robbery').shape).not.toBeNull();
+  });
+  test('in 2027 the rape window two years back starts after the change, so the shape returns', () => {
+    const r = notableMoves({ raw: raw('1/4/2027'), places: ['41st Precinct'], crimes: ['Rape'] });
+    expect(r.all[0].shape).not.toBeNull();
+  });
+});
+
+describe('audit B4: a pace claim needs a margin, and says "at least" when it should', () => {
+  const series = crimeHistory.citywide.map((d) => ({ y: d.y, val: d.Murder }));
+  test('murder, Nov. 15, 2026: a high end 0.53 below 2025 makes no claim', () => {
+    expect(arcClaim(series, { low: 252, high: 308.47 }).kind).toBe('in-line');
+  });
+  test('a year inside the range makes it "since at least"', () => {
+    const c = arcClaim(series, { low: 290, high: 300 });
+    expect(c).toMatchObject({ kind: 'low-since', since: 2018, atLeast: true });
+  });
+  test('a year clearly below the range is a plain "since"', () => {
+    const s = [{ y: 2018, val: 100 }, { y: 2019, val: 300 }, { y: 2020, val: 310 }, { y: 2021, val: 320 }, { y: 2022, val: 330 }];
+    expect(arcClaim(s, { low: 150, high: 200 })).toMatchObject({ kind: 'low-since', since: 2018, atLeast: false });
+  });
+  test('the margin is 1% of last year, at least one crime', () => {
+    expect(S.claimMargin(309)).toBeCloseTo(3.09);
+    expect(S.claimMargin(40)).toBe(1);
+    const s = [{ y: 2023, val: 50 }, { y: 2024, val: 38 }, { y: 2025, val: 40 }];
+    expect(arcClaim(s, { low: 30, high: 39.5 }).kind).toBe('in-line');
+    expect(arcClaim(s, { low: 30, high: 39 }).kind).toBe('below-last'); // 2024 was lower still
+  });
+  test('rises get the same treatment', () => {
+    const s = [{ y: 2018, val: 500 }, { y: 2019, val: 300 }, { y: 2020, val: 310 }, { y: 2021, val: 320 }, { y: 2022, val: 330 }];
+    expect(arcClaim(s, { low: 332, high: 360 }).kind).toBe('in-line');
+    expect(arcClaim(s, { low: 400, high: 450 })).toMatchObject({ kind: 'high-since', since: 2018, atLeast: false });
+  });
+});
+
+describe('January: dates that cross the New Year say both years', () => {
+  const rp = (start, end) => ({ week_start: start, week_end: end });
+  test('a week across the New Year', () => {
+    const P = S.periodText('wtd', rp('12/29/2026', '1/4/2027'));
+    expect(P.dates).toBe('Dec. 29, 2026-Jan. 4, 2027');
+    expect(P.cmp).toBe('the same week a year earlier');
+    expect(P.kicker).not.toMatch(/of 2026$/);
+  });
+  test('28 days across the New Year', () => {
+    const P = S.periodText('d28', rp('12/29/2026', '1/4/2027'));
+    expect(P.dates).toBe('Dec. 8, 2026-Jan. 4, 2027');
+    expect(P.tag).toBe('Dec. 8, 2026-Jan. 4, 2027 vs. the same dates a year earlier');
+  });
+  test('year to date in the first days of January', () => {
+    expect(S.periodText('ytd', rp('12/29/2026', '1/4/2027')).dates).toBe('Jan. 1-4, 2027');
+    expect(S.periodText('ytd', rp('12/26/2026', '1/1/2027')).dates).toBe('Jan. 1, 2027');
+    expect(S.periodText('ytd', rp('12/29/2026', '1/4/2027')).cmp).toBe('the same period of 2026');
+  });
+  test('ordinary weeks read as before', () => {
+    const w = S.periodText('wtd', rp('11/9/2026', '11/15/2026'));
+    expect(w.dates).toBe('Nov. 9-15, 2026');
+    expect(w.cmp).toBe('the same week of 2025');
+    expect(w.lead2).toBe('In the week of Nov. 9-15');
+    expect(S.periodText('wtd', rp('10/27/2026', '11/2/2026')).dates).toBe('Oct. 27-Nov. 2, 2026');
+    const y = S.periodText('ytd', rp('11/9/2026', '11/15/2026'));
+    expect(y.dates).toBe('Jan. 1-Nov. 15, 2026');
+    expect(y.lead2).toBe('From Jan. 1 to Nov. 15');
+    expect(S.periodText('d28', rp('11/9/2026', '11/15/2026')).dates).toBe('Oct. 19-Nov. 15, 2026');
+  });
+  test('no pace before a quarter of the year, so January never projects', () => {
+    expect(paceRange({ cur: 6, priorYtd: 5, priorFull: 300, weekEnd: '1/4/2027' }).tooEarly).toBe(true);
+  });
+  test('revision flows never pair a December report with a January one', () => {
+    const snap = (end, ytdCur) => ({ citywide: { report_period: { week_end: end }, seven_major_felonies: { Murder: { year_to_date: { current_year: ytdCur, prior_year: 300 }, week_to_date: { current_year: 5, prior_year: 6 } } } } });
+    expect(revisionFlows([snap('12/28/2026', 290), snap('1/4/2027', 5)])).toBeNull();
+  });
+});
