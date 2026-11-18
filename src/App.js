@@ -3,6 +3,7 @@ import { AreaChart, Area, LineChart, Line, BarChart, Bar, XAxis, YAxis, Cartesia
 import { geoPath, geoMercator } from 'd3-geo';
 import precinctGeoJSON from './data/nyc_precincts.json';
 import crimeHistory from './data/crime_history.json';
+import { ratePopulation, REDRAWN_PRECINCTS, describeDriver, LARGEST_CITIES, reportYearOf, RTCI_NYC_KEY, parseRTCIcsv, getHistoricalContext, getPrePandemicRecovery } from './ledgerRules';
 
 /* ------------------------------------------------------------------ */
 /* 1. HISTORICAL DATASETS & CONFIG                                    */
@@ -276,6 +277,15 @@ const EXPANDED_CRIME_NAMES = {
   'Other Sex Crimes': 'other sex crimes',
 };
 const expandCrime = (name) => EXPANDED_CRIME_NAMES[name] || (name || '').toLowerCase();
+// When one crime moved more than the net change (others moved the other way), say that instead of
+// giving it a share above 100%. driver comes from describeDriver in ledgerRules.js.
+const plural = (n, one, many) => `${Math.abs(n).toLocaleString()} ${Math.abs(n) === 1 ? one : many}`;
+const offsetDriverText = (driver, dName, where) => {
+  const dir = driver.diff > 0 ? 'rose' : 'fell';
+  const otherDir = driver.others > 0 ? 'rose' : 'fell';
+  const netText = driver.net > 0 ? `a net rise of ${plural(driver.net, 'crime', 'crimes')}` : `a net drop of ${plural(driver.net, 'crime', 'crimes')}`;
+  return `**${dName}** ${dir} by **${Math.abs(driver.diff).toLocaleString()}**${where === 'citywide' ? ' citywide' : ''}, while the other major felonies ${otherDir} by ${Math.abs(driver.others).toLocaleString()} combined, for ${netText}.`;
+};
 const expandCrimeTitle = (name) => {
   const exp = expandCrime(name);
   return exp.replace(/\b\w/g, c => c.toUpperCase());
@@ -450,7 +460,7 @@ const rtciRate = (count, pop) => (count == null || !pop ? null : +((count / pop)
 // some through April), and a partial year divided by population is not an annual rate.
 // Cities are keyed by agency AND state, because "Jacksonville" matches cities in Florida and North
 // Carolina. A count that is blank, "NA" or zero in every column is missing, not zero.
-const RTCI_NYC_KEY = 'New York City|New York';
+
 
 // Cached copy, used only for a city the live scorecard can't supply for the same year (or for every
 // city if the scorecard can't be reached). Calendar-year 2025 counts and RTCI populations from the
@@ -468,10 +478,13 @@ const RTCI_FALLBACK = [
   ['San Diego', 'California', 1409432, 32, 5655, 21809],
   ['Dallas', 'Texas', 1246336, 139, 7660, 40704],
   ['Jacksonville', 'Florida', 1008920, 80, null, null],
+  ['Fort Worth', 'Texas', 1009136, 78, 3834, 22707],
   ['Baltimore', 'Maryland', 562811, 133, 8390, 23481],
   ['Boston', 'Massachusetts', 671262, 25, 3916, 12857],
   ['Pittsburgh', 'Pennsylvania', 306794, 34, 1520, 8830],
-  ['Washington', 'District of Columbia', 693645, 127, 1446, 21664],
+  // D.C.'s 2025 violent total (1,446) is murder plus robbery only: the index reports no assaults or
+  // rapes for it, so the total is left out (see usableViolentTotal in ledgerRules.js).
+  ['Washington', 'District of Columbia', 693645, 127, null, 21664],
   ['Buffalo', 'New York', 276384, 30, 1925, 9431],
 ].map(([city, state, pop, murder, violent, property]) => ({
   key: `${city}|${state}`, city, state, pop, murder, violent, property,
@@ -480,62 +493,13 @@ const RTCI_FALLBACK = [
 
 // Comparison groups, as agency|state keys from the RTCI CSV
 const RTCI_GROUPS = [
-  { key: 'largest5', label: '5 Largest', cities: ['New York City|New York', 'Los Angeles|California', 'Chicago|Illinois', 'Houston|Texas', 'Philadelphia|Pennsylvania'] },
-  { key: 'largest10', label: '10 Largest', cities: ['New York City|New York', 'Los Angeles|California', 'Chicago|Illinois', 'Houston|Texas', 'Phoenix|Arizona', 'Philadelphia|Pennsylvania', 'San Antonio|Texas', 'San Diego|California', 'Dallas|Texas', 'Jacksonville|Florida'] },
+  // Ranked by the Census Bureau's Vintage 2025 city estimates (July 1, 2025; released May 14, 2026).
+  // Recheck when the next vintage comes out each May. The index's own populations can't rank cities:
+  // it also lists counties and metro police forces (Harris County, Las Vegas Metro).
+  { key: 'largest5', label: '5 Largest', cities: LARGEST_CITIES.slice(0, 5) },
+  { key: 'largest10', label: '10 Largest', cities: LARGEST_CITIES.slice(0, 10) },
   { key: 'northeast', label: 'Northeast', cities: ['New York City|New York', 'Philadelphia|Pennsylvania', 'Baltimore|Maryland', 'Boston|Massachusetts', 'Pittsburgh|Pennsylvania', 'Washington|District of Columbia', 'Buffalo|New York'] },
 ];
-const RTCI_TYPES = { murder: 'murder', violent_crime: 'violent', property_crime: 'property' };
-
-function parseRTCIcsv(csvText) {
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return null;
-  const parseRow = (line) => {
-    const vals = []; let cur = '', inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') { inQuote = !inQuote; }
-      else if (ch === ',' && !inQuote) { vals.push(cur.trim()); cur = ''; }
-      else { cur += ch; }
-    }
-    vals.push(cur.trim());
-    return vals;
-  };
-  const headers = parseRow(lines[0]);
-  const rows = lines.slice(1).map(parseRow);
-  const nameI = headers.indexOf('agency_name');
-  const stateI = headers.indexOf('state_name');
-  const typeI = headers.indexOf('crime_type');
-  const fullI = headers.indexOf('previous_year_full');
-  const popI = headers.indexOf('population');
-  const updI = headers.indexOf('last_updated');
-  const rangeI = headers.indexOf('ytd_month_range');
-  if ([nameI, stateI, typeI, fullI, popI, rangeI].some(i => i < 0)) return null;
-  const countCols = ['two_years_prior_full', 'previous_year_full', 'two_years_prior_ytd', 'previous_year_ytd', 'current_year_ytd']
-    .map(h => headers.indexOf(h)).filter(i => i >= 0);
-
-  const cityMap = {};
-  let updated = '';
-  rows.forEach(r => {
-    const type = RTCI_TYPES[r[typeI]];
-    if (!type) return;
-    const key = `${r[nameI]}|${r[stateI]}`;
-    // "Jan - Apr 2026" -> the previous full year is 2025
-    const ym = (r[rangeI] || '').match(/(\d{4})\s*$/);
-    const fullYear = ym ? +ym[1] - 1 : null;
-    let count = /^\d+$/.test(r[fullI] || '') ? parseInt(r[fullI], 10) : null;
-    if (count === 0 && countCols.every(i => !(parseFloat(r[i]) > 0))) count = null; // nothing reported
-    const pop = parseInt(r[popI], 10) || 0;
-    if (!cityMap[key]) cityMap[key] = { key, city: r[nameI], state: r[stateI], pop, fullYear, murder: null, violent: null, property: null, isNYC: key === RTCI_NYC_KEY };
-    const c = cityMap[key];
-    if (c.fullYear !== fullYear) c.mixedYears = true;
-    c[type] = count;
-    if (pop > 0) c.pop = pop;
-    if (!updated && updI >= 0 && r[updI]) updated = r[updI].slice(0, 10);
-  });
-  // A violent-crime total equal to the murder count means only murders were reported.
-  Object.values(cityMap).forEach(c => { if (c.violent != null && c.violent === c.murder) c.violent = null; });
-  return { cities: cityMap, updated };
-}
 
 // Sequential color scale for choropleth: light neutral → orange → magenta
 const CHOROPLETH_STOPS = [
@@ -598,124 +562,6 @@ const MiniSparkline = ({ points, width = 48, height = 16, minY }) => {
 /* ------------------------------------------------------------------ */
 /* HISTORICAL CONTEXT HELPERS                                          */
 /* ------------------------------------------------------------------ */
-// Map of CompStat row names to crime_history.json keys (for citywide annual history).
-// Names not in this map will fall back to a 2-point sparkline.
-const HISTORICAL_KEY = {
-  'Burglary': 'Burglary',
-  'Fel. Assault': 'Fel. Assault',
-  'G.L.A.': 'G.L.A.',
-  'Gr. Larceny': 'Gr. Larceny',
-  'Murder': 'Murder',
-  'Rape': 'Rape',
-  'Robbery': 'Robbery',
-  'Misd. Assault': 'Misd. Assault',
-  'Petit Larceny': 'Petit Larceny',
-  'Shooting Inc.': 'Shooting Inc.',
-};
-
-// Returns historical-context info for a given offense row.
-// Logic:
-//   - Annualize the current YTD count using the prior-year YTD/prior-year-full-year ratio,
-//     so we can compare to historical full-year values.
-//   - Build a series of {y, val} for the last ~12 years.
-//   - Compute pre-pandemic baseline (2017-2019 mean / range).
-//   - Emit a primary "vs pre-pandemic" badge and an "outlier vs 5-yr norm" badge.
-function getHistoricalContext(history, item, currentYear) {
-  const key = HISTORICAL_KEY[item.name];
-  if (!key || !history || !history.length) return null;
-  const series = history.filter(d => typeof d[key] === 'number').map(d => ({ y: d.y, val: d[key] }));
-  if (series.length < 5) return null;
-
-  const priorYearRow = series.find(d => d.y === currentYear - 1);
-  const priorFull = priorYearRow?.val;
-  // YTD fraction: how much of last full year happened in YTD-equivalent period.
-  const ytdFrac = (priorFull && item.prior > 0 && priorFull > 0) ? (item.prior / priorFull) : null;
-  const annualized = (ytdFrac && ytdFrac > 0.05) ? item.current / ytdFrac : item.current;
-
-  // Pre-pandemic baseline: 2017-2019.
-  const pre = series.filter(d => d.y >= 2017 && d.y <= 2019).map(d => d.val);
-  let pandemicBadge = null;
-  if (pre.length >= 2) {
-    const preLow = Math.min(...pre);
-    const preHigh = Math.max(...pre);
-    const preMean = pre.reduce((a, b) => a + b, 0) / pre.length;
-    if (annualized < preLow) {
-      pandemicBadge = { kind: 'below', label: 'Below pre-pandemic low', tone: 'green' };
-    } else if (annualized < preMean * 0.97) {
-      pandemicBadge = { kind: 'belowAvg', label: 'Below pre-pandemic avg', tone: 'green' };
-    } else if (annualized > preHigh * 1.03) {
-      pandemicBadge = { kind: 'aboveHigh', label: 'Above pre-pandemic high', tone: 'orange' };
-    } else if (annualized > preMean * 1.03) {
-      pandemicBadge = { kind: 'above', label: 'Above pre-pandemic avg', tone: 'orange' };
-    } else {
-      pandemicBadge = { kind: 'at', label: 'Back at pre-pandemic level', tone: 'gray' };
-    }
-  }
-
-  // 5-year recent z-score outlier (excluding current).
-  const recent = series.filter(d => d.y >= currentYear - 6 && d.y < currentYear).map(d => d.val);
-  let outlierBadge = null;
-  if (recent.length >= 4) {
-    const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
-    const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
-    const std = Math.sqrt(variance);
-    if (std > 0) {
-      const z = (annualized - mean) / std;
-      if (z >= 2) outlierBadge = { kind: 'spike', label: '5-yr high outlier', tone: 'orange' };
-      else if (z <= -2) outlierBadge = { kind: 'plunge', label: '5-yr low outlier', tone: 'green' };
-    }
-  }
-
-  // Find the year-since superlative (e.g., "Lowest since 2014").
-  const sinceSuperlative = (() => {
-    if (annualized <= 0) return null;
-    // Lowest since: find the most recent year (excluding current) where val <= annualized.
-    let lowSince = null;
-    for (let i = series.length - 1; i >= 0; i--) {
-      if (series[i].y >= currentYear) continue;
-      if (series[i].val < annualized) { lowSince = series[i].y + 1; break; }
-    }
-    if (lowSince && lowSince <= currentYear - 3) return { kind: 'low', label: `Lowest since ${lowSince}`, tone: 'green' };
-    let highSince = null;
-    for (let i = series.length - 1; i >= 0; i--) {
-      if (series[i].y >= currentYear) continue;
-      if (series[i].val > annualized) { highSince = series[i].y + 1; break; }
-    }
-    if (highSince && highSince <= currentYear - 3) return { kind: 'high', label: `Highest since ${highSince}`, tone: 'orange' };
-    return null;
-  })();
-
-  return { series, annualized, ytdFrac, pandemicBadge, outlierBadge, sinceSuperlative, preLow: pre.length ? Math.min(...pre) : null, preHigh: pre.length ? Math.max(...pre) : null };
-}
-
-// Summarize how many of the 7 major felonies have returned to or fallen below their 2017-19
-// pre-pandemic average, using YTD-to-annualized projection. Returns: { below, total, above:[...names] }.
-function getPrePandemicRecovery(felonies, history) {
-  if (!felonies || !history || !history.length) return null;
-  const result = { below: 0, total: 0, above: [], at: [] };
-  felonies.forEach(f => {
-    const key = HISTORICAL_KEY[f.name];
-    if (!key) return;
-    const series = history.filter(d => typeof d[key] === 'number').map(d => ({ y: d.y, val: d[key] }));
-    const pre = series.filter(d => d.y >= 2017 && d.y <= 2019).map(d => d.val);
-    if (pre.length < 2) return;
-    const preMean = pre.reduce((a, b) => a + b, 0) / pre.length;
-    // Annualize current YTD against last full year so the comparison is apples-to-apples.
-    const lastFull = series.find(d => d.y === series[series.length - 1].y)?.val;
-    const ytdFrac = (lastFull && f.prior > 0 && lastFull > 0) ? (f.prior / lastFull) : null;
-    const annualized = (ytdFrac && ytdFrac > 0.05) ? f.current / ytdFrac : f.current;
-    result.total += 1;
-    if (annualized <= preMean) {
-      result.below += 1;
-    } else {
-      result.above.push({ name: f.name, ratio: annualized / preMean, annualized });
-    }
-  });
-  result.above.sort((a, b) => b.ratio - a.ratio);
-  if (result.total === 0) return null;
-  return result;
-}
-
 // Sparkline that renders a multi-year series with a pre-pandemic reference band and a "current" projection dot.
 const ContextSparkline = ({ series, annualized, preLow, preHigh, width = 80, height = 22 }) => {
   if (!series || series.length < 3) return null;
@@ -762,7 +608,6 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
   const metrics = [
     { key: 'murder', label: 'Murder', unit: 'per 100k' },
     { key: 'violent', label: 'Violent Crime', unit: 'per 100k' },
-    { key: 'property', label: 'Property Crime', unit: 'per 100k' },
   ];
   // Toggle persistence: remember the user's last metric / group choice across sessions.
   const [activeMetric, setActiveMetric] = useState(() => {
@@ -773,8 +618,10 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
   });
   useEffect(() => { try { localStorage.setItem('rtci_metric', activeMetric); } catch {} }, [activeMetric]);
   useEffect(() => { try { localStorage.setItem('rtci_group', activeGroup); } catch {} }, [activeGroup]);
-  const metric = metrics.find(m => m.key === activeMetric);
-  const group = RTCI_GROUPS.find(g => g.key === activeGroup) || RTCI_GROUPS[0];
+  // A remembered choice that no longer exists (the property tab was removed) falls back to murder.
+  const metric = metrics.find(m => m.key === activeMetric) || metrics[0];
+  const metricKey = metric.key;
+  const groupDef = RTCI_GROUPS.find(g => g.key === activeGroup) || RTCI_GROUPS[0];
 
   const allCities = rtciData?.cities || {};
   const updated = rtciData?.updated || RTCI_FALLBACK_UPDATED;
@@ -782,17 +629,18 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
   const year = allCities[RTCI_NYC_KEY]?.fullYear || RTCI_FALLBACK_YEAR;
   const cityName = (c) => (c.city === 'New York City' ? 'New York' : c.city);
 
+  const group = groupDef;
   const citiesForGroup = group.cities.map(key => {
     const live = allCities[key];
-    if (live && live.fullYear === year && !live.mixedYears && live[activeMetric] != null) return live;
+    if (live && live.fullYear === year && !live.mixedYears && live[metricKey] != null) return live;
     const fb = RTCI_FALLBACK.find(c => c.key === key);
-    if (fb && fb.fullYear === year && fb[activeMetric] != null) return { ...fb, cached: true };
+    if (fb && fb.fullYear === year && fb[metricKey] != null) return { ...fb, cached: true };
     return null;
   });
   const notShown = group.cities.filter((key, i) => !citiesForGroup[i]).map(key => key.split('|')[0]);
 
   const ranked = citiesForGroup.filter(c => c && c.pop > 0)
-    .map(c => ({ ...c, rate: rtciRate(c[activeMetric], c.pop) }))
+    .map(c => ({ ...c, rate: rtciRate(c[metricKey], c.pop) }))
     .sort((a, b) => a.rate - b.rate);
   const anyCached = ranked.some(c => c.cached);
   const maxRate = ranked.length > 0 ? ranked[ranked.length - 1].rate : 1;
@@ -808,7 +656,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
           <div className="flex bg-white p-1 rounded border border-gray-200">
             {metrics.map(m => (
               <button key={m.key} onClick={() => setActiveMetric(m.key)}
-                className={`px-3 py-1 text-[10px] font-black uppercase tracking-wide ${activeMetric === m.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700'}`}>
+                className={`px-3 py-1 text-[10px] font-black uppercase tracking-wide ${metricKey === m.key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700'}`}>
                 {m.label}
               </button>
             ))}
@@ -843,11 +691,9 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
           );
         })}
       </div>
-      {activeMetric === 'murder' && (
-        <p className="mt-3 text-[11px] font-serif italic text-gray-500 leading-snug">
-          Murder is the most reliably comparable crime category across jurisdictions — definitions are nearly identical and reporting rates approach 100%. Violent and property crime totals are more affected by differences in classification, reporting culture, and arrest practices, so cross-city comparisons in those categories should be read with more caution.
-        </p>
-      )}
+      <p className="mt-3 text-[11px] font-serif italic text-gray-500 leading-snug">
+        Murder is the most reliably comparable crime across cities: definitions are nearly identical and nearly every one is recorded. Violent-crime totals depend more on how each city classifies and records assaults, so read them with more caution; a city is left out when the index is missing any part of its total. Property crime isn't compared: the index's New York theft count covers only felony grand larceny, while other cities count every theft.
+      </p>
       <div className="mt-4 pt-3 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <p className="text-[10px] text-gray-400">
           Calendar year {year}, the latest complete year in the scorecard. Year-to-date counts aren’t used because cities report through different months. Scorecard updated {updated} · populations as published by the index.
@@ -858,7 +704,7 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
           {downloadCSV && (
             <button
               onClick={() => {
-                const header = ['City', 'State', 'Year', 'Population', 'Murder', 'Violent Crime', 'Property Crime', 'Murder per 100k', 'Violent per 100k', 'Property per 100k', 'Source'];
+                const header = ['City', 'State', 'Year', 'Population', 'Murder', 'Violent Crime', 'Murder per 100k', 'Violent per 100k', 'Source'];
                 const data = ranked.map(c => [
                   c.city,
                   c.state,
@@ -866,13 +712,11 @@ const CityComparisonWidget = ({ rtciData, downloadCSV }) => {
                   c.pop,
                   c.murder,
                   c.violent,
-                  c.property,
                   rtciRate(c.murder, c.pop),
                   rtciRate(c.violent, c.pop),
-                  rtciRate(c.property, c.pop),
                   c.cached ? `cached scorecard ${RTCI_FALLBACK_UPDATED}` : `scorecard ${updated}`,
                 ]);
-                downloadCSV(`city_comparison_${activeMetric}_${activeGroup}.csv`, [header, ...data]);
+                downloadCSV(`city_comparison_${metricKey}_${group.key}.csv`, [header, ...data]);
               }}
               title="Download city comparison as CSV"
               className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-black border border-gray-300 rounded px-2 py-1 hover:bg-gray-50 transition-colors flex items-center gap-1">
@@ -1338,7 +1182,7 @@ const PrecinctMap = ({ precinctRates, onSelect, activeGeo, mapMode = 'rate', wid
         })}
       </svg>
       {hoveredData && (() => {
-        const pop = GEO_POPULATIONS[hoveredData.precinct];
+        const pop = ratePopulation(hoveredData.precinct, GEO_POPULATIONS, CITYWIDE_POPULATION);
         const rankInfo = rateRanks[hoveredData.precinctNum];
         return (
           <div
@@ -1351,6 +1195,9 @@ const PrecinctMap = ({ precinctRates, onSelect, activeGeo, mapMode = 'rate', wid
             </div>
             {PRECINCT_NEIGHBORHOODS[hoveredData.precinct] && <div className="text-gray-500 mb-2">{PRECINCT_NEIGHBORHOODS[hoveredData.precinct]}</div>}
             <div className="font-bold text-black">{hoveredData.count.toLocaleString()} incidents</div>
+            {REDRAWN_PRECINCTS[hoveredData.precinct] && (
+              <div className="text-gray-400 italic">No rate per resident: {REDRAWN_PRECINCTS[hoveredData.precinct]}.</div>
+            )}
             {hoveredData.rate != null && (
               <div className="text-gray-600">
                 {hoveredData.rate.toFixed(1)} per 100k ({POP_BASIS})
@@ -1738,7 +1585,7 @@ export default function App() {
   const parsedData = useMemo(() => {
     const geoData = rawData[activeGeo] || rawData['citywide'];
     const citywideData = rawData['citywide'];
-    const pop = activeGeo === 'citywide' ? CITYWIDE_POPULATION : (GEO_POPULATIONS[activeGeo] || null);
+    const pop = ratePopulation(activeGeo, GEO_POPULATIONS, CITYWIDE_POPULATION);
     const extract = (obj) => Object.entries(obj || {}).map(([name, stats]) => {
       const current = activeTab === 'ytd' ? stats?.year_to_date?.current_year : stats?.week_to_date?.current_year;
       const prior = activeTab === 'ytd' ? stats?.year_to_date?.prior_year : stats?.week_to_date?.prior_year;
@@ -1778,11 +1625,7 @@ export default function App() {
     }
 
     const mDiff = mCur - mPri;
-    let driverObj = null;
-    if (mDiff !== 0 && felonies.length > 0) {
-      const d = felonies.reduce((p, c) => (Math.abs(c.diff) > Math.abs(p.diff) && Math.sign(c.diff) === Math.sign(mDiff)) ? c : p, {diff: 0});
-      if (d && d.name) driverObj = { name: d.name, diff: d.diff, share: Math.abs((d.diff / mDiff) * 100) };
-    }
+    const driverObj = describeDriver(felonies);
 
     let topSurge = null, topDrop = null;
     felonies.forEach(f => {
@@ -1853,12 +1696,12 @@ export default function App() {
       });
       volumes.push({ precinct: pct, violent: vSum });
     });
-    const sortedV = [...volumes].filter(v => v.violent > 0).sort((a,b) => b.violent - a.violent);
+    const sortedV = [...volumes].filter(v => v.violent > 0 && ratePopulation(v.precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) && !TOURIST_PRECINCTS.includes(v.precinct)).sort((a,b) => b.violent - a.violent);
     let inequality = null;
     if (sortedV.length > 10) {
-      const top5 = sortedV.slice(0, 5); const top5Sum = top5.reduce((s, p) => s + p.violent, 0); const top5Pop = top5.reduce((s, p) => s + (GEO_POPULATIONS[p.precinct] || 0), 0);
+      const top5 = sortedV.slice(0, 5); const top5Sum = top5.reduce((s, p) => s + p.violent, 0); const top5Pop = top5.reduce((s, p) => s + (ratePopulation(p.precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) || 0), 0);
       let bottomSum = 0, bottomCount = 0, bottomPop = 0;
-      for (let i = sortedV.length - 1; i >= 0 && bottomSum < top5Sum; i--) { bottomSum += sortedV[i].violent; bottomCount++; bottomPop += (GEO_POPULATIONS[sortedV[i].precinct] || 0); }
+      for (let i = sortedV.length - 1; i >= 0 && bottomSum < top5Sum; i--) { bottomSum += sortedV[i].violent; bottomCount++; bottomPop += (ratePopulation(sortedV[i].precinct, GEO_POPULATIONS, CITYWIDE_POPULATION) || 0); }
       inequality = { topCount: 5, topSum: top5Sum, topPop: top5Pop, bottomCount, bottomPop };
     }
     allPrecinctCrimes.sort((a, b) => b.pct - a.pct);
@@ -1873,14 +1716,14 @@ export default function App() {
   }, [rawData, activeTab]);
 
   const isTouristPrecinct = TOURIST_PRECINCTS.includes(activeGeo);
-  const activePop = GEO_POPULATIONS[activeGeo] || (activeGeo === 'citywide' ? CITYWIDE_POPULATION : null);
+  const activePop = ratePopulation(activeGeo, GEO_POPULATIONS, CITYWIDE_POPULATION);
   const formattedMPct = typeof parsedData.totals.mPct === 'number' ? Number(Math.abs(parsedData.totals.mPct)).toFixed(1) : '0.0';
 
   // Compute per-100k rates for all precincts (for map + ranking bars)
   const precinctRates = useMemo(() => {
     const precinctKeys = Object.keys(rawData).filter(k => k.includes('Precinct'));
     return precinctKeys.map(pct => {
-      const pop = GEO_POPULATIONS[pct];
+      const pop = ratePopulation(pct, GEO_POPULATIONS, CITYWIDE_POPULATION);
       const d = rawData[pct];
       const felonies = d.seven_major_felonies || {};
       const addl = d.additional_stats || {};
@@ -1909,12 +1752,14 @@ export default function App() {
     if (activeGeo === 'citywide') {
       if (driver) {
         const dName = expandCrimeTitle(driver.name);
-        const driverShareText = driver.diff > 0
+        const driverShareText = driver.offset
+          ? offsetDriverText(driver, dName, 'citywide')
+          : driver.diff > 0
           ? `The overall rise was largely driven by **${dName}** index offenses, which account for **${Math.round(driver.share)}%** of the total citywide upward shift.`
-          : `Nearly **${Math.round(driver.share)}%** of the total citywide drop in major index offenses can be attributed to **${dName}**, which saw **${Math.abs(driver.diff).toLocaleString()} fewer cases** than last year.`;
+          : `About **${Math.round(driver.share)}%** of the total citywide drop in major index offenses came from **${dName}**, which saw **${Math.abs(driver.diff).toLocaleString()} fewer cases** than last year.`;
         const shareW = Math.min(100, driver.share);
         cards.push({ id: 'driver', icon: Target, title: 'Primary Driver', content: driverShareText,
-          dataViz: (
+          dataViz: driver.offset ? null : (
             <div className="mt-3 flex items-center gap-2">
               <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
                 <div className="h-full rounded-full bg-gray-900" style={{ width: `${shareW}%` }} />
@@ -1954,16 +1799,17 @@ export default function App() {
       }
       // Pre-pandemic recovery: how many of the 7 major felonies are back at or below their 2017-19 baseline,
       // using a YTD-annualized projection. Replaces a "lethality gap" card that asserted a claim it didn't show.
-      const recovery = getPrePandemicRecovery(parsedData.felonies, crimeHistory.citywide);
+      const recovery = getPrePandemicRecovery(parsedData.felonies, crimeHistory.citywide, reportYearOf(parsedData.period), activeTab);
       if (recovery && recovery.total > 0) {
         // No Oxford comma per Vital City house style.
         const joinNames = (names) => names.length <= 1 ? names.join('')
           : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
         const stillAbove = joinNames(recovery.above.map(a => expandCrimeTitle(a.name)));
         const content = recovery.above.length === 0
-          ? `All **${recovery.total} of the 7 major felonies** are tracking at or below their 2017–19 pre-pandemic average so far this year.`
-          : `**${recovery.below} of the ${recovery.total} major felonies** tracked since 1993 are tracking at or below their 2017–19 pre-pandemic average so far this year. Still above: ${stillAbove}.`;
-        cards.push({ id: 'recovery', icon: ShieldCheck, title: 'Pre-Pandemic Recovery', content,
+          ? `All **${recovery.total} major felonies** compared are tracking at or below their 2017–19 pre-pandemic average so far this year.`
+          : `**${recovery.below} of the ${recovery.total} major felonies** compared are tracking at or below their 2017–19 pre-pandemic average so far this year. Still above: ${stillAbove}.`;
+        const leftOutText = recovery.leftOut.length > 0 ? ` ${recovery.leftOut.map(expandCrimeTitle).join(' and ')} is left out: its definition changed in 2024.` : '';
+        cards.push({ id: 'recovery', icon: ShieldCheck, title: 'Pre-Pandemic Recovery', content: content + leftOutText,
           dataViz: (
             <div className="mt-3">
               <div className="flex items-center gap-1.5 mb-1">
@@ -1986,7 +1832,9 @@ export default function App() {
         });
       }
     } else {
-      if (driver && driver.share >= 25) cards.push({ id: 'local_driver', icon: Target, title: 'Local Driver', content: `The change in **${expandCrimeTitle(driver.name)}** volume accounts for **${Math.round(driver.share)}%** of this area's trajectory.` });
+      if (driver && driver.share >= 25) cards.push({ id: 'local_driver', icon: Target, title: 'Local Driver', content: driver.offset
+        ? offsetDriverText(driver, expandCrimeTitle(driver.name), 'here')
+        : `The change in **${expandCrimeTitle(driver.name)}** volume accounts for **${Math.round(driver.share)}%** of this area's net change in major felonies.` });
       if (localAnomaly && !isTouristPrecinct) cards.push({ id: 'anomaly', icon: AlertTriangle, title: 'Elevated Local Risk', content: `The rate for **${expandCrimeTitle(localAnomaly.name)}** here is **${localAnomaly.localRate.toFixed(1)} per 100k residents**, which is **${localAnomaly.ratio.toFixed(1)}x** higher than the citywide average (${localAnomaly.cityRate.toFixed(1)}).` });
       else if (topSurge && topSurge.pct > 0) cards.push({ id: 'surge', icon: TrendingUp, title: 'Local Trajectory', content: `**${expandCrimeTitle(topSurge.name)}** index offenses have increased by **${Math.round(topSurge.pct)}%** compared to last year.` });
       if (localBrightSpot && !isTouristPrecinct) cards.push({ id: 'brightspot', icon: ShieldCheck, title: 'Local Bright Spot', content: `The rate of **${expandCrimeTitle(localBrightSpot.name)}** offenses here sits **${Math.round((1 - localBrightSpot.ratio)*100)}% below** the citywide average.` });
@@ -2323,6 +2171,12 @@ export default function App() {
                 <span className="text-xs font-medium text-gray-500 mt-1">Citywide: {(parsedData.totals.citywideRate || 0).toFixed(1)} per 100k</span>
               </div>
             )}
+            {REDRAWN_PRECINCTS[activeGeo] && (
+              <div className="pb-1.5 flex flex-col pl-6 border-l border-gray-200 max-w-xs">
+                <span className="text-sm font-medium text-indigo-500 uppercase tracking-widest mb-1 flex items-center gap-1"><Users size={14} /> Per 100k Residents</span>
+                <span className="text-xs text-gray-500">Not shown: {REDRAWN_PRECINCTS[activeGeo]}.</span>
+              </div>
+            )}
           </div>
         </section>
 
@@ -2330,7 +2184,7 @@ export default function App() {
         {activeGeo === 'citywide' && (() => {
           const story = buildStorySummary({ parsedData, activeTab });
           const ineq = hotspots?.inequality;
-          const recovery = getPrePandemicRecovery(parsedData.felonies, crimeHistory.citywide);
+          const recovery = getPrePandemicRecovery(parsedData.felonies, crimeHistory.citywide, reportYearOf(parsedData.period), activeTab);
           const spike = hotspots?.topPctSpike;
           return (
             <section className="mb-10 grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2364,6 +2218,7 @@ export default function App() {
                       const joined = names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
                       return <> Still above: <strong>{joined}</strong>.</>;
                     })()}
+                    {recovery.leftOut.length > 0 && <> {recovery.leftOut.map(expandCrimeTitle).join(' and ')} is left out: its definition changed in 2024.</>}
                   </p>
                 </div>
               )}
@@ -2523,14 +2378,14 @@ export default function App() {
                 {(() => {
                   const rows = trendFilter === 'all' ? parsedData.all : (trendFilter === 'up' ? risingOffenses : fallingOffenses);
                   const maxAbsChange = Math.max(1, ...rows.map(r => Math.abs(r.pct || 0)));
-                  const currentYear = parsedData.period?.week_end ? new Date(parsedData.period.week_end).getFullYear() : new Date().getFullYear();
+                  const currentYear = reportYearOf(parsedData.period);
                   const toneClass = (tone) => tone === 'green' ? 'bg-green-50 text-green-700 border-green-200'
                     : tone === 'orange' ? 'bg-orange-50 text-orange-700 border-orange-200'
                     : 'bg-gray-50 text-gray-600 border-gray-200';
                   return rows.map(item => {
                     const isVolatile = item.prior < VOLATILITY_THRESHOLD;
                     const changeBarW = Math.abs(item.pct || 0) / maxAbsChange * 48;
-                    const ctx = activeGeo === 'citywide' ? getHistoricalContext(crimeHistory.citywide, item, currentYear) : null;
+                    const ctx = activeGeo === 'citywide' ? getHistoricalContext(crimeHistory.citywide, item, currentYear, activeTab) : null;
                     // Pick the most-noteworthy single badge to display inline (don't crowd the row).
                     const primaryBadge = ctx?.sinceSuperlative || ctx?.outlierBadge || ctx?.pandemicBadge;
                     return (
@@ -2606,7 +2461,8 @@ export default function App() {
             <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-3">Methodology notes</h3>
             <ul className="space-y-1 leading-snug">
               <li>"Year-to-date" follows NYPD's CompStat week ending on Sunday — same-period prior-year comparison.</li>
-              <li>"Tourist hubs" (14th, 18th, 22nd precincts) have residential populations far below daytime populations, so per-100k rates are flagged with a hatch overlay. % change and volume Δ are unaffected.</li>
+              <li>The 105th, 113th and 116th precincts have no per-100k rates: the 116th was carved from the other two in December 2024, and the 2020 Census crosswalk covers only the old lines. Their counts and changes are shown.</li>
+                <li>"Tourist hubs" (14th, 18th, 22nd precincts) have residential populations far below daytime populations, so per-100k rates are flagged with a hatch overlay. % change and volume Δ are unaffected.</li>
               <li>Pre-pandemic baseline = mean and range of 2017–2019 annual citywide totals.</li>
               <li>Current-year sparkline dot uses an annualized projection: <code className="text-[10px]">current_ytd / (prior_year_ytd / prior_year_full)</code>.</li>
               <li>Outlier badges use z-score against the prior-5-year baseline; |z| ≥ 2 triggers a flag.</li>
